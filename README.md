@@ -1,5 +1,7 @@
 # google_places_autocomplete
 
+[![CI](https://github.com/guy-evdev/google_places_autocomplete/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/guy-evdev/google_places_autocomplete/actions/workflows/ci.yml)
+
 Cross-platform Google Places autocomplete for Flutter, built on Places API (New).
 
 The package includes package-owned request and response models, a
@@ -10,23 +12,19 @@ and Linux.
 
 ## Preview
 
-Animated overview:
+Overview:
 
 <p>
   <img src="assets/readme/example.gif" alt="Package example" width="320" />
 </p>
 
-Key flows:
+Sample flows (Inline field, dialog launcher, fullscreen launcher, and rich result payload):
 
 <p>
-  <img src="assets/readme/text_field_mode.png" alt="Inline field mode" width="220" />
-  <img src="assets/readme/dialog_mode.png" alt="Dialog mode" width="220" />
-  <img src="assets/readme/fullscreen_mode.png" alt="Fullscreen mode" width="220" />
-  <img src="assets/readme/rich_result.png" alt="Rich result payload" width="220" />
-</p>
-
-<p>
-  Inline field, dialog launcher, fullscreen launcher, and rich result payload.
+  <img src="assets/readme/text_field_mode.png" alt="Inline field mode" width="200" />
+  <img src="assets/readme/dialog_mode.png" alt="Dialog mode" width="200" />
+  <img src="assets/readme/fullscreen_mode.png" alt="Fullscreen mode" width="200" />
+  <img src="assets/readme/rich_result.png" alt="Rich result payload" width="200" />
 </p>
 
 ## Features
