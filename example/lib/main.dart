@@ -75,24 +75,25 @@ class _ExampleAppState extends State<ExampleApp> {
 
     return ListView(
       children: <Widget>[
-        // Wrap(
-        //   spacing: 8,
-        //   runSpacing: 8,
-        //   crossAxisAlignment: WrapCrossAlignment.center,
-        //   children: <Widget>[
-        //     const Text('Locale'),
-        //     SegmentedButton<DemoLocale>(
-        //       segments: DemoLocale.values.map((locale) => ButtonSegment<DemoLocale>(value: locale, label: Text(locale.label))).toList(growable: false),
-        //       selected: <DemoLocale>{_demoLocale},
-        //       onSelectionChanged: (selection) {
-        //         setState(() {
-        //           _demoLocale = selection.first;
-        //         });
-        //       },
-        //     ),
-        //   ],
-        // ),
-        // const SizedBox(height: 24),
+        const Text('Widget Locale', textAlign: TextAlign.center),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: <Widget>[
+            SegmentedButton<DemoLocale>(
+              segments: DemoLocale.values.map((locale) => ButtonSegment<DemoLocale>(value: locale, label: Text(locale.label))).toList(growable: false),
+              selected: <DemoLocale>{_demoLocale},
+              onSelectionChanged: (selection) {
+                setState(() {
+                  _demoLocale = selection.first;
+                });
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
         const Text('Search Widget Type', textAlign: TextAlign.center),
         Wrap(
           spacing: 8,
@@ -179,10 +180,6 @@ class _ExampleAppState extends State<ExampleApp> {
                 onPressed: () => _openOverlay(context, strings, mode: _widgetType == WidgetType.fullscreen ? PlacesAutocompleteOverlayMode.fullscreen : PlacesAutocompleteOverlayMode.dialog),
                 child: const Text('Click to Search'),
               ),
-              // FilledButton.tonal(
-              //   onPressed: () => _openOverlay(context, strings, mode: PlacesAutocompleteOverlayMode.fullscreen),
-              //   child: const Text('Fullscreen Search'),
-              // ),
             ],
           ),
           const SizedBox(height: 24),
