@@ -210,6 +210,7 @@ In practice:
 - `fieldMode` can be `inline`, `dialog`, or `fullscreen`
 - `includedPrimaryTypes` uses Google Places primary type strings such as `'restaurant'`, `'cafe'`, or `'(cities)'`
 - `selectionFields` controls which fields are fetched when details loading is enabled
+- `maxSuggestions` is a display cap and is effectively limited to `5` by Google Autocomplete (New)
 - if you pass a custom `InputDecoration`, the package preserves your styling and still keeps the clear action available
 
 Google primary type reference:

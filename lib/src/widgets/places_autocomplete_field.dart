@@ -133,6 +133,14 @@ class PlacesAutocompleteField extends StatefulWidget {
   final ValueChanged<PlaceSelection>? onSelection;
   final VoidCallback? onClearField;
   final ValueChanged<Object>? onError;
+
+  /// Maximum number of autocomplete suggestions to display.
+  ///
+  /// Google Autocomplete (New) returns at most five predictions, so values
+  /// above `5` are clamped to the upstream response limit.
+  ///
+  /// Official reference:
+  /// https://developers.google.com/maps/documentation/places/web-service/place-autocomplete
   final int maxSuggestions;
   final bool enabled;
   final bool autofocus;
@@ -168,6 +176,8 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       widget.fetchTimeZoneOnSelection
       ? <PlaceField>{...widget.selectionFields, PlaceField.location}
       : widget.selectionFields;
+
+  int get _effectiveMaxSuggestions => widget.maxSuggestions.clamp(1, 5);
 
   @override
   void initState() {
@@ -288,7 +298,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       }
       setState(() {
         _loading = false;
-        _suggestions = suggestions.take(widget.maxSuggestions).toList();
+        _suggestions = suggestions.take(_effectiveMaxSuggestions).toList();
       });
     } catch (error) {
       if (!_isActiveSearch(input, generation)) {
@@ -389,6 +399,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       selectionRegionCode: widget.selectionRegionCode,
       selectionTimeZoneAt: widget.selectionTimeZoneAt,
       selectionTimeZoneLanguageCode: widget.selectionTimeZoneLanguageCode,
+      maxSuggestions: widget.maxSuggestions,
       onError: widget.onError,
     );
 
@@ -406,6 +417,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     final decoration = _buildDecoration();
 
     return Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         TextField(
@@ -445,6 +457,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
               color: theme.colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(12),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   for (final suggestion in _suggestions)
                     ListTile(
@@ -550,8 +563,8 @@ class _PoweredByGoogleAttribution extends StatelessWidget {
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
     final assetName = brightness == Brightness.dark
-        ? 'assets/google_white.png'
-        : 'assets/google_black.png';
+        ? 'assets/google_black.png'
+        : 'assets/google_white.png';
     return Image.asset(
       assetName,
       package: 'google_places_sdk_flutter',

@@ -35,6 +35,7 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     this.selectionRegionCode,
     this.selectionTimeZoneAt,
     this.selectionTimeZoneLanguageCode,
+    this.maxSuggestions = 5,
     this.onSelection,
     this.onError,
   });
@@ -82,6 +83,12 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   /// Optional BCP-47 language code for localized time-zone names.
   final String? selectionTimeZoneLanguageCode;
 
+  /// Maximum number of autocomplete suggestions to display.
+  ///
+  /// Google Autocomplete (New) returns at most five predictions, so values
+  /// above `5` are clamped to the upstream response limit.
+  final int maxSuggestions;
+
   /// Called when the user selects a suggestion, optionally with resolved place
   /// details.
   final ValueChanged<PlaceSelection>? onSelection;
@@ -120,6 +127,7 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     String? selectionRegionCode,
     DateTime? selectionTimeZoneAt,
     String? selectionTimeZoneLanguageCode,
+    int maxSuggestions = 5,
     ValueChanged<PlaceSelection>? onSelection,
     ValueChanged<Object>? onError,
   }) async {
@@ -148,6 +156,7 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       selectionRegionCode: selectionRegionCode,
       selectionTimeZoneAt: selectionTimeZoneAt,
       selectionTimeZoneLanguageCode: selectionTimeZoneLanguageCode,
+      maxSuggestions: maxSuggestions,
       onSelection: (selection) {
         navigator.pop(selection);
         onSelection?.call(selection);
@@ -174,7 +183,9 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
               maxWidth: 560,
               maxHeight: MediaQuery.sizeOf(dialogContext).height * 0.8,
             ),
-            child: Padding(padding: const EdgeInsets.all(16), child: child),
+            child: SingleChildScrollView(
+              child: Padding(padding: const EdgeInsets.all(16), child: child),
+            ),
           ),
         ),
       );
@@ -207,6 +218,7 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       selectionRegionCode: selectionRegionCode,
       selectionTimeZoneAt: selectionTimeZoneAt,
       selectionTimeZoneLanguageCode: selectionTimeZoneLanguageCode,
+      maxSuggestions: maxSuggestions,
       onSelection: onSelection,
       onError: onError,
       autofocus: true,
@@ -220,6 +232,7 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     }
 
     return Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         Text(
@@ -227,7 +240,7 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 16),
-        Flexible(child: field),
+        field,
       ],
     );
   }

@@ -18,6 +18,14 @@ class _FakeBackend implements PlacesBackend {
         primaryText: const StructuredText(text: 'Coffee Lab'),
         secondaryText: const StructuredText(text: 'Main Street'),
       ),
+      for (var index = 2; index <= 10; index++)
+        PlaceSuggestion(
+          placeId: 'place-$index',
+          placeResourceName: 'places/place-$index',
+          fullText: StructuredText(text: 'Coffee Lab $index, Main Street'),
+          primaryText: StructuredText(text: 'Coffee Lab $index'),
+          secondaryText: const StructuredText(text: 'Main Street'),
+        ),
     ];
   }
 
@@ -103,7 +111,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Coffee Lab'), findsOneWidget);
-    expect(find.text('Main Street'), findsOneWidget);
+    expect(find.text('Main Street'), findsWidgets);
   });
 
   testWidgets('emits a unified selection with resolved place data', (
@@ -425,4 +433,45 @@ void main() {
       expect(find.byType(Dialog), findsNothing);
     },
   );
+
+  testWidgets('overlay show clamps maxSuggestions to the Google limit', (
+    tester,
+  ) async {
+    final client = PlacesClient.testing(
+      apiKey: 'test',
+      backend: _FakeBackend(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: FilledButton(
+              onPressed: () {
+                unawaited(
+                  PlacesAutocompleteOverlay.show(
+                    context,
+                    client: client,
+                    mode: PlacesAutocompleteOverlayMode.dialog,
+                    maxSuggestions: 7,
+                  ),
+                );
+              },
+              child: const Text('Open dialog'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open dialog'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'cof');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ListTile), findsNWidgets(5));
+    expect(find.text('Coffee Lab 6'), findsNothing);
+  });
 }

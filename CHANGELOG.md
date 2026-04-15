@@ -1,3 +1,10 @@
+## 0.3.2 - 2026-04-15
+
+- Fixed dialog sizing so autocomplete overlays shrink-wrap content more naturally instead of expanding to near fullscreen in some host app layouts.
+- Exposed `maxSuggestions` through dialog and fullscreen overlay flows and aligned its behavior with Google Autocomplete (New) limits.
+- Documented and clamped `maxSuggestions` to the upstream maximum of five predictions.
+- Corrected the Powered by Google attribution asset theme mapping.
+
 ## 0.3.1 - 2026-04-15
 
 - Fixed fullscreen overlay presentation so it uses the root navigator and opens truly fullscreen inside nested navigator setups such as `go_router` shells.
