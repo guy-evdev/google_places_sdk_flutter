@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_places_autocomplete/google_places_autocomplete.dart';
+import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
 
 void main() {
   group('AutocompleteRequest', () {

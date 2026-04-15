@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:google_places_autocomplete/google_places_autocomplete.dart';
+import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
 
 const _apiKey = String.fromEnvironment('GOOGLE_MAPS_API_KEY');
 
@@ -56,7 +56,7 @@ class _ExampleAppState extends State<ExampleApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'google_places_autocomplete example',
+      title: 'google_places_sdk_flutter example',
       debugShowCheckedModeBanner: false,
       locale: _demoLocale.locale,
       supportedLocales: DemoLocale.values
@@ -79,7 +79,7 @@ class _ExampleAppState extends State<ExampleApp> {
       ),
       home: Builder(
         builder: (appContext) => Scaffold(
-          appBar: AppBar(title: const Text('google_places_autocomplete')),
+          appBar: AppBar(title: const Text('google_places_sdk_flutter')),
           body: Padding(
             padding: const EdgeInsets.all(16),
             child: _apiKey.isEmpty

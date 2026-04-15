@@ -14,7 +14,7 @@ class PlacesWebBackend implements PlacesBackend {
   PlacesWebBackend({required this.apiKey, this.timeZoneBaseUrl})
     : _httpClient = BrowserClient();
 
-  static const _mapsScriptId = 'google_places_autocomplete_maps_js';
+  static const _mapsScriptId = 'google_places_sdk_flutter_maps_js';
   static const _defaultTimeZoneBaseUrl =
       'https://maps.googleapis.com/maps/api/timezone/json';
 

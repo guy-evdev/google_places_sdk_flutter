@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_places_autocomplete/google_places_autocomplete.dart';
-import 'package:google_places_autocomplete/src/internal/backend.dart';
+import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
+import 'package:google_places_sdk_flutter/src/internal/backend.dart';
 
 class _RecordingBackend implements PlacesBackend {
   PlaceDetailsRequest? lastPlaceRequest;

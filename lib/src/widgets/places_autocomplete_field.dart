@@ -554,7 +554,7 @@ class _PoweredByGoogleAttribution extends StatelessWidget {
         : 'assets/google_black.png';
     return Image.asset(
       assetName,
-      package: 'google_places_autocomplete',
+      package: 'google_places_sdk_flutter',
       height: 18,
       semanticLabel: const PlacesStrings().poweredByGoogleLabel,
     );

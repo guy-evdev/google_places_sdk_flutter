@@ -1,9 +1,8 @@
-# Google Places Autocomplete for Flutter
+# Google Places SDK Flutter
 
-[![pub package](https://img.shields.io/pub/v/google_places_autocomplete.svg)](https://pub.dev/packages/google_places_autocomplete)
 [![CI](https://github.com/guy-evdev/google_places_autocomplete/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/guy-evdev/google_places_autocomplete/actions/workflows/ci.yml)
 
-Cross-platform Google Places autocomplete for Flutter, built on Places API (New).
+Cross-platform Google Places client and widget toolkit for Flutter, built on Places API (New).
 
 The package includes package-owned request and response models, a
 cross-platform `PlacesClient`, and autocomplete widgets for inline, form,
@@ -46,7 +45,7 @@ Add the package to your `pubspec.yaml` file:
 
 ```yaml
 dependencies:
-  google_places_autocomplete: latest_version
+  google_places_sdk_flutter: latest_version
 ```
 
 Then create a client with your Google Maps Platform API key:
@@ -70,7 +69,7 @@ same `PlacesClient` API.
 
 ```dart
 import 'package:flutter/material.dart';
-import 'package:google_places_autocomplete/google_places_autocomplete.dart';
+import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
 
 class MinimalPlacesField extends StatefulWidget {
   const MinimalPlacesField({super.key});
