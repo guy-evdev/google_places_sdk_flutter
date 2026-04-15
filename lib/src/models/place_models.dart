@@ -462,18 +462,75 @@ class PlaceSuggestion {
 }
 
 @immutable
+/// Time zone metadata returned by Google Time Zone API.
+///
+/// This data is fetched separately from Places API using the selected place
+/// coordinates.
+///
+/// Official reference:
+/// https://developers.google.com/maps/documentation/timezone/requests-timezone
+class PlaceTimeZoneData {
+  const PlaceTimeZoneData({
+    required this.dstOffset,
+    required this.rawOffset,
+    required this.timeZoneId,
+    required this.timeZoneName,
+    required this.timestamp,
+    this.rawData = const <String, Object?>{},
+  });
+
+  /// Daylight saving offset for the supplied [timestamp].
+  final Duration dstOffset;
+
+  /// Base UTC offset for the supplied [timestamp], excluding DST.
+  final Duration rawOffset;
+
+  /// Stable Google/Olson time-zone id, such as `America/New_York`.
+  final String timeZoneId;
+
+  /// Human-readable time-zone name, such as `Eastern Daylight Time`.
+  final String timeZoneName;
+
+  /// Timestamp used for this time-zone lookup.
+  final DateTime timestamp;
+
+  /// Full raw payload from Google.
+  final Map<String, Object?> rawData;
+
+  factory PlaceTimeZoneData.fromJson(
+    Map<String, Object?> json, {
+    required DateTime timestamp,
+  }) => PlaceTimeZoneData(
+    dstOffset: Duration(
+      milliseconds: (((_toDouble(json['dstOffset']) ?? 0) * 1000).round()),
+    ),
+    rawOffset: Duration(
+      milliseconds: (((_toDouble(json['rawOffset']) ?? 0) * 1000).round()),
+    ),
+    timeZoneId: (json['timeZoneId'] ?? '') as String,
+    timeZoneName: (json['timeZoneName'] ?? '') as String,
+    timestamp: timestamp,
+    rawData: Map<String, Object?>.unmodifiable(json),
+  );
+}
+
+@immutable
 /// Unified selection result returned by field and overlay flows.
 ///
 /// Always contains the selected [suggestion]. When details fetching is enabled,
-/// [place] may also be populated.
+/// [place] may also be populated. When time-zone fetching is enabled,
+/// [timeZone] may also be populated.
 class PlaceSelection {
-  const PlaceSelection({required this.suggestion, this.place});
+  const PlaceSelection({required this.suggestion, this.place, this.timeZone});
 
   /// The lightweight autocomplete suggestion the user selected.
   final PlaceSuggestion suggestion;
 
   /// Rich place details resolved for the selection, if requested.
   final PlaceData? place;
+
+  /// Time-zone data resolved for the selection, if requested.
+  final PlaceTimeZoneData? timeZone;
 
   /// Convenience getter for [suggestion.placeId].
   String get placeId => suggestion.placeId;
@@ -484,10 +541,18 @@ class PlaceSelection {
   /// Whether [place] is available.
   bool get hasResolvedPlace => place != null;
 
-  PlaceSelection copyWith({PlaceSuggestion? suggestion, PlaceData? place}) {
+  /// Whether [timeZone] is available.
+  bool get hasTimeZone => timeZone != null;
+
+  PlaceSelection copyWith({
+    PlaceSuggestion? suggestion,
+    PlaceData? place,
+    PlaceTimeZoneData? timeZone,
+  }) {
     return PlaceSelection(
       suggestion: suggestion ?? this.suggestion,
       place: place ?? this.place,
+      timeZone: timeZone ?? this.timeZone,
     );
   }
 }
@@ -865,6 +930,54 @@ class PlaceDetailsRequest {
 
   /// Comma-separated field mask for Google Place Details requests.
   String get detailsFieldMask => fields.map((field) => field.apiName).join(',');
+}
+
+@immutable
+/// Request payload for Google Time Zone API.
+///
+/// Time-zone lookups are based on geographic coordinates and a timestamp.
+/// If [timestamp] is omitted, callers typically use the current time.
+///
+/// Official reference:
+/// https://developers.google.com/maps/documentation/timezone/requests-timezone
+class TimeZoneRequest {
+  const TimeZoneRequest({
+    required this.location,
+    this.timestamp,
+    this.languageCode,
+  });
+
+  /// Geographic coordinates to resolve into time-zone metadata.
+  final PlaceCoordinates location;
+
+  /// Timestamp the time-zone lookup should apply to.
+  ///
+  /// If omitted, the client/backend should default to the current time.
+  final DateTime? timestamp;
+
+  /// Optional BCP-47 language code for localized time-zone names.
+  final String? languageCode;
+
+  /// Creates a time-zone request from resolved place details.
+  ///
+  /// Throws [PlacesException] if [place] does not include [PlaceData.location].
+  factory TimeZoneRequest.fromPlace(
+    PlaceData place, {
+    DateTime? timestamp,
+    String? languageCode,
+  }) {
+    final location = place.location;
+    if (location == null) {
+      throw const PlacesException(
+        'Time zone lookup requires place details with location coordinates.',
+      );
+    }
+    return TimeZoneRequest(
+      location: location,
+      timestamp: timestamp,
+      languageCode: languageCode,
+    );
+  }
 }
 
 @immutable

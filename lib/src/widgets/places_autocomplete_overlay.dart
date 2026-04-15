@@ -29,9 +29,12 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     this.includedRegionCodes = const <String>[],
     this.includePureServiceAreaBusinesses = false,
     this.fetchPlaceDetailsOnSelection = false,
+    this.fetchTimeZoneOnSelection = false,
     this.selectionFields = PlaceFieldPresets.recommended,
     this.selectionLanguageCode,
     this.selectionRegionCode,
+    this.selectionTimeZoneAt,
+    this.selectionTimeZoneLanguageCode,
     this.onSelection,
     this.onError,
   });
@@ -64,10 +67,20 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   /// before [onSelection] fires and before [show] completes.
   final bool fetchPlaceDetailsOnSelection;
 
+  /// Whether the selected suggestion should also resolve time-zone metadata.
+  ///
+  /// This implies place-details resolution because time-zone lookups require
+  /// place coordinates.
+  final bool fetchTimeZoneOnSelection;
+
   /// Field set used when [fetchPlaceDetailsOnSelection] is enabled.
   final Set<PlaceField> selectionFields;
   final String? selectionLanguageCode;
   final String? selectionRegionCode;
+  final DateTime? selectionTimeZoneAt;
+
+  /// Optional BCP-47 language code for localized time-zone names.
+  final String? selectionTimeZoneLanguageCode;
 
   /// Called when the user selects a suggestion, optionally with resolved place
   /// details.
@@ -100,13 +113,18 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     List<String> includedRegionCodes = const <String>[],
     bool includePureServiceAreaBusinesses = false,
     bool fetchPlaceDetailsOnSelection = false,
+    bool fetchTimeZoneOnSelection = false,
     Set<PlaceField> selectionFields = PlaceFieldPresets.recommended,
     String? selectionLanguageCode,
     String? selectionRegionCode,
+    DateTime? selectionTimeZoneAt,
+    String? selectionTimeZoneLanguageCode,
     ValueChanged<PlaceSelection>? onSelection,
     ValueChanged<Object>? onError,
   }) async {
-    final ownedController = controller == null ? PlacesAutocompleteController(initialText: initialText) : null;
+    final ownedController = controller == null
+        ? PlacesAutocompleteController(initialText: initialText)
+        : null;
     final effectiveController = controller ?? ownedController!;
     final navigator = Navigator.of(context);
     final child = PlacesAutocompleteOverlay(
@@ -123,9 +141,12 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       includedRegionCodes: includedRegionCodes,
       includePureServiceAreaBusinesses: includePureServiceAreaBusinesses,
       fetchPlaceDetailsOnSelection: fetchPlaceDetailsOnSelection,
+      fetchTimeZoneOnSelection: fetchTimeZoneOnSelection,
       selectionFields: selectionFields,
       selectionLanguageCode: selectionLanguageCode,
       selectionRegionCode: selectionRegionCode,
+      selectionTimeZoneAt: selectionTimeZoneAt,
+      selectionTimeZoneLanguageCode: selectionTimeZoneLanguageCode,
       onSelection: (selection) {
         navigator.pop(selection);
         onSelection?.call(selection);
@@ -135,7 +156,12 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
 
     try {
       if (mode == PlacesAutocompleteOverlayMode.fullscreen) {
-        return await navigator.push<PlaceSelection>(MaterialPageRoute<PlaceSelection>(builder: (_) => child, fullscreenDialog: true));
+        return await navigator.push<PlaceSelection>(
+          MaterialPageRoute<PlaceSelection>(
+            builder: (_) => child,
+            fullscreenDialog: true,
+          ),
+        );
       }
 
       return await showDialog<PlaceSelection>(
@@ -166,9 +192,12 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       includedRegionCodes: includedRegionCodes,
       includePureServiceAreaBusinesses: includePureServiceAreaBusinesses,
       fetchPlaceDetailsOnSelection: fetchPlaceDetailsOnSelection,
+      fetchTimeZoneOnSelection: fetchTimeZoneOnSelection,
       selectionFields: selectionFields,
       selectionLanguageCode: selectionLanguageCode,
       selectionRegionCode: selectionRegionCode,
+      selectionTimeZoneAt: selectionTimeZoneAt,
+      selectionTimeZoneLanguageCode: selectionTimeZoneLanguageCode,
       onSelection: onSelection,
       onError: onError,
       autofocus: true,
@@ -185,7 +214,10 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        Text(title ?? strings.overlayTitle, style: Theme.of(context).textTheme.titleLarge),
+        Text(
+          title ?? strings.overlayTitle,
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
         const SizedBox(height: 16),
         field,
       ],

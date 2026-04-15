@@ -1,28 +1,41 @@
 import 'dart:async';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
+import 'dart:convert';
 
+import 'package:http/browser_client.dart';
+import 'package:http/http.dart' as http;
 import 'package:web/web.dart' as web;
 
 import '../models/place_models.dart';
 import 'backend.dart';
 
 class PlacesWebBackend implements PlacesBackend {
-  PlacesWebBackend({required this.apiKey});
+  PlacesWebBackend({required this.apiKey, this.timeZoneBaseUrl})
+    : _httpClient = BrowserClient();
 
   static const _mapsScriptId = 'google_places_autocomplete_maps_js';
+  static const _defaultTimeZoneBaseUrl =
+      'https://maps.googleapis.com/maps/api/timezone/json';
 
   final String apiKey;
+  final String? timeZoneBaseUrl;
+  final http.Client _httpClient;
   final Map<String, Object> _sessionTokens = <String, Object>{};
 
   static Completer<Object>? _placesLibraryCompleter;
   static String? _loadedApiKey;
 
   @override
-  Future<List<PlaceSuggestion>> autocomplete(AutocompleteRequest request) async {
+  Future<List<PlaceSuggestion>> autocomplete(
+    AutocompleteRequest request,
+  ) async {
     final library = await _loadPlacesLibrary();
-    final autocompleteSuggestion = library.getProperty('AutocompleteSuggestion'.toJS) as JSFunction;
-    final fetchSuggestions = autocompleteSuggestion.getProperty('fetchAutocompleteSuggestions'.toJS) as JSFunction;
+    final autocompleteSuggestion =
+        library.getProperty('AutocompleteSuggestion'.toJS) as JSFunction;
+    final fetchSuggestions =
+        autocompleteSuggestion.getProperty('fetchAutocompleteSuggestions'.toJS)
+            as JSFunction;
     final result =
         await (fetchSuggestions.callAsFunction(
                   autocompleteSuggestion,
@@ -30,8 +43,10 @@ class PlacesWebBackend implements PlacesBackend {
                 )
                 as JSPromise<JSAny?>)
             .toDart;
-    final suggestions = (result as JSObject).getProperty('suggestions'.toJS) as JSObject;
-    final length = (suggestions.getProperty('length'.toJS) as JSNumber).toDartInt;
+    final suggestions =
+        (result as JSObject).getProperty('suggestions'.toJS) as JSObject;
+    final length =
+        (suggestions.getProperty('length'.toJS) as JSNumber).toDartInt;
     final items = <PlaceSuggestion>[];
     for (var index = 0; index < length; index++) {
       final suggestion = suggestions.getProperty(index.toJS) as JSObject;
@@ -51,8 +66,10 @@ class PlacesWebBackend implements PlacesBackend {
     final place = placeCtor.callAsConstructor<JSObject>(
       <String, Object?>{
             'id': request.placeId,
-            if (request.languageCode != null) 'requestedLanguage': request.languageCode,
-            if (request.regionCode != null) 'requestedRegion': request.regionCode,
+            if (request.languageCode != null)
+              'requestedLanguage': request.languageCode,
+            if (request.regionCode != null)
+              'requestedRegion': request.regionCode,
           }.jsify()!
           as JSObject,
     );
@@ -60,12 +77,52 @@ class PlacesWebBackend implements PlacesBackend {
     final fetchFields = place.getProperty('fetchFields'.toJS) as JSFunction;
     await (fetchFields.callAsFunction(
               place,
-              <String, Object?>{'fields': request.fields.map((field) => field.apiName).toList()}.jsify()!,
+              <String, Object?>{
+                'fields': request.fields.map((field) => field.apiName).toList(),
+              }.jsify()!,
             )
             as JSPromise<JSAny?>)
         .toDart;
 
     return PlaceData.fromJson(_extractPlaceMap(place, request.fields));
+  }
+
+  @override
+  Future<PlaceTimeZoneData> fetchTimeZone(TimeZoneRequest request) async {
+    final timestamp = request.timestamp?.toUtc() ?? DateTime.now().toUtc();
+    final uri =
+        Uri.parse(
+          _normalizeTimeZoneUrl(timeZoneBaseUrl ?? _defaultTimeZoneBaseUrl),
+        ).replace(
+          queryParameters: <String, String>{
+            'location':
+                '${request.location.latitude},${request.location.longitude}',
+            'timestamp': (timestamp.millisecondsSinceEpoch ~/ 1000).toString(),
+            'key': apiKey,
+            if (request.languageCode != null) 'language': request.languageCode!,
+          },
+        );
+    final response = await _httpClient.get(uri);
+    final dynamic decoded = response.body.isEmpty
+        ? <String, Object?>{}
+        : jsonDecode(response.body);
+    final body = (decoded as Map).cast<String, Object?>();
+    if (response.statusCode >= 400) {
+      throw PlacesException(
+        'Google Time Zone request failed.',
+        statusCode: response.statusCode,
+        details: body,
+      );
+    }
+    final status = (body['status'] ?? 'UNKNOWN_ERROR') as String;
+    if (status != 'OK') {
+      throw PlacesException(
+        (body['errorMessage'] ?? 'Google Time Zone request failed.') as String,
+        statusCode: response.statusCode,
+        details: body,
+      );
+    }
+    return PlaceTimeZoneData.fromJson(body, timestamp: timestamp);
   }
 
   @override
@@ -79,18 +136,31 @@ class PlacesWebBackend implements PlacesBackend {
       if (request.regionCode != null) 'region': request.regionCode,
       if (request.includedType != null) 'includedType': request.includedType,
       if (request.strictTypeFiltering) 'strictTypeFiltering': true,
-      if (request.locationBias != null) 'locationBias': request.locationBias!.area.toWebJson(),
-      if (request.locationRestriction != null) 'locationRestriction': request.locationRestriction!.area.toWebJson(),
-      if (request.maxResultCount != null) 'maxResultCount': request.maxResultCount,
+      if (request.locationBias != null)
+        'locationBias': request.locationBias!.area.toWebJson(),
+      if (request.locationRestriction != null)
+        'locationRestriction': request.locationRestriction!.area.toWebJson(),
+      if (request.maxResultCount != null)
+        'maxResultCount': request.maxResultCount,
       if (request.minRating != null) 'minRating': request.minRating,
       if (request.openNow != null) 'openNow': request.openNow,
-      'rankPreference': _searchByTextRankPreference(library, request.rankPreference),
+      'rankPreference': _searchByTextRankPreference(
+        library,
+        request.rankPreference,
+      ),
     };
 
-    final searchByText = placeCtor.getProperty('searchByText'.toJS) as JSFunction;
-    final result = await (searchByText.callAsFunction(placeCtor, requestMap.jsify()!) as JSPromise<JSAny?>).toDart;
+    final searchByText =
+        placeCtor.getProperty('searchByText'.toJS) as JSFunction;
+    final result =
+        await (searchByText.callAsFunction(placeCtor, requestMap.jsify()!)
+                as JSPromise<JSAny?>)
+            .toDart;
 
-    return _extractPlaceResults(result: result as JSObject, fields: request.fields);
+    return _extractPlaceResults(
+      result: result as JSObject,
+      fields: request.fields,
+    );
   }
 
   @override
@@ -102,22 +172,39 @@ class PlacesWebBackend implements PlacesBackend {
       'locationRestriction': request.locationRestriction.area.toWebJson(),
       if (request.languageCode != null) 'language': request.languageCode,
       if (request.regionCode != null) 'region': request.regionCode,
-      if (request.includedTypes.isNotEmpty) 'includedTypes': request.includedTypes,
-      if (request.excludedTypes.isNotEmpty) 'excludedTypes': request.excludedTypes,
-      if (request.includedPrimaryTypes.isNotEmpty) 'includedPrimaryTypes': request.includedPrimaryTypes,
-      if (request.excludedPrimaryTypes.isNotEmpty) 'excludedPrimaryTypes': request.excludedPrimaryTypes,
-      if (request.maxResultCount != null) 'maxResultCount': request.maxResultCount,
-      'rankPreference': _searchNearbyRankPreference(library, request.rankPreference),
+      if (request.includedTypes.isNotEmpty)
+        'includedTypes': request.includedTypes,
+      if (request.excludedTypes.isNotEmpty)
+        'excludedTypes': request.excludedTypes,
+      if (request.includedPrimaryTypes.isNotEmpty)
+        'includedPrimaryTypes': request.includedPrimaryTypes,
+      if (request.excludedPrimaryTypes.isNotEmpty)
+        'excludedPrimaryTypes': request.excludedPrimaryTypes,
+      if (request.maxResultCount != null)
+        'maxResultCount': request.maxResultCount,
+      'rankPreference': _searchNearbyRankPreference(
+        library,
+        request.rankPreference,
+      ),
     };
 
-    final searchNearby = placeCtor.getProperty('searchNearby'.toJS) as JSFunction;
-    final result = await (searchNearby.callAsFunction(placeCtor, requestMap.jsify()!) as JSPromise<JSAny?>).toDart;
+    final searchNearby =
+        placeCtor.getProperty('searchNearby'.toJS) as JSFunction;
+    final result =
+        await (searchNearby.callAsFunction(placeCtor, requestMap.jsify()!)
+                as JSPromise<JSAny?>)
+            .toDart;
 
-    return _extractPlaceResults(result: result as JSObject, fields: request.fields);
+    return _extractPlaceResults(
+      result: result as JSObject,
+      fields: request.fields,
+    );
   }
 
   @override
-  Future<void> close() async {}
+  Future<void> close() async {
+    _httpClient.close();
+  }
 
   Future<JSObject> _loadPlacesLibrary() async {
     if (_placesLibraryCompleter != null) {
@@ -126,7 +213,9 @@ class PlacesWebBackend implements PlacesBackend {
     _placesLibraryCompleter = Completer<Object>();
     try {
       if (_loadedApiKey != null && _loadedApiKey != apiKey) {
-        throw PlacesException('Google Maps JavaScript API is already loaded with a different API key.');
+        throw PlacesException(
+          'Google Maps JavaScript API is already loaded with a different API key.',
+        );
       }
       if (!_hasGoogleMapsImportLibrary()) {
         await _injectMapsScript();
@@ -134,8 +223,12 @@ class PlacesWebBackend implements PlacesBackend {
       _loadedApiKey = apiKey;
       final google = web.window.getProperty('google'.toJS) as JSObject;
       final maps = google.getProperty('maps'.toJS) as JSObject;
-      final importLibrary = maps.getProperty('importLibrary'.toJS) as JSFunction;
-      final library = await (importLibrary.callAsFunction(maps, 'places'.toJS) as JSPromise<JSAny?>).toDart;
+      final importLibrary =
+          maps.getProperty('importLibrary'.toJS) as JSFunction;
+      final library =
+          await (importLibrary.callAsFunction(maps, 'places'.toJS)
+                  as JSPromise<JSAny?>)
+              .toDart;
       _placesLibraryCompleter!.complete(library);
     } catch (error, stackTrace) {
       _placesLibraryCompleter!.completeError(error, stackTrace);
@@ -169,13 +262,18 @@ class PlacesWebBackend implements PlacesBackend {
           '?key=$apiKey&loading=async&libraries=places&v=weekly';
     final load = script.onLoad.first;
     final error = script.onError.first.then<void>(
-      (_) => throw const PlacesException('Failed to load the Google Maps JavaScript Places library.'),
+      (_) => throw const PlacesException(
+        'Failed to load the Google Maps JavaScript Places library.',
+      ),
     );
     web.document.head!.append(script);
     await Future.any(<Future<void>>[load, error]);
   }
 
-  JSObject _jsifyAutocompleteRequest(AutocompleteRequest request, {required JSObject library}) {
+  JSObject _jsifyAutocompleteRequest(
+    AutocompleteRequest request, {
+    required JSObject library,
+  }) {
     request.validate();
     return <String, Object?>{
           'input': request.input,
@@ -183,22 +281,36 @@ class PlacesWebBackend implements PlacesBackend {
           if (request.regionCode != null) 'region': request.regionCode,
           if (request.inputOffset != null) 'inputOffset': request.inputOffset,
           if (request.origin != null) 'origin': request.origin!.toWebJson(),
-          if (request.locationBias != null) 'locationBias': request.locationBias!.area.toWebJson(),
-          if (request.locationRestriction != null) 'locationRestriction': request.locationRestriction!.area.toWebJson(),
-          if (request.includedPrimaryTypes.isNotEmpty) 'includedPrimaryTypes': request.includedPrimaryTypes,
-          if (request.includedRegionCodes.isNotEmpty) 'includedRegionCodes': request.includedRegionCodes,
-          if (request.includePureServiceAreaBusinesses) 'includePureServiceAreaBusinesses': true,
-          if (request.sessionToken != null) 'sessionToken': _sessionTokenFor(request.sessionToken!, library: library),
+          if (request.locationBias != null)
+            'locationBias': request.locationBias!.area.toWebJson(),
+          if (request.locationRestriction != null)
+            'locationRestriction': request.locationRestriction!.area
+                .toWebJson(),
+          if (request.includedPrimaryTypes.isNotEmpty)
+            'includedPrimaryTypes': request.includedPrimaryTypes,
+          if (request.includedRegionCodes.isNotEmpty)
+            'includedRegionCodes': request.includedRegionCodes,
+          if (request.includePureServiceAreaBusinesses)
+            'includePureServiceAreaBusinesses': true,
+          if (request.sessionToken != null)
+            'sessionToken': _sessionTokenFor(
+              request.sessionToken!,
+              library: library,
+            ),
         }.jsify()!
         as JSObject;
   }
 
-  JSObject _sessionTokenFor(AutocompleteSessionToken token, {required JSObject library}) {
+  JSObject _sessionTokenFor(
+    AutocompleteSessionToken token, {
+    required JSObject library,
+  }) {
     final cached = _sessionTokens[token.value];
     if (cached != null) {
       return cached as JSObject;
     }
-    final tokenCtor = library.getProperty('AutocompleteSessionToken'.toJS) as JSFunction;
+    final tokenCtor =
+        library.getProperty('AutocompleteSessionToken'.toJS) as JSFunction;
     final value = tokenCtor.callAsConstructor<JSObject>();
     _sessionTokens[token.value] = value;
     return value;
@@ -210,29 +322,47 @@ class PlacesWebBackend implements PlacesBackend {
     final types = _listOfStrings(prediction.getProperty('types'.toJS));
 
     return PlaceSuggestion(
-      placeId: ((prediction.getProperty('placeId'.toJS) as JSString?)?.toDart) ?? '',
-      placeResourceName: ((prediction.getProperty('place'.toJS) as JSString?)?.toDart) ?? '',
+      placeId:
+          ((prediction.getProperty('placeId'.toJS) as JSString?)?.toDart) ?? '',
+      placeResourceName:
+          ((prediction.getProperty('place'.toJS) as JSString?)?.toDart) ?? '',
       fullText: StructuredText.fromJson(_dartify(text)),
       primaryText: StructuredText.fromJson(
         structuredFormat == null
             ? _dartify(text)
-            : _dartify((structuredFormat as JSObject).getProperty('mainText'.toJS) ?? text),
+            : _dartify(
+                (structuredFormat as JSObject).getProperty('mainText'.toJS) ??
+                    text,
+              ),
       ),
       secondaryText: structuredFormat == null
           ? null
-          : StructuredText.fromJson(_dartify((structuredFormat as JSObject).getProperty('secondaryText'.toJS))),
-      distanceMeters: (prediction.getProperty('distanceMeters'.toJS) as JSNumber?)?.toDartInt,
+          : StructuredText.fromJson(
+              _dartify(
+                (structuredFormat as JSObject).getProperty(
+                  'secondaryText'.toJS,
+                ),
+              ),
+            ),
+      distanceMeters:
+          (prediction.getProperty('distanceMeters'.toJS) as JSNumber?)
+              ?.toDartInt,
       types: types,
       rawData:
           _dartify(prediction as JSAny?) as Map<String, Object?>? ??
           <String, Object?>{
-            'placeId': ((prediction.getProperty('placeId'.toJS) as JSString?)?.toDart),
-            'place': ((prediction.getProperty('place'.toJS) as JSString?)?.toDart),
+            'placeId':
+                ((prediction.getProperty('placeId'.toJS) as JSString?)?.toDart),
+            'place':
+                ((prediction.getProperty('place'.toJS) as JSString?)?.toDart),
           },
     );
   }
 
-  List<PlaceData> _extractPlaceResults({required JSObject result, required Set<PlaceField> fields}) {
+  List<PlaceData> _extractPlaceResults({
+    required JSObject result,
+    required Set<PlaceField> fields,
+  }) {
     final places = result.getProperty('places'.toJS) as JSObject;
     final length = (places.getProperty('length'.toJS) as JSNumber).toDartInt;
     final items = <PlaceData>[];
@@ -243,7 +373,10 @@ class PlacesWebBackend implements PlacesBackend {
     return items;
   }
 
-  Map<String, Object?> _extractPlaceMap(JSObject place, Set<PlaceField> fields) {
+  Map<String, Object?> _extractPlaceMap(
+    JSObject place,
+    Set<PlaceField> fields,
+  ) {
     final data = <String, Object?>{};
     for (final field in fields) {
       final value = _fieldValue(place, field.apiName);
@@ -286,14 +419,24 @@ class PlacesWebBackend implements PlacesBackend {
     if (value.isA<JSBoolean>()) {
       return (value as JSBoolean).toDart;
     }
-    if (value.isA<JSObject>() && _hasMethod(value as JSObject, 'lat') && _hasMethod(value, 'lng')) {
+    if (value.isA<JSObject>() &&
+        _hasMethod(value as JSObject, 'lat') &&
+        _hasMethod(value, 'lng')) {
       return <String, Object?>{
-        'latitude': ((value.getProperty('lat'.toJS) as JSFunction).callAsFunction(value) as JSNumber).toDartDouble,
-        'longitude': ((value.getProperty('lng'.toJS) as JSFunction).callAsFunction(value) as JSNumber).toDartDouble,
+        'latitude':
+            ((value.getProperty('lat'.toJS) as JSFunction).callAsFunction(value)
+                    as JSNumber)
+                .toDartDouble,
+        'longitude':
+            ((value.getProperty('lng'.toJS) as JSFunction).callAsFunction(value)
+                    as JSNumber)
+                .toDartDouble,
       };
     }
     if (value.isA<JSObject>() && _hasMethod(value as JSObject, 'toJSON')) {
-      return _dartify((value.getProperty('toJSON'.toJS) as JSFunction).callAsFunction(value));
+      return _dartify(
+        (value.getProperty('toJSON'.toJS) as JSFunction).callAsFunction(value),
+      );
     }
     try {
       final dartified = value.dartify();
@@ -322,13 +465,28 @@ class PlacesWebBackend implements PlacesBackend {
     return const <String>[];
   }
 
-  JSAny _searchByTextRankPreference(JSObject library, SearchByTextRankPreference preference) {
-    final values = library.getProperty('SearchByTextRankPreference'.toJS) as JSObject;
+  JSAny _searchByTextRankPreference(
+    JSObject library,
+    SearchByTextRankPreference preference,
+  ) {
+    final values =
+        library.getProperty('SearchByTextRankPreference'.toJS) as JSObject;
     return values.getProperty(preference.name.toUpperCase().toJS)!;
   }
 
-  JSAny _searchNearbyRankPreference(JSObject library, SearchNearbyRankPreference preference) {
-    final values = library.getProperty('SearchNearbyRankPreference'.toJS) as JSObject;
+  JSAny _searchNearbyRankPreference(
+    JSObject library,
+    SearchNearbyRankPreference preference,
+  ) {
+    final values =
+        library.getProperty('SearchNearbyRankPreference'.toJS) as JSObject;
     return values.getProperty(preference.name.toUpperCase().toJS)!;
   }
+}
+
+String _normalizeTimeZoneUrl(String value) {
+  final normalized = value.endsWith('/')
+      ? value.substring(0, value.length - 1)
+      : value;
+  return normalized.endsWith('/json') ? normalized : '$normalized/json';
 }

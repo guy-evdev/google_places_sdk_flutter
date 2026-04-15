@@ -6,20 +6,36 @@ import '../models/place_models.dart';
 import 'backend.dart';
 
 class PlacesHttpBackend implements PlacesBackend {
-  PlacesHttpBackend({required this.apiKey, this.proxyBaseUrl, http.Client? httpClient})
-    : _httpClient = httpClient ?? http.Client();
+  PlacesHttpBackend({
+    required this.apiKey,
+    this.proxyBaseUrl,
+    this.timeZoneBaseUrl,
+    http.Client? httpClient,
+  }) : _httpClient = httpClient ?? http.Client();
 
-  static const _defaultBaseUrl = 'https://places.googleapis.com/v1';
+  static const _defaultPlacesBaseUrl = 'https://places.googleapis.com/v1';
+  static const _defaultTimeZoneBaseUrl =
+      'https://maps.googleapis.com/maps/api/timezone/json';
 
   final String apiKey;
   final String? proxyBaseUrl;
+  final String? timeZoneBaseUrl;
   final http.Client _httpClient;
 
-  String get _baseUrl => proxyBaseUrl ?? _defaultBaseUrl;
+  String get _placesBaseUrl => proxyBaseUrl ?? _defaultPlacesBaseUrl;
+
+  String get _timeZoneUrl =>
+      _normalizeTimeZoneUrl(timeZoneBaseUrl ?? _defaultTimeZoneBaseUrl);
 
   @override
-  Future<List<PlaceSuggestion>> autocomplete(AutocompleteRequest request) async {
-    final response = await _post(path: 'places:autocomplete', body: request.toRestJson(), fieldMask: '*');
+  Future<List<PlaceSuggestion>> autocomplete(
+    AutocompleteRequest request,
+  ) async {
+    final response = await _post(
+      path: 'places:autocomplete',
+      body: request.toRestJson(),
+      fieldMask: '*',
+    );
     final suggestions = ((response['suggestions'] as List?) ?? <Object?>[])
         .whereType<Map>()
         .map((item) => item.cast<String, Object?>())
@@ -40,10 +56,26 @@ class PlacesHttpBackend implements PlacesBackend {
       queryParameters: <String, String>{
         if (request.languageCode != null) 'languageCode': request.languageCode!,
         if (request.regionCode != null) 'regionCode': request.regionCode!,
-        if (request.sessionToken != null) 'sessionToken': request.sessionToken!.value,
+        if (request.sessionToken != null)
+          'sessionToken': request.sessionToken!.value,
       },
     );
     return PlaceData.fromJson(response);
+  }
+
+  @override
+  Future<PlaceTimeZoneData> fetchTimeZone(TimeZoneRequest request) async {
+    final timestamp = request.timestamp?.toUtc() ?? DateTime.now().toUtc();
+    final response = await _getTimeZone(
+      queryParameters: <String, String>{
+        'location':
+            '${request.location.latitude},${request.location.longitude}',
+        'timestamp': (timestamp.millisecondsSinceEpoch ~/ 1000).toString(),
+        'key': apiKey,
+        if (request.languageCode != null) 'language': request.languageCode!,
+      },
+    );
+    return PlaceTimeZoneData.fromJson(response, timestamp: timestamp);
   }
 
   @override
@@ -97,16 +129,51 @@ class PlacesHttpBackend implements PlacesBackend {
     Map<String, String> queryParameters = const <String, String>{},
   }) async {
     final uri = _resolveUri(path, queryParameters: queryParameters);
-    final response = await _httpClient.get(uri, headers: _headers(fieldMask: fieldMask));
+    final response = await _httpClient.get(
+      uri,
+      headers: _headers(fieldMask: fieldMask),
+    );
     return _decode(response);
   }
 
-  Uri _resolveUri(String path, {Map<String, String> queryParameters = const <String, String>{}}) {
-    final normalizedBase = _baseUrl.endsWith('/') ? _baseUrl.substring(0, _baseUrl.length - 1) : _baseUrl;
-    final normalizedPath = path.startsWith('/') ? path.substring(1) : path;
+  Future<Map<String, Object?>> _getTimeZone({
+    required Map<String, String> queryParameters,
+  }) async {
+    final uri = _resolveUri(
+      _timeZoneUrl,
+      queryParameters: queryParameters,
+      treatPathAsAbsolute: true,
+    );
+    final response = await _httpClient.get(uri);
+    final body = _decode(response);
+    final status = (body['status'] ?? 'UNKNOWN_ERROR') as String;
+    if (status != 'OK') {
+      throw PlacesException(
+        (body['errorMessage'] ?? 'Google Time Zone request failed.') as String,
+        statusCode: response.statusCode,
+        details: body,
+      );
+    }
+    return body;
+  }
+
+  Uri _resolveUri(
+    String path, {
+    Map<String, String> queryParameters = const <String, String>{},
+    bool treatPathAsAbsolute = false,
+  }) {
+    final baseUrl = treatPathAsAbsolute ? path : _placesBaseUrl;
+    final normalizedBase = baseUrl.endsWith('/')
+        ? baseUrl.substring(0, baseUrl.length - 1)
+        : baseUrl;
+    final normalizedPath = treatPathAsAbsolute
+        ? ''
+        : (path.startsWith('/') ? path.substring(1) : path);
     return Uri.parse(
-      '$normalizedBase/$normalizedPath',
-    ).replace(queryParameters: queryParameters.isEmpty ? null : queryParameters);
+      treatPathAsAbsolute ? normalizedBase : '$normalizedBase/$normalizedPath',
+    ).replace(
+      queryParameters: queryParameters.isEmpty ? null : queryParameters,
+    );
   }
 
   Map<String, String> _headers({required String fieldMask}) {
@@ -118,7 +185,9 @@ class PlacesHttpBackend implements PlacesBackend {
   }
 
   Map<String, Object?> _decode(http.Response response) {
-    final dynamic decoded = response.body.isEmpty ? <String, Object?>{} : jsonDecode(response.body);
+    final dynamic decoded = response.body.isEmpty
+        ? <String, Object?>{}
+        : jsonDecode(response.body);
     final body = (decoded as Map).cast<String, Object?>();
     if (response.statusCode >= 400) {
       final error = (body['error'] as Map?)?.cast<String, Object?>();
@@ -130,4 +199,11 @@ class PlacesHttpBackend implements PlacesBackend {
     }
     return body;
   }
+}
+
+String _normalizeTimeZoneUrl(String value) {
+  final normalized = value.endsWith('/')
+      ? value.substring(0, value.length - 1)
+      : value;
+  return normalized.endsWith('/json') ? normalized : '$normalized/json';
 }

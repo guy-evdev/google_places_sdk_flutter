@@ -31,6 +31,7 @@ Sample flows (Inline field, dialog launcher, fullscreen launcher, and rich resul
 
 - Places API (New) autocomplete
 - Optional place-details fetch on selection
+- Optional Google Time Zone API fetch on selection
 - Text search and nearby search client APIs
 - Inline field, dialog launcher, and fullscreen launcher modes
 - Customizable strings and `InputDecoration`
@@ -58,6 +59,7 @@ Official Google docs:
 - [Places API (New)](https://developers.google.com/maps/documentation/places/web-service)
 - [Place Autocomplete (New)](https://developers.google.com/maps/documentation/places/web-service/place-autocomplete)
 - [Place Details (New)](https://developers.google.com/maps/documentation/places/web-service/place-details)
+- [Time Zone API](https://developers.google.com/maps/documentation/timezone/requests-timezone)
 
 On web, the package uses the Google Maps JavaScript Places library behind the
 same `PlacesClient` API.
@@ -119,10 +121,12 @@ PlacesAutocompleteField(
   includedPrimaryTypes: const <String>['restaurant', 'cafe'],
   includedRegionCodes: const <String>['us'],
   fetchPlaceDetailsOnSelection: true,
+  fetchTimeZoneOnSelection: true,
   selectionFields: PlaceFieldPresets.rich,
   onSelection: (selection) {
     debugPrint(selection.displayText);
     debugPrint(selection.place?.formattedAddress);
+    debugPrint(selection.timeZone?.timeZoneId);
   },
   onClearField: () {
     debugPrint('Cleared');
@@ -183,9 +187,12 @@ PlacesAutocompleteField(
   includedRegionCodes: includedRegionCodes,
   includePureServiceAreaBusinesses: includePureServiceAreaBusinesses,
   fetchPlaceDetailsOnSelection: fetchPlaceDetailsOnSelection,
+  fetchTimeZoneOnSelection: fetchTimeZoneOnSelection,
   selectionFields: selectionFields,
   selectionLanguageCode: selectionLanguageCode,
   selectionRegionCode: selectionRegionCode,
+  selectionTimeZoneAt: selectionTimeZoneAt,
+  selectionTimeZoneLanguageCode: selectionTimeZoneLanguageCode,
   fieldMode: fieldMode,
   onSelection: onSelection,
   onClearField: onClearField,
@@ -215,12 +222,46 @@ All widget flows return a package-owned `PlaceSelection`:
 class PlaceSelection {
   final PlaceSuggestion suggestion;
   final PlaceData? place;
+  final PlaceTimeZoneData? timeZone;
 }
 ```
 
 This means:
 - `suggestion` is always available
 - `place` is available when `fetchPlaceDetailsOnSelection` is enabled
+- `timeZone` is available when `fetchTimeZoneOnSelection` is enabled
+
+## Standalone Client Calls
+
+Use the client directly when you already have a place id or want to resolve
+time-zone data separately from the widget flow.
+
+Fetch rich place details from a place id:
+
+```dart
+final place = await client.fetchPlaceById(
+  'ChIJmQJIxlVYwokRLgeuocVOGVU',
+  fields: PlaceFieldPresets.rich,
+  languageCode: 'en',
+  regionCode: 'us',
+);
+```
+
+Fetch time-zone data from resolved place details:
+
+```dart
+final timeZone = await client.fetchTimeZoneForPlace(
+  place,
+  timestamp: DateTime.now().toUtc(),
+  languageCode: 'en',
+);
+
+debugPrint(timeZone.timeZoneId);
+debugPrint(timeZone.timeZoneName);
+```
+
+Time-zone lookups use Google Time Zone API, which is separate from Places API
+and may be billed separately.
 
 ## Overlay Usage
 
@@ -235,6 +276,7 @@ final selection = await PlacesAutocompleteOverlay.show(
   languageCode: 'en',
   regionCode: 'us',
   fetchPlaceDetailsOnSelection: true,
+  fetchTimeZoneOnSelection: true,
   selectionFields: PlaceFieldPresets.rich,
 );
 ```
@@ -246,6 +288,7 @@ The `/example` app demonstrates:
 - form integration
 - dialog and fullscreen launcher modes
 - rich place-details loading
+- optional time-zone loading
 - custom strings
 - locale switching
 - RTL layout

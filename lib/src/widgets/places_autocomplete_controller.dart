@@ -7,9 +7,11 @@ import '../models/place_models.dart';
 /// Holds the text controller, focus node, active autocomplete session token,
 /// and the last selected [PlaceSelection].
 class PlacesAutocompleteController extends ChangeNotifier {
-  PlacesAutocompleteController({String initialText = '', this.debounceDuration = const Duration(milliseconds: 300)})
-    : textController = TextEditingController(text: initialText),
-      focusNode = FocusNode();
+  PlacesAutocompleteController({
+    String initialText = '',
+    this.debounceDuration = const Duration(milliseconds: 300),
+  }) : textController = TextEditingController(text: initialText),
+       focusNode = FocusNode();
 
   final TextEditingController textController;
   final FocusNode focusNode;
@@ -45,7 +47,9 @@ class PlacesAutocompleteController extends ChangeNotifier {
     if (updateText) {
       textController
         ..text = selection.displayText
-        ..selection = TextSelection.collapsed(offset: selection.displayText.length);
+        ..selection = TextSelection.collapsed(
+          offset: selection.displayText.length,
+        );
     }
     notifyListeners();
   }

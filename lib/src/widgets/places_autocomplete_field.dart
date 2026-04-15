@@ -48,9 +48,12 @@ class PlacesAutocompleteField extends StatefulWidget {
     this.includedRegionCodes = const <String>[],
     this.includePureServiceAreaBusinesses = false,
     this.fetchPlaceDetailsOnSelection = false,
+    this.fetchTimeZoneOnSelection = false,
     this.selectionFields = PlaceFieldPresets.recommended,
     this.selectionLanguageCode,
     this.selectionRegionCode,
+    this.selectionTimeZoneAt,
+    this.selectionTimeZoneLanguageCode,
     this.fieldMode = PlacesAutocompleteFieldMode.inline,
     this.onSelection,
     this.onClearField,
@@ -100,10 +103,29 @@ class PlacesAutocompleteField extends StatefulWidget {
   /// [onSelection] is called.
   final bool fetchPlaceDetailsOnSelection;
 
+  /// Whether a selected suggestion should also resolve time-zone metadata.
+  ///
+  /// This implicitly resolves place details first because time-zone lookup
+  /// requires geographic coordinates.
+  final bool fetchTimeZoneOnSelection;
+
   /// The fields to request when [fetchPlaceDetailsOnSelection] is enabled.
+  ///
+  /// If [fetchTimeZoneOnSelection] is enabled, the widget will automatically
+  /// ensure that [PlaceField.location] is included even if it is not present
+  /// here.
   final Set<PlaceField> selectionFields;
   final String? selectionLanguageCode;
   final String? selectionRegionCode;
+
+  /// Timestamp to use for the time-zone lookup.
+  final DateTime? selectionTimeZoneAt;
+
+  /// Optional BCP-47 language code for localized time-zone names.
+  ///
+  /// If omitted, the widget falls back to [selectionLanguageCode] and then
+  /// [languageCode].
+  final String? selectionTimeZoneLanguageCode;
 
   /// How the field should behave: inline search, dialog launcher, or
   /// fullscreen launcher.
@@ -115,10 +137,12 @@ class PlacesAutocompleteField extends StatefulWidget {
   final bool enabled;
   final bool autofocus;
   final bool showPoweredByGoogle;
-  final Widget Function(BuildContext context, PlaceSuggestion suggestion)? suggestionBuilder;
+  final Widget Function(BuildContext context, PlaceSuggestion suggestion)?
+  suggestionBuilder;
 
   @override
-  State<PlacesAutocompleteField> createState() => _PlacesAutocompleteFieldState();
+  State<PlacesAutocompleteField> createState() =>
+      _PlacesAutocompleteFieldState();
 }
 
 class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
@@ -130,9 +154,20 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   bool _searchUiVisible = false;
   int _searchGeneration = 0;
 
-  PlacesAutocompleteController get _controller => widget.controller ?? (_ownedController ??= PlacesAutocompleteController());
+  PlacesAutocompleteController get _controller =>
+      widget.controller ??
+      (_ownedController ??= PlacesAutocompleteController());
 
-  bool get _isLauncherMode => widget.fieldMode != PlacesAutocompleteFieldMode.inline;
+  bool get _isLauncherMode =>
+      widget.fieldMode != PlacesAutocompleteFieldMode.inline;
+
+  bool get _shouldResolvePlaceOnSelection =>
+      widget.fetchPlaceDetailsOnSelection || widget.fetchTimeZoneOnSelection;
+
+  Set<PlaceField> get _effectiveSelectionFields =>
+      widget.fetchTimeZoneOnSelection
+      ? <PlaceField>{...widget.selectionFields, PlaceField.location}
+      : widget.selectionFields;
 
   @override
   void initState() {
@@ -145,7 +180,9 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   void didUpdateWidget(PlacesAutocompleteField oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
-      (oldWidget.controller ?? _ownedController)?.focusNode.removeListener(_onFocusChanged);
+      (oldWidget.controller ?? _ownedController)?.focusNode.removeListener(
+        _onFocusChanged,
+      );
       _controller.focusNode.addListener(_onFocusChanged);
     }
     _syncFocusMode();
@@ -201,7 +238,12 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   }
 
   bool _isActiveSearch(String input, int generation) {
-    return mounted && generation == _searchGeneration && _searchUiVisible && !_isLauncherMode && _controller.focusNode.hasFocus && _controller.textController.text.trim() == input;
+    return mounted &&
+        generation == _searchGeneration &&
+        _searchUiVisible &&
+        !_isLauncherMode &&
+        _controller.focusNode.hasFocus &&
+        _controller.textController.text.trim() == input;
   }
 
   void _closeSearchUi() {
@@ -237,7 +279,8 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
           locationRestriction: widget.locationRestriction,
           includedPrimaryTypes: widget.includedPrimaryTypes,
           includedRegionCodes: widget.includedRegionCodes,
-          includePureServiceAreaBusinesses: widget.includePureServiceAreaBusinesses,
+          includePureServiceAreaBusinesses:
+              widget.includePureServiceAreaBusinesses,
         ),
       );
       if (!_isActiveSearch(input, generation)) {
@@ -271,7 +314,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     final initialSelection = PlaceSelection(suggestion: suggestion);
     _controller.setSelection(initialSelection);
     _controller.focusNode.unfocus();
-    if (!widget.fetchPlaceDetailsOnSelection) {
+    if (!_shouldResolvePlaceOnSelection) {
       widget.onSelection?.call(initialSelection);
       _controller.resetSession();
       return;
@@ -280,7 +323,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       final place = await widget.client.fetchPlace(
         PlaceDetailsRequest(
           placeId: suggestion.placeId,
-          fields: widget.selectionFields,
+          fields: _effectiveSelectionFields,
           languageCode: widget.selectionLanguageCode ?? widget.languageCode,
           regionCode: widget.selectionRegionCode ?? widget.regionCode,
           sessionToken: _controller.sessionToken,
@@ -289,7 +332,22 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       if (!mounted) {
         return;
       }
-      final resolvedSelection = PlaceSelection(suggestion: suggestion, place: place);
+      PlaceTimeZoneData? timeZone;
+      if (widget.fetchTimeZoneOnSelection) {
+        timeZone = await widget.client.fetchTimeZoneForPlace(
+          place,
+          timestamp: widget.selectionTimeZoneAt,
+          languageCode:
+              widget.selectionTimeZoneLanguageCode ??
+              widget.selectionLanguageCode ??
+              widget.languageCode,
+        );
+      }
+      final resolvedSelection = PlaceSelection(
+        suggestion: suggestion,
+        place: place,
+        timeZone: timeZone,
+      );
       _controller.setSelection(resolvedSelection, updateText: false);
       widget.onSelection?.call(resolvedSelection);
     } catch (error) {
@@ -302,8 +360,10 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   Future<void> _openOverlay() async {
     final mode = switch (widget.fieldMode) {
       PlacesAutocompleteFieldMode.inline => null,
-      PlacesAutocompleteFieldMode.dialog => PlacesAutocompleteOverlayMode.dialog,
-      PlacesAutocompleteFieldMode.fullscreen => PlacesAutocompleteOverlayMode.fullscreen,
+      PlacesAutocompleteFieldMode.dialog =>
+        PlacesAutocompleteOverlayMode.dialog,
+      PlacesAutocompleteFieldMode.fullscreen =>
+        PlacesAutocompleteOverlayMode.fullscreen,
     };
     if (mode == null) {
       return;
@@ -323,9 +383,12 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       includedRegionCodes: widget.includedRegionCodes,
       includePureServiceAreaBusinesses: widget.includePureServiceAreaBusinesses,
       fetchPlaceDetailsOnSelection: widget.fetchPlaceDetailsOnSelection,
+      fetchTimeZoneOnSelection: widget.fetchTimeZoneOnSelection,
       selectionFields: widget.selectionFields,
       selectionLanguageCode: widget.selectionLanguageCode,
       selectionRegionCode: widget.selectionRegionCode,
+      selectionTimeZoneAt: widget.selectionTimeZoneAt,
+      selectionTimeZoneLanguageCode: widget.selectionTimeZoneLanguageCode,
       onError: widget.onError,
     );
 
@@ -362,7 +425,11 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
             _InfoTile(
               child: Row(
                 children: <Widget>[
-                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
                   const SizedBox(width: 12),
                   Expanded(child: Text(widget.strings.loadingText)),
                 ],
@@ -370,7 +437,8 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
             )
           else if (_error != null)
             _InfoTile(child: Text(widget.strings.errorText))
-          else if (_suggestions.isEmpty && _controller.textController.text.trim().isNotEmpty)
+          else if (_suggestions.isEmpty &&
+              _controller.textController.text.trim().isNotEmpty)
             _InfoTile(child: Text(widget.strings.noResultsText))
           else if (_suggestions.isNotEmpty)
             Material(
@@ -381,14 +449,23 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
                   for (final suggestion in _suggestions)
                     ListTile(
                       onTap: () => _handleSuggestionTap(suggestion),
-                      title: widget.suggestionBuilder?.call(context, suggestion) ?? Text(suggestion.primaryText.text),
-                      subtitle: suggestion.secondaryText == null ? null : Text(suggestion.secondaryText!.text),
-                      trailing: suggestion.distanceMeters == null ? null : Text('${suggestion.distanceMeters} m'),
+                      title:
+                          widget.suggestionBuilder?.call(context, suggestion) ??
+                          Text(suggestion.primaryText.text),
+                      subtitle: suggestion.secondaryText == null
+                          ? null
+                          : Text(suggestion.secondaryText!.text),
+                      trailing: suggestion.distanceMeters == null
+                          ? null
+                          : Text('${suggestion.distanceMeters} m'),
                     ),
                   if (widget.showPoweredByGoogle)
                     const Padding(
                       padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
-                      child: Align(alignment: AlignmentDirectional.centerEnd, child: _PoweredByGoogleAttribution()),
+                      child: Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: _PoweredByGoogleAttribution(),
+                      ),
                     ),
                 ],
               ),
@@ -400,19 +477,31 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
 
   InputDecoration _buildDecoration() {
     final baseDecoration = widget.decoration ?? const InputDecoration();
-    final clearButton = IconButton(onPressed: widget.enabled ? _clearField : null, icon: const Icon(Icons.clear), tooltip: widget.strings.clearLabel);
+    final clearButton = IconButton(
+      onPressed: widget.enabled ? _clearField : null,
+      icon: const Icon(Icons.clear),
+      tooltip: widget.strings.clearLabel,
+    );
 
     final userSuffix = baseDecoration.suffix;
     final userSuffixIcon = baseDecoration.suffixIcon;
 
     return baseDecoration.copyWith(
       hintText: baseDecoration.hintText ?? widget.strings.searchHint,
-      suffix: _mergeSuffix(suffix: userSuffix, suffixIcon: userSuffixIcon, suffixIconConstraints: baseDecoration.suffixIconConstraints),
+      suffix: _mergeSuffix(
+        suffix: userSuffix,
+        suffixIcon: userSuffixIcon,
+        suffixIconConstraints: baseDecoration.suffixIconConstraints,
+      ),
       suffixIcon: clearButton,
     );
   }
 
-  Widget? _mergeSuffix({Widget? suffix, Widget? suffixIcon, BoxConstraints? suffixIconConstraints}) {
+  Widget? _mergeSuffix({
+    Widget? suffix,
+    Widget? suffixIcon,
+    BoxConstraints? suffixIconConstraints,
+  }) {
     if (suffix == null && suffixIcon == null) {
       return null;
     }
@@ -422,14 +511,20 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       items.add(suffix);
     }
     if (suffixIcon != null) {
-      items.add(_SuffixIconProxy(constraints: suffixIconConstraints, child: suffixIcon));
+      items.add(
+        _SuffixIconProxy(constraints: suffixIconConstraints, child: suffixIcon),
+      );
     }
 
     if (items.length == 1) {
       return items.single;
     }
 
-    return Wrap(spacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: items);
+    return Wrap(
+      spacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: items,
+    );
   }
 }
 
@@ -454,8 +549,15 @@ class _PoweredByGoogleAttribution extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    final assetName = brightness == Brightness.dark ? 'assets/google_white.png' : 'assets/google_black.png';
-    return Image.asset(assetName, package: 'google_places_autocomplete', height: 18, semanticLabel: const PlacesStrings().poweredByGoogleLabel);
+    final assetName = brightness == Brightness.dark
+        ? 'assets/google_white.png'
+        : 'assets/google_black.png';
+    return Image.asset(
+      assetName,
+      package: 'google_places_autocomplete',
+      height: 18,
+      semanticLabel: const PlacesStrings().poweredByGoogleLabel,
+    );
   }
 }
 
@@ -467,7 +569,8 @@ class _SuffixIconProxy extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveConstraints = constraints ?? const BoxConstraints(minWidth: 48, minHeight: 48);
+    final effectiveConstraints =
+        constraints ?? const BoxConstraints(minWidth: 48, minHeight: 48);
 
     return ConstrainedBox(
       constraints: effectiveConstraints,

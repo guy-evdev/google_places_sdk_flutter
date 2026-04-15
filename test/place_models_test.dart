@@ -75,4 +75,41 @@ void main() {
     expect(place.location?.latitude, 1.2);
     expect(place.photos, hasLength(1));
   });
+
+  test('parses time-zone data', () {
+    final timestamp = DateTime.utc(2026, 4, 15, 12);
+    final timeZone = PlaceTimeZoneData.fromJson(<String, Object?>{
+      'dstOffset': 3600,
+      'rawOffset': -18000,
+      'timeZoneId': 'America/New_York',
+      'timeZoneName': 'Eastern Daylight Time',
+      'status': 'OK',
+    }, timestamp: timestamp);
+
+    expect(timeZone.dstOffset, const Duration(hours: 1));
+    expect(timeZone.rawOffset, const Duration(hours: -5));
+    expect(timeZone.timeZoneId, 'America/New_York');
+    expect(timeZone.timestamp, timestamp);
+  });
+
+  test('creates time-zone request from place coordinates', () {
+    final request = TimeZoneRequest.fromPlace(
+      const PlaceData(
+        id: 'place-1',
+        location: PlaceCoordinates(latitude: 32.08, longitude: 34.78),
+      ),
+      timestamp: DateTime.utc(2026, 4, 15),
+      languageCode: 'en',
+    );
+
+    expect(request.location.latitude, 32.08);
+    expect(request.languageCode, 'en');
+  });
+
+  test('rejects time-zone request from place without location', () {
+    expect(
+      () => TimeZoneRequest.fromPlace(const PlaceData(id: 'place-1')),
+      throwsA(isA<PlacesException>()),
+    );
+  });
 }

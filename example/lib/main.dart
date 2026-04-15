@@ -36,13 +36,15 @@ class ExampleApp extends StatefulWidget {
 
 class _ExampleAppState extends State<ExampleApp> {
   final PlacesClient _client = PlacesClient(apiKey: _apiKey);
-  final PlacesAutocompleteController _controller = PlacesAutocompleteController();
+  final PlacesAutocompleteController _controller =
+      PlacesAutocompleteController();
 
   DemoLocale _demoLocale = DemoLocale.english;
   PlacesAutocompleteFieldMode _fieldMode = PlacesAutocompleteFieldMode.inline;
   PlaceSelection? _selection;
   Object? _lastError;
   WidgetType _widgetType = WidgetType.textField;
+  bool _fetchTimeZoneOnSelection = false;
 
   @override
   void dispose() {
@@ -57,14 +59,33 @@ class _ExampleAppState extends State<ExampleApp> {
       title: 'google_places_autocomplete example',
       debugShowCheckedModeBanner: false,
       locale: _demoLocale.locale,
-      supportedLocales: DemoLocale.values.map((locale) => locale.locale).toList(),
-      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[GlobalMaterialLocalizations.delegate, GlobalWidgetsLocalizations.delegate, GlobalCupertinoLocalizations.delegate],
-      builder: (context, child) => Directionality(textDirection: _demoLocale.isRtl ? TextDirection.rtl : TextDirection.ltr, child: child!),
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0B5D3B)), useMaterial3: true),
+      supportedLocales: DemoLocale.values
+          .map((locale) => locale.locale)
+          .toList(),
+      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      builder: (context, child) => Directionality(
+        textDirection: _demoLocale.isRtl
+            ? TextDirection.rtl
+            : TextDirection.ltr,
+        child: child!,
+      ),
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0B5D3B)),
+        useMaterial3: true,
+      ),
       home: Builder(
         builder: (appContext) => Scaffold(
           appBar: AppBar(title: const Text('google_places_autocomplete')),
-          body: Padding(padding: const EdgeInsets.all(16), child: _apiKey.isEmpty ? const _MissingKeyNotice() : _buildContent(appContext)),
+          body: Padding(
+            padding: const EdgeInsets.all(16),
+            child: _apiKey.isEmpty
+                ? const _MissingKeyNotice()
+                : _buildContent(appContext),
+          ),
         ),
       ),
     );
@@ -83,7 +104,14 @@ class _ExampleAppState extends State<ExampleApp> {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: <Widget>[
             SegmentedButton<DemoLocale>(
-              segments: DemoLocale.values.map((locale) => ButtonSegment<DemoLocale>(value: locale, label: Text(locale.label))).toList(growable: false),
+              segments: DemoLocale.values
+                  .map(
+                    (locale) => ButtonSegment<DemoLocale>(
+                      value: locale,
+                      label: Text(locale.label),
+                    ),
+                  )
+                  .toList(growable: false),
               selected: <DemoLocale>{_demoLocale},
               onSelectionChanged: (selection) {
                 setState(() {
@@ -103,9 +131,18 @@ class _ExampleAppState extends State<ExampleApp> {
           children: <Widget>[
             SegmentedButton<WidgetType>(
               segments: const <ButtonSegment<WidgetType>>[
-                ButtonSegment<WidgetType>(value: WidgetType.textField, label: Text('Text Field')),
-                ButtonSegment<WidgetType>(value: WidgetType.dialog, label: Text('Dialog')),
-                ButtonSegment<WidgetType>(value: WidgetType.fullscreen, label: Text('Fullscreen')),
+                ButtonSegment<WidgetType>(
+                  value: WidgetType.textField,
+                  label: Text('Text Field'),
+                ),
+                ButtonSegment<WidgetType>(
+                  value: WidgetType.dialog,
+                  label: Text('Dialog'),
+                ),
+                ButtonSegment<WidgetType>(
+                  value: WidgetType.fullscreen,
+                  label: Text('Fullscreen'),
+                ),
               ],
               selected: <WidgetType>{_widgetType},
               onSelectionChanged: (selection) {
@@ -117,6 +154,20 @@ class _ExampleAppState extends State<ExampleApp> {
           ],
         ),
         const SizedBox(height: 24),
+        SwitchListTile(
+          dense: true,
+          value: _fetchTimeZoneOnSelection,
+          title: const Text('Fetch time zone on selection'),
+          subtitle: const Text(
+            'Uses Google Time Zone API after resolving the selected place coordinates.',
+          ),
+          onChanged: (value) {
+            setState(() {
+              _fetchTimeZoneOnSelection = value;
+            });
+          },
+        ),
+        const SizedBox(height: 8),
         if (_widgetType == WidgetType.textField) ...[
           const Text('Text Field Type', textAlign: TextAlign.center),
           Wrap(
@@ -127,9 +178,18 @@ class _ExampleAppState extends State<ExampleApp> {
             children: <Widget>[
               SegmentedButton<PlacesAutocompleteFieldMode>(
                 segments: const <ButtonSegment<PlacesAutocompleteFieldMode>>[
-                  ButtonSegment<PlacesAutocompleteFieldMode>(value: PlacesAutocompleteFieldMode.inline, label: Text('Inline')),
-                  ButtonSegment<PlacesAutocompleteFieldMode>(value: PlacesAutocompleteFieldMode.dialog, label: Text('Dialog')),
-                  ButtonSegment<PlacesAutocompleteFieldMode>(value: PlacesAutocompleteFieldMode.fullscreen, label: Text('Fullscreen')),
+                  ButtonSegment<PlacesAutocompleteFieldMode>(
+                    value: PlacesAutocompleteFieldMode.inline,
+                    label: Text('Inline'),
+                  ),
+                  ButtonSegment<PlacesAutocompleteFieldMode>(
+                    value: PlacesAutocompleteFieldMode.dialog,
+                    label: Text('Dialog'),
+                  ),
+                  ButtonSegment<PlacesAutocompleteFieldMode>(
+                    value: PlacesAutocompleteFieldMode.fullscreen,
+                    label: Text('Fullscreen'),
+                  ),
                 ],
                 selected: <PlacesAutocompleteFieldMode>{_fieldMode},
                 onSelectionChanged: (selection) {
@@ -148,6 +208,7 @@ class _ExampleAppState extends State<ExampleApp> {
             languageCode: _demoLocale.locale.languageCode,
             regionCode: _demoLocale.locale.countryCode?.toLowerCase(),
             fetchPlaceDetailsOnSelection: true,
+            fetchTimeZoneOnSelection: _fetchTimeZoneOnSelection,
             selectionFields: PlaceFieldPresets.rich,
             fieldMode: _fieldMode,
             onSelection: (selection) {
@@ -177,7 +238,13 @@ class _ExampleAppState extends State<ExampleApp> {
             alignment: WrapAlignment.center,
             children: <Widget>[
               FilledButton.tonal(
-                onPressed: () => _openOverlay(context, strings, mode: _widgetType == WidgetType.fullscreen ? PlacesAutocompleteOverlayMode.fullscreen : PlacesAutocompleteOverlayMode.dialog),
+                onPressed: () => _openOverlay(
+                  context,
+                  strings,
+                  mode: _widgetType == WidgetType.fullscreen
+                      ? PlacesAutocompleteOverlayMode.fullscreen
+                      : PlacesAutocompleteOverlayMode.dialog,
+                ),
                 child: const Text('Click to Search'),
               ),
             ],
@@ -185,23 +252,43 @@ class _ExampleAppState extends State<ExampleApp> {
           const SizedBox(height: 24),
           if (_selection != null)
             Card(
-              child: ListTile(title: Text(_selection!.suggestion.primaryText.text), subtitle: Text(_selection!.displayText)),
+              child: ListTile(
+                title: Text(_selection!.suggestion.primaryText.text),
+                subtitle: Text(_selection!.displayText),
+              ),
             ),
         ],
         if (_selection?.place != null)
           Card(
-            child: Padding(padding: const EdgeInsets.all(16), child: SelectableText(prettyJson(_selection!.place!.rawData))),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: SelectableText(prettyJson(_selection!.place!.rawData)),
+            ),
+          ),
+        if (_selection?.timeZone != null)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: SelectableText(prettyJson(_selection!.timeZone!.rawData)),
+            ),
           ),
         if (_lastError != null)
           Card(
             color: Theme.of(context).colorScheme.errorContainer,
-            child: Padding(padding: const EdgeInsets.all(16), child: Text(_lastError.toString())),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(_lastError.toString()),
+            ),
           ),
       ],
     );
   }
 
-  Future<void> _openOverlay(BuildContext context, PlacesStrings strings, {PlacesAutocompleteOverlayMode mode = PlacesAutocompleteOverlayMode.dialog}) async {
+  Future<void> _openOverlay(
+    BuildContext context,
+    PlacesStrings strings, {
+    PlacesAutocompleteOverlayMode mode = PlacesAutocompleteOverlayMode.dialog,
+  }) async {
     final selection = await PlacesAutocompleteOverlay.show(
       context,
       client: _client,
@@ -210,7 +297,10 @@ class _ExampleAppState extends State<ExampleApp> {
       languageCode: _demoLocale.locale.languageCode,
       regionCode: _demoLocale.locale.countryCode?.toLowerCase(),
       fetchPlaceDetailsOnSelection: true,
-      selectionFields: mode == PlacesAutocompleteOverlayMode.dialog ? PlaceFieldPresets.recommended : PlaceFieldPresets.minimal,
+      fetchTimeZoneOnSelection: _fetchTimeZoneOnSelection,
+      selectionFields: mode == PlacesAutocompleteOverlayMode.dialog
+          ? PlaceFieldPresets.recommended
+          : PlaceFieldPresets.minimal,
       onError: (error) {
         setState(() {
           _lastError = error;
@@ -230,7 +320,10 @@ class _ExampleAppState extends State<ExampleApp> {
 
   PlacesStrings _stringsFor(DemoLocale locale) {
     return switch (locale) {
-      DemoLocale.english => const PlacesStrings(searchHint: 'Search for a place', overlayTitle: 'Search places'),
+      DemoLocale.english => const PlacesStrings(
+        searchHint: 'Search for a place',
+        overlayTitle: 'Search places',
+      ),
       DemoLocale.hebrew => const PlacesStrings(
         searchHint: 'חיפוש מקום',
         loadingText: 'טוען תוצאות…',
@@ -262,6 +355,11 @@ class _MissingKeyNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text('Pass GOOGLE_MAPS_API_KEY with --dart-define to run the example.', textAlign: TextAlign.center));
+    return const Center(
+      child: Text(
+        'Pass GOOGLE_MAPS_API_KEY with --dart-define to run the example.',
+        textAlign: TextAlign.center,
+      ),
+    );
   }
 }

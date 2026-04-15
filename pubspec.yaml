@@ -1,6 +1,6 @@
 name: google_places_autocomplete
 description: "Cross-platform Google Places autocomplete widgets and clients built on Places API (New)."
-version: 0.1.0
+version: 0.2.0
 homepage: https://github.com/guy-evdev/google_places_autocomplete
 repository: https://github.com/guy-evdev/google_places_autocomplete
 topics:

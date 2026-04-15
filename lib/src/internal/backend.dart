@@ -5,6 +5,8 @@ abstract interface class PlacesBackend {
 
   Future<PlaceData> fetchPlace(PlaceDetailsRequest request);
 
+  Future<PlaceTimeZoneData> fetchTimeZone(TimeZoneRequest request);
+
   Future<List<PlaceData>> searchText(TextSearchRequest request);
 
   Future<List<PlaceData>> searchNearby(NearbySearchRequest request);

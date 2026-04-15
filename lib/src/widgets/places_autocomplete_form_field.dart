@@ -25,9 +25,12 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
     List<String> includedRegionCodes = const <String>[],
     bool includePureServiceAreaBusinesses = false,
     bool fetchPlaceDetailsOnSelection = false,
+    bool fetchTimeZoneOnSelection = false,
     Set<PlaceField> selectionFields = PlaceFieldPresets.recommended,
     String? selectionLanguageCode,
     String? selectionRegionCode,
+    DateTime? selectionTimeZoneAt,
+    String? selectionTimeZoneLanguageCode,
     PlacesAutocompleteFieldMode fieldMode = PlacesAutocompleteFieldMode.inline,
     ValueChanged<PlaceSelection>? onSelection,
     VoidCallback? onClearField,
@@ -36,14 +39,16 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
     bool enabled = true,
     bool autofocus = false,
     bool showPoweredByGoogle = true,
-    Widget Function(BuildContext context, PlaceSuggestion suggestion)? suggestionBuilder,
+    Widget Function(BuildContext context, PlaceSuggestion suggestion)?
+    suggestionBuilder,
     super.validator,
     super.onSaved,
     super.initialValue,
     super.autovalidateMode = AutovalidateMode.disabled,
   }) : super(
          builder: (FormFieldState<PlaceSelection?> field) {
-           final effectiveDecoration = (decoration ?? const InputDecoration()).copyWith(errorText: field.errorText);
+           final effectiveDecoration = (decoration ?? const InputDecoration())
+               .copyWith(errorText: field.errorText);
            return PlacesAutocompleteField(
              client: client,
              controller: controller,
@@ -57,9 +62,12 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
              includedRegionCodes: includedRegionCodes,
              includePureServiceAreaBusinesses: includePureServiceAreaBusinesses,
              fetchPlaceDetailsOnSelection: fetchPlaceDetailsOnSelection,
+             fetchTimeZoneOnSelection: fetchTimeZoneOnSelection,
              selectionFields: selectionFields,
              selectionLanguageCode: selectionLanguageCode,
              selectionRegionCode: selectionRegionCode,
+             selectionTimeZoneAt: selectionTimeZoneAt,
+             selectionTimeZoneLanguageCode: selectionTimeZoneLanguageCode,
              fieldMode: fieldMode,
              onSelection: (selection) {
                field.didChange(selection);

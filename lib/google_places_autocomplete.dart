@@ -3,6 +3,7 @@
 /// This library exports:
 /// - request and response models for Places API (New)
 /// - a cross-platform [PlacesClient]
+/// - optional Google Time Zone API integration
 /// - inline, dialog, and fullscreen autocomplete widgets
 /// - localization strings and controller types for UI integration
 ///

@@ -28,6 +28,25 @@ class _FakeBackend implements PlacesBackend {
       id: 'place-1',
       displayName: LocalizedText(text: 'Coffee Lab'),
       formattedAddress: 'Main Street',
+      location: PlaceCoordinates(latitude: 40.7128, longitude: -74.0060),
+    );
+  }
+
+  @override
+  Future<PlaceTimeZoneData> fetchTimeZone(TimeZoneRequest request) async {
+    return PlaceTimeZoneData(
+      dstOffset: const Duration(hours: 1),
+      rawOffset: const Duration(hours: -5),
+      timeZoneId: 'America/New_York',
+      timeZoneName: 'Eastern Daylight Time',
+      timestamp: request.timestamp ?? DateTime.utc(2026, 4, 15),
+      rawData: const <String, Object?>{
+        'dstOffset': 3600,
+        'rawOffset': -18000,
+        'timeZoneId': 'America/New_York',
+        'timeZoneName': 'Eastern Daylight Time',
+        'status': 'OK',
+      },
     );
   }
 
@@ -108,6 +127,43 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.text(const PlacesStrings().noResultsText), findsNothing);
     expect(find.text('Main Street'), findsNothing);
+  });
+
+  testWidgets('can enrich the selection with time-zone data', (tester) async {
+    final client = PlacesClient.testing(
+      apiKey: 'test',
+      backend: _FakeBackend(),
+    );
+    PlaceSelection? selection;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlacesAutocompleteField(
+            client: client,
+            fetchTimeZoneOnSelection: true,
+            selectionFields: PlaceFieldPresets.minimal,
+            onSelection: (value) {
+              selection = value;
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), 'cof');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Coffee Lab'));
+    await tester.pumpAndSettle();
+
+    expect(selection, isNotNull);
+    expect(selection!.place, isNotNull);
+    expect(selection!.timeZone, isNotNull);
+    expect(selection!.timeZone!.timeZoneId, 'America/New_York');
+    expect(find.byType(ListTile), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
   testWidgets('clear button clears the field and calls onClearField', (
