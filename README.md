@@ -1,5 +1,6 @@
-# google_places_autocomplete
+# Google Places Autocomplete for Flutter
 
+[![pub package](https://img.shields.io/pub/v/google_places_autocomplete.svg)](https://pub.dev/packages/google_places_autocomplete)
 [![CI](https://github.com/guy-evdev/google_places_autocomplete/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/guy-evdev/google_places_autocomplete/actions/workflows/ci.yml)
 
 Cross-platform Google Places autocomplete for Flutter, built on Places API (New).
@@ -37,6 +38,7 @@ Sample flows (Inline field, dialog launcher, fullscreen launcher, and rich resul
 - Customizable strings and `InputDecoration`
 - Locale support with `languageCode` and `regionCode`
 - Rich field-mask control with `PlaceField` and `PlaceFieldPresets`
+- Typed address support through `postalAddress`, `addressComponents`, and convenience getters
 
 ## Installation
 
@@ -262,6 +264,35 @@ debugPrint(timeZone.timeZoneName);
 
 Time-zone lookups use Google Time Zone API, which is separate from Places API
 and may be billed separately.
+
+## Typed Address Details
+
+When you request `PlaceField.postalAddress` and/or
+`PlaceField.addressComponents`, `PlaceData` exposes typed address structures
+and convenience getters for common legacy-style fields:
+
+```dart
+final place = await client.fetchPlaceById(
+  'ChIJmQJIxlVYwokRLgeuocVOGVU',
+  fields: <PlaceField>{
+    ...PlaceFieldPresets.rich,
+    PlaceField.postalAddress,
+    PlaceField.addressComponents,
+  },
+);
+
+debugPrint(place.route);
+debugPrint(place.streetNumber);
+debugPrint(place.locality);
+debugPrint(place.administrativeArea);
+debugPrint(place.postalCode);
+debugPrint(place.country);
+debugPrint(place.countryCode);
+```
+
+Google references:
+- [Place resource: postalAddress](https://developers.google.com/maps/documentation/places/web-service/reference/rest/v1/places#PostalAddress)
+- [Place resource: addressComponents](https://developers.google.com/maps/documentation/places/web-service/reference/rest/v1/places#AddressComponent)
 
 ## Overlay Usage
 

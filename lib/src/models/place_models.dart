@@ -204,6 +204,7 @@ enum PlaceField {
   formattedAddress('formattedAddress'),
   shortFormattedAddress('shortFormattedAddress'),
   adrFormatAddress('adrFormatAddress'),
+  postalAddress('postalAddress'),
   location('location'),
   viewport('viewport'),
   types('types'),
@@ -281,6 +282,8 @@ abstract final class PlaceFieldPresets {
   /// Rich payload with additional business, review, and amenity data.
   static const Set<PlaceField> rich = <PlaceField>{
     ...recommended,
+    PlaceField.postalAddress,
+    PlaceField.addressComponents,
     PlaceField.websiteUri,
     PlaceField.nationalPhoneNumber,
     PlaceField.internationalPhoneNumber,
@@ -558,6 +561,96 @@ class PlaceSelection {
 }
 
 @immutable
+/// Structured component of a place address, such as route or locality.
+///
+/// Google may return multiple types for a single component, and the order is
+/// not guaranteed to be stable between requests.
+///
+/// Official reference:
+/// https://developers.google.com/maps/documentation/places/web-service/reference/rest/v1/places#AddressComponent
+class PlaceAddressComponent {
+  const PlaceAddressComponent({
+    required this.longText,
+    this.shortText,
+    this.types = const <String>[],
+    this.languageCode,
+  });
+
+  final String longText;
+  final String? shortText;
+  final List<String> types;
+  final String? languageCode;
+
+  factory PlaceAddressComponent.fromJson(Map<String, Object?> json) =>
+      PlaceAddressComponent(
+        longText: (json['longText'] ?? '') as String,
+        shortText: json['shortText'] as String?,
+        types: ((json['types'] as List?) ?? <Object?>[])
+            .whereType<String>()
+            .toList(growable: false),
+        languageCode: json['languageCode'] as String?,
+      );
+
+  /// Whether this component includes the supplied Google component type.
+  bool hasType(String type) => types.contains(type);
+}
+
+@immutable
+/// Postal-address representation returned by Google Places API (New).
+///
+/// This schema is useful when you need normalized city, administrative area,
+/// postal code, or country information in addition to formatted address text.
+///
+/// Official reference:
+/// https://developers.google.com/maps/documentation/places/web-service/reference/rest/v1/places#PostalAddress
+class PlacePostalAddress {
+  const PlacePostalAddress({
+    this.revision,
+    required this.regionCode,
+    this.languageCode,
+    this.postalCode,
+    this.sortingCode,
+    this.administrativeArea,
+    this.locality,
+    this.sublocality,
+    this.addressLines = const <String>[],
+    this.recipients = const <String>[],
+    this.organization,
+  });
+
+  final int? revision;
+  final String regionCode;
+  final String? languageCode;
+  final String? postalCode;
+  final String? sortingCode;
+  final String? administrativeArea;
+  final String? locality;
+  final String? sublocality;
+  final List<String> addressLines;
+  final List<String> recipients;
+  final String? organization;
+
+  factory PlacePostalAddress.fromJson(Map<String, Object?> json) =>
+      PlacePostalAddress(
+        revision: (json['revision'] as num?)?.toInt(),
+        regionCode: (json['regionCode'] ?? '') as String,
+        languageCode: json['languageCode'] as String?,
+        postalCode: json['postalCode'] as String?,
+        sortingCode: json['sortingCode'] as String?,
+        administrativeArea: json['administrativeArea'] as String?,
+        locality: json['locality'] as String?,
+        sublocality: json['sublocality'] as String?,
+        addressLines: ((json['addressLines'] as List?) ?? <Object?>[])
+            .whereType<String>()
+            .toList(growable: false),
+        recipients: ((json['recipients'] as List?) ?? <Object?>[])
+            .whereType<String>()
+            .toList(growable: false),
+        organization: json['organization'] as String?,
+      );
+}
+
+@immutable
 /// Photo metadata returned in rich place details.
 class PlacePhoto {
   const PlacePhoto({
@@ -631,6 +724,8 @@ class PlaceData {
     this.displayName,
     this.formattedAddress,
     this.shortFormattedAddress,
+    this.postalAddress,
+    this.addressComponents = const <PlaceAddressComponent>[],
     this.location,
     this.viewport,
     this.types = const <String>[],
@@ -684,6 +779,12 @@ class PlaceData {
   /// Short formatted address returned by Google.
   final String? shortFormattedAddress;
 
+  /// Structured postal-address representation, when requested.
+  final PlacePostalAddress? postalAddress;
+
+  /// Structured address components, when requested.
+  final List<PlaceAddressComponent> addressComponents;
+
   /// Geographic coordinates for the place.
   final PlaceCoordinates? location;
 
@@ -736,6 +837,56 @@ class PlaceData {
   /// Full raw payload from Google.
   final Map<String, Object?> rawData;
 
+  /// Street route component, such as `Broadway`.
+  String? get route => _addressComponent('route')?.longText;
+
+  /// Short street route component, when Google provides it.
+  String? get routeShort => _addressComponent('route')?.shortText;
+
+  /// Street number component, such as `151`.
+  String? get streetNumber => _addressComponent('street_number')?.longText;
+
+  /// Short street number component, when Google provides it.
+  String? get streetNumberShort =>
+      _addressComponent('street_number')?.shortText;
+
+  /// Locality component, typically a city or town.
+  String? get locality =>
+      _addressComponent('locality')?.longText ?? postalAddress?.locality;
+
+  /// Short locality component, when Google provides it.
+  String? get localityShort => _addressComponent('locality')?.shortText;
+
+  /// Administrative area component, typically state/province/region.
+  String? get administrativeArea =>
+      _addressComponent('administrative_area_level_1')?.longText ??
+      postalAddress?.administrativeArea;
+
+  /// Short administrative area component, when Google provides it.
+  String? get administrativeAreaShort =>
+      _addressComponent('administrative_area_level_1')?.shortText;
+
+  /// Postal code component.
+  String? get postalCode =>
+      _addressComponent('postal_code')?.longText ?? postalAddress?.postalCode;
+
+  /// Short postal code component, when Google provides it.
+  String? get postalCodeShort => _addressComponent('postal_code')?.shortText;
+
+  /// Country name component.
+  String? get country => _addressComponent('country')?.longText;
+
+  /// Short country component, typically an ISO/CLDR-like country code.
+  String? get countryShort => _addressComponent('country')?.shortText;
+
+  /// Country/region code from the postal address schema.
+  String? get countryCode => postalAddress?.regionCode;
+
+  /// Short country/region code from address components when available, falling
+  /// back to [countryCode].
+  String? get countryCodeShort =>
+      _addressComponent('country')?.shortText ?? countryCode;
+
   factory PlaceData.fromJson(Map<String, Object?> json) => PlaceData(
     id: (json['id'] ?? '') as String,
     resourceName: json['name'] as String?,
@@ -744,6 +895,18 @@ class PlaceData {
         : LocalizedText.fromJson(json['displayName']),
     formattedAddress: json['formattedAddress'] as String?,
     shortFormattedAddress: json['shortFormattedAddress'] as String?,
+    postalAddress: (json['postalAddress'] as Map?) == null
+        ? null
+        : PlacePostalAddress.fromJson(
+            (json['postalAddress'] as Map).cast<String, Object?>(),
+          ),
+    addressComponents: ((json['addressComponents'] as List?) ?? <Object?>[])
+        .whereType<Map>()
+        .map(
+          (component) =>
+              PlaceAddressComponent.fromJson(component.cast<String, Object?>()),
+        )
+        .toList(growable: false),
     location: _parseCoordinates(json['location']),
     viewport: _parseViewport(json['viewport']),
     types: ((json['types'] as List?) ?? <Object?>[]).whereType<String>().toList(
@@ -793,6 +956,15 @@ class PlaceData {
         .toList(growable: false),
     rawData: Map<String, Object?>.unmodifiable(json),
   );
+
+  PlaceAddressComponent? _addressComponent(String type) {
+    for (final component in addressComponents) {
+      if (component.hasType(type)) {
+        return component;
+      }
+    }
+    return null;
+  }
 }
 
 /// Request payload for Places API (New) autocomplete.

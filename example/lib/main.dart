@@ -262,7 +262,41 @@ class _ExampleAppState extends State<ExampleApp> {
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: SelectableText(prettyJson(_selection!.place!.rawData)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  if (_selection!.place!.route != null ||
+                      _selection!.place!.streetNumber != null ||
+                      _selection!.place!.locality != null ||
+                      _selection!.place!.administrativeArea != null ||
+                      _selection!.place!.postalCode != null ||
+                      _selection!.place!.country != null) ...<Widget>[
+                    Text(
+                      'Typed address fields',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    if (_selection!.place!.route != null)
+                      Text('route: ${_selection!.place!.route}'),
+                    if (_selection!.place!.streetNumber != null)
+                      Text('streetNumber: ${_selection!.place!.streetNumber}'),
+                    if (_selection!.place!.locality != null)
+                      Text('locality: ${_selection!.place!.locality}'),
+                    if (_selection!.place!.administrativeArea != null)
+                      Text(
+                        'administrativeArea: ${_selection!.place!.administrativeArea}',
+                      ),
+                    if (_selection!.place!.postalCode != null)
+                      Text('postalCode: ${_selection!.place!.postalCode}'),
+                    if (_selection!.place!.country != null)
+                      Text('country: ${_selection!.place!.country}'),
+                    if (_selection!.place!.countryCode != null)
+                      Text('countryCode: ${_selection!.place!.countryCode}'),
+                    const SizedBox(height: 16),
+                  ],
+                  SelectableText(prettyJson(_selection!.place!.rawData)),
+                ],
+              ),
             ),
           ),
         if (_selection?.timeZone != null)

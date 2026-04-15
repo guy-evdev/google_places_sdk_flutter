@@ -61,6 +61,50 @@ void main() {
         'languageCode': 'en',
       },
       'formattedAddress': '1 Main St',
+      'postalAddress': <String, Object?>{
+        'regionCode': 'US',
+        'administrativeArea': 'NY',
+        'locality': 'New York',
+        'postalCode': '10036',
+      },
+      'addressComponents': <Map<String, Object?>>[
+        <String, Object?>{
+          'longText': 'Times Square',
+          'shortText': 'Times Square',
+          'types': <String>['route'],
+          'languageCode': 'en',
+        },
+        <String, Object?>{
+          'longText': '1',
+          'shortText': '1',
+          'types': <String>['street_number'],
+          'languageCode': 'en',
+        },
+        <String, Object?>{
+          'longText': 'New York',
+          'shortText': 'NYC',
+          'types': <String>['locality'],
+          'languageCode': 'en',
+        },
+        <String, Object?>{
+          'longText': 'New York',
+          'shortText': 'NY',
+          'types': <String>['administrative_area_level_1'],
+          'languageCode': 'en',
+        },
+        <String, Object?>{
+          'longText': '10036',
+          'shortText': '10036',
+          'types': <String>['postal_code'],
+          'languageCode': 'en',
+        },
+        <String, Object?>{
+          'longText': 'United States',
+          'shortText': 'US',
+          'types': <String>['country'],
+          'languageCode': 'en',
+        },
+      ],
       'location': <String, Object?>{'latitude': 1.2, 'longitude': 3.4},
       'rating': 4.7,
       'userRatingCount': 128,
@@ -73,6 +117,22 @@ void main() {
     expect(place.resourceName, 'places/place-1');
     expect(place.displayName?.text, 'Coffee Lab');
     expect(place.location?.latitude, 1.2);
+    expect(place.postalAddress?.locality, 'New York');
+    expect(place.addressComponents, hasLength(6));
+    expect(place.route, 'Times Square');
+    expect(place.routeShort, 'Times Square');
+    expect(place.streetNumber, '1');
+    expect(place.streetNumberShort, '1');
+    expect(place.locality, 'New York');
+    expect(place.localityShort, 'NYC');
+    expect(place.administrativeArea, 'New York');
+    expect(place.administrativeAreaShort, 'NY');
+    expect(place.postalCode, '10036');
+    expect(place.postalCodeShort, '10036');
+    expect(place.country, 'United States');
+    expect(place.countryShort, 'US');
+    expect(place.countryCode, 'US');
+    expect(place.countryCodeShort, 'US');
     expect(place.photos, hasLength(1));
   });
 
