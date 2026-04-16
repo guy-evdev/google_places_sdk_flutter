@@ -1,3 +1,8 @@
+## 0.4.1 - 2026-04-16
+
+- Updated README preview images.
+- Added screenshot metadata for richer pub.dev package presentation.
+
 ## 0.4.0 - 2026-04-16
 
 Initial public release on pub.dev.

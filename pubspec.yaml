@@ -1,6 +1,6 @@
 name: google_places_sdk_flutter
 description: "Cross-platform Google Places autocomplete widgets and clients built on Places API (New)."
-version: 0.4.0
+version: 0.4.1
 homepage: https://github.com/guy-evdev/google_places_sdk_flutter
 repository: https://github.com/guy-evdev/google_places_sdk_flutter
 topics:
@@ -8,6 +8,16 @@ topics:
   - autocomplete
   - google-maps
   - places
+
+screenshots:
+  - description: 'Overview of the example app and autocomplete flows.'
+    path: assets/readme/example.gif
+  - description: 'Inline text field mode with the embedded autocomplete experience.'
+    path: assets/readme/text_field_mode.png
+  - description: 'Dialog launcher mode using the overlay search experience.'
+    path: assets/readme/dialog_mode.png
+  - description: 'Fullscreen launcher mode with rich place details shown after selection.'
+    path: assets/readme/rich_result.png
 
 environment:
   sdk: ">=3.11.0 <4.0.0"

@@ -17,16 +17,16 @@ and Linux.
 Overview:
 
 <p>
-  <img src="assets/readme/example.gif" alt="Package example" width="320" />
+  <img src="https://raw.githubusercontent.com/guy-evdev/google_places_sdk_flutter/main/assets/readme/example.gif" alt="Package example" width="320" />
 </p>
 
 Sample flows (Inline field, dialog launcher, fullscreen launcher, and rich result payload):
 
 <p>
-  <img src="assets/readme/text_field_mode.png" alt="Inline field mode" width="200" />
-  <img src="assets/readme/dialog_mode.png" alt="Dialog mode" width="200" />
-  <img src="assets/readme/fullscreen_mode.png" alt="Fullscreen mode" width="200" />
-  <img src="assets/readme/rich_result.png" alt="Rich result payload" width="200" />
+  <img src="https://raw.githubusercontent.com/guy-evdev/google_places_sdk_flutter/main/assets/readme/text_field_mode.png" alt="Inline field mode" width="200" />
+  <img src="https://raw.githubusercontent.com/guy-evdev/google_places_sdk_flutter/main/assets/readme/dialog_mode.png" alt="Dialog mode" width="200" />
+  <img src="https://raw.githubusercontent.com/guy-evdev/google_places_sdk_flutter/main/assets/readme/fullscreen_mode.png" alt="Fullscreen mode" width="200" />
+  <img src="https://raw.githubusercontent.com/guy-evdev/google_places_sdk_flutter/main/assets/readme/rich_result.png" alt="Rich result payload" width="200" />
 </p>
 
 ## Features
