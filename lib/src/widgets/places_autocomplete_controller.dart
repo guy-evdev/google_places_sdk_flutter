@@ -39,14 +39,16 @@ class PlacesAutocompleteController extends ChangeNotifier {
   void clear() {
     selectedSelection = null;
     textController.clear();
-    resetSession();
+    resetSession(notify: false);
     notifyListeners();
   }
 
   /// Resets the autocomplete session token for a new search flow.
-  void resetSession() {
+  void resetSession({bool notify = true}) {
     _sessionToken = AutocompleteSessionToken.generate();
-    notifyListeners();
+    if (notify) {
+      notifyListeners();
+    }
   }
 
   /// Updates the controller with a new [selection].

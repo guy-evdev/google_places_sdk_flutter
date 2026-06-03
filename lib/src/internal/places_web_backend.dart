@@ -37,6 +37,14 @@ class PlacesWebBackend implements PlacesBackend {
   Future<List<PlaceSuggestion>> autocomplete(
     AutocompleteRequest request,
   ) async {
+    final suggestions = await autocompleteSuggestions(request);
+    return suggestions.whereType<PlaceSuggestion>().toList(growable: false);
+  }
+
+  @override
+  Future<List<AutocompleteSuggestion>> autocompleteSuggestions(
+    AutocompleteRequest request,
+  ) async {
     final library = await _loadPlacesLibrary();
     final autocompleteSuggestion =
         library.getProperty('AutocompleteSuggestion'.toJS) as JSFunction;
@@ -54,14 +62,18 @@ class PlacesWebBackend implements PlacesBackend {
         (result as JSObject).getProperty('suggestions'.toJS) as JSObject;
     final length =
         (suggestions.getProperty('length'.toJS) as JSNumber).toDartInt;
-    final items = <PlaceSuggestion>[];
+    final items = <AutocompleteSuggestion>[];
     for (var index = 0; index < length; index++) {
       final suggestion = suggestions.getProperty(index.toJS) as JSObject;
       final prediction = suggestion.getProperty('placePrediction'.toJS);
-      if (prediction == null) {
+      if (prediction != null) {
+        items.add(_predictionToSuggestion(prediction as JSObject));
         continue;
       }
-      items.add(_predictionToSuggestion(prediction as JSObject));
+      final queryPrediction = suggestion.getProperty('queryPrediction'.toJS);
+      if (queryPrediction != null) {
+        items.add(_queryPredictionToSuggestion(queryPrediction as JSObject));
+      }
     }
     return items;
   }
@@ -102,6 +114,18 @@ class PlacesWebBackend implements PlacesBackend {
   }
 
   @override
+  Future<PlacePhotoMedia> fetchPhotoMedia(PhotoMediaRequest request) async {
+    final response = await _get(
+      path: request.mediaPath,
+      queryParameters: <String, String>{
+        ...request.toQueryParameters(),
+        'key': apiKey,
+      },
+    );
+    return PlacePhotoMedia.fromJson(response);
+  }
+
+  @override
   Future<PlaceTimeZoneData> fetchTimeZone(TimeZoneRequest request) async {
     final timestamp = request.timestamp?.toUtc() ?? DateTime.now().toUtc();
     final uri =
@@ -120,7 +144,7 @@ class PlacesWebBackend implements PlacesBackend {
     final dynamic decoded = response.body.isEmpty
         ? <String, Object?>{}
         : jsonDecode(response.body);
-    final body = (decoded as Map).cast<String, Object?>();
+    final body = (decoded as Map<Object?, Object?>).cast<String, Object?>();
     if (response.statusCode >= 400) {
       throw PlacesException(
         'Google Time Zone request failed.',
@@ -334,6 +358,7 @@ class PlacesWebBackend implements PlacesBackend {
             'includedRegionCodes': request.includedRegionCodes,
           if (request.includePureServiceAreaBusinesses)
             'includePureServiceAreaBusinesses': true,
+          if (request.includeQueryPredictions) 'includeQueryPredictions': true,
           if (request.sessionToken != null)
             'sessionToken': _sessionTokenFor(
               request.sessionToken!,
@@ -392,6 +417,17 @@ class PlacesWebBackend implements PlacesBackend {
             'place':
                 ((prediction.getProperty('place'.toJS) as JSString?)?.toDart),
           },
+    );
+  }
+
+  QuerySuggestion _queryPredictionToSuggestion(JSObject prediction) {
+    final text = _structuredTextFromJs(prediction.getProperty('text'.toJS));
+    return QuerySuggestion(
+      fullText: text,
+      matches: text.matches,
+      rawData:
+          _dartify(prediction as JSAny?) as Map<String, Object?>? ??
+          <String, Object?>{'text': text.text},
     );
   }
 
@@ -589,7 +625,7 @@ class PlacesWebBackend implements PlacesBackend {
       fieldMask: request.searchFieldMask,
     );
     return ((response['places'] as List?) ?? <Object?>[])
-        .whereType<Map>()
+        .whereType<Map<Object?, Object?>>()
         .map((item) => PlaceData.fromJson(item.cast<String, Object?>()))
         .toList(growable: false);
   }
@@ -603,7 +639,7 @@ class PlacesWebBackend implements PlacesBackend {
       fieldMask: request.searchFieldMask,
     );
     return ((response['places'] as List?) ?? <Object?>[])
-        .whereType<Map>()
+        .whereType<Map<Object?, Object?>>()
         .map((item) => PlaceData.fromJson(item.cast<String, Object?>()))
         .toList(growable: false);
   }
@@ -624,13 +660,13 @@ class PlacesWebBackend implements PlacesBackend {
 
   Future<Map<String, Object?>> _get({
     required String path,
-    required String fieldMask,
+    String? fieldMask,
     Map<String, String> queryParameters = const <String, String>{},
   }) async {
     final uri = _resolveUri(path, queryParameters: queryParameters);
     final response = await _httpClient.get(
       uri,
-      headers: _headers(fieldMask: fieldMask),
+      headers: _headers(fieldMask: fieldMask ?? ''),
     );
     return _decode(response);
   }
@@ -658,7 +694,7 @@ class PlacesWebBackend implements PlacesBackend {
     return <String, String>{
       'Content-Type': 'application/json',
       'X-Goog-Api-Key': apiKey,
-      'X-Goog-FieldMask': fieldMask,
+      if (fieldMask.isNotEmpty) 'X-Goog-FieldMask': fieldMask,
     };
   }
 
@@ -666,9 +702,10 @@ class PlacesWebBackend implements PlacesBackend {
     final dynamic decoded = response.body.isEmpty
         ? <String, Object?>{}
         : jsonDecode(response.body);
-    final body = (decoded as Map).cast<String, Object?>();
+    final body = (decoded as Map<Object?, Object?>).cast<String, Object?>();
     if (response.statusCode >= 400) {
-      final error = (body['error'] as Map?)?.cast<String, Object?>();
+      final error = (body['error'] as Map<Object?, Object?>?)
+          ?.cast<String, Object?>();
       throw PlacesException(
         (error?['message'] ?? 'Google Places request failed.') as String,
         statusCode: response.statusCode,

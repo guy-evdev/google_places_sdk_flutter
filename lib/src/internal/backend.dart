@@ -3,7 +3,13 @@ import '../models/place_models.dart';
 abstract interface class PlacesBackend {
   Future<List<PlaceSuggestion>> autocomplete(AutocompleteRequest request);
 
+  Future<List<AutocompleteSuggestion>> autocompleteSuggestions(
+    AutocompleteRequest request,
+  );
+
   Future<PlaceData> fetchPlace(PlaceDetailsRequest request);
+
+  Future<PlacePhotoMedia> fetchPhotoMedia(PhotoMediaRequest request);
 
   Future<PlaceTimeZoneData> fetchTimeZone(TimeZoneRequest request);
 

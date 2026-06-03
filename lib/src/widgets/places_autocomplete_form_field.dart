@@ -39,6 +39,8 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
     bool enabled = true,
     bool autofocus = false,
     bool showPoweredByGoogle = true,
+    bool includeQueryPredictions = false,
+    ValueChanged<QuerySuggestion>? onQuerySelection,
     Widget Function(BuildContext context, PlaceSuggestion suggestion)?
     suggestionBuilder,
     super.validator,
@@ -82,6 +84,8 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
              enabled: enabled,
              autofocus: autofocus,
              showPoweredByGoogle: showPoweredByGoogle,
+             includeQueryPredictions: includeQueryPredictions,
+             onQuerySelection: onQuerySelection,
              suggestionBuilder: suggestionBuilder,
            );
          },

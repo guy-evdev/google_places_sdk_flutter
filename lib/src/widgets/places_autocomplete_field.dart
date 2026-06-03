@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/place_models.dart';
 import '../places_client.dart';
@@ -72,6 +73,8 @@ class PlacesAutocompleteField extends StatefulWidget {
     this.enabled = true,
     this.autofocus = false,
     this.showPoweredByGoogle = true,
+    this.includeQueryPredictions = false,
+    this.onQuerySelection,
     this.suggestionBuilder,
   });
 
@@ -183,6 +186,12 @@ class PlacesAutocompleteField extends StatefulWidget {
   /// Whether the Powered by Google attribution should be shown.
   final bool showPoweredByGoogle;
 
+  /// Whether autocomplete should include query suggestions as well as places.
+  final bool includeQueryPredictions;
+
+  /// Called when the user selects a query suggestion.
+  final ValueChanged<QuerySuggestion>? onQuerySelection;
+
   /// Optional builder for rendering custom suggestion tiles.
   final Widget Function(BuildContext context, PlaceSuggestion suggestion)?
   suggestionBuilder;
@@ -195,11 +204,14 @@ class PlacesAutocompleteField extends StatefulWidget {
 class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   PlacesAutocompleteController? _ownedController;
   Timer? _debounce;
-  List<PlaceSuggestion> _suggestions = const <PlaceSuggestion>[];
+  List<AutocompleteSuggestion> _suggestions = const <AutocompleteSuggestion>[];
   Object? _error;
   bool _loading = false;
+  bool _selectionLoading = false;
   bool _searchUiVisible = false;
   bool _suggestionPointerDown = false;
+  bool _hasText = false;
+  int _highlightedSuggestionIndex = -1;
   int _searchGeneration = 0;
 
   PlacesAutocompleteController get _controller =>
@@ -223,6 +235,8 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   void initState() {
     super.initState();
     _controller.focusNode.addListener(_onFocusChanged);
+    _controller.textController.addListener(_onTextControllerChanged);
+    _hasText = _controller.textController.text.isNotEmpty;
     _syncFocusMode();
   }
 
@@ -233,7 +247,12 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       (oldWidget.controller ?? _ownedController)?.focusNode.removeListener(
         _onFocusChanged,
       );
+      (oldWidget.controller ?? _ownedController)?.textController.removeListener(
+        _onTextControllerChanged,
+      );
       _controller.focusNode.addListener(_onFocusChanged);
+      _controller.textController.addListener(_onTextControllerChanged);
+      _hasText = _controller.textController.text.isNotEmpty;
     }
     _syncFocusMode();
   }
@@ -251,6 +270,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   void dispose() {
     _debounce?.cancel();
     _controller.focusNode.removeListener(_onFocusChanged);
+    _controller.textController.removeListener(_onTextControllerChanged);
     _ownedController?.dispose();
     super.dispose();
   }
@@ -263,6 +283,16 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       return;
     }
     _closeSearchUi();
+  }
+
+  void _onTextControllerChanged() {
+    final hasText = _controller.textController.text.isNotEmpty;
+    if (hasText == _hasText || !mounted) {
+      return;
+    }
+    setState(() {
+      _hasText = hasText;
+    });
   }
 
   void _onUserInputChanged(String value) {
@@ -279,6 +309,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       _searchUiVisible = true;
       _loading = false;
       _error = null;
+      _highlightedSuggestionIndex = -1;
     });
     final generation = ++_searchGeneration;
     _debounce = Timer(_controller.debounceDuration, () {
@@ -309,7 +340,8 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       _searchUiVisible = false;
       _loading = false;
       _error = null;
-      _suggestions = const <PlaceSuggestion>[];
+      _suggestions = const <AutocompleteSuggestion>[];
+      _highlightedSuggestionIndex = -1;
     });
   }
 
@@ -322,26 +354,32 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
         _loading = true;
         _error = null;
       });
-      final suggestions = await widget.client.autocomplete(
-        AutocompleteRequest(
-          input: input,
-          sessionToken: _controller.sessionToken,
-          languageCode: widget.languageCode,
-          regionCode: widget.regionCode,
-          locationBias: widget.locationBias,
-          locationRestriction: widget.locationRestriction,
-          includedPrimaryTypes: widget.includedPrimaryTypes,
-          includedRegionCodes: widget.includedRegionCodes,
-          includePureServiceAreaBusinesses:
-              widget.includePureServiceAreaBusinesses,
-        ),
+      final request = AutocompleteRequest(
+        input: input,
+        sessionToken: _controller.sessionToken,
+        languageCode: widget.languageCode,
+        regionCode: widget.regionCode,
+        locationBias: widget.locationBias,
+        locationRestriction: widget.locationRestriction,
+        includedPrimaryTypes: widget.includedPrimaryTypes,
+        includedRegionCodes: widget.includedRegionCodes,
+        includePureServiceAreaBusinesses:
+            widget.includePureServiceAreaBusinesses,
+        includeQueryPredictions: widget.includeQueryPredictions,
       );
+      final suggestions = widget.includeQueryPredictions
+          ? await widget.client.autocompleteSuggestions(request)
+          : await widget.client.autocomplete(request);
       if (!_isActiveSearch(input, generation)) {
         return;
       }
+      final limitedSuggestions = suggestions
+          .take(_effectiveMaxSuggestions)
+          .toList(growable: false);
       setState(() {
         _loading = false;
-        _suggestions = suggestions.take(_effectiveMaxSuggestions).toList();
+        _suggestions = limitedSuggestions;
+        _highlightedSuggestionIndex = limitedSuggestions.isEmpty ? -1 : 0;
       });
     } catch (error) {
       if (!_isActiveSearch(input, generation)) {
@@ -350,7 +388,8 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       setState(() {
         _loading = false;
         _error = error;
-        _suggestions = const <PlaceSuggestion>[];
+        _suggestions = const <AutocompleteSuggestion>[];
+        _highlightedSuggestionIndex = -1;
       });
       widget.onError?.call(error);
     }
@@ -362,7 +401,24 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     widget.onClearField?.call();
   }
 
-  Future<void> _handleSuggestionTap(PlaceSuggestion suggestion) async {
+  Future<void> _handleSuggestionTap(AutocompleteSuggestion suggestion) async {
+    if (_selectionLoading) {
+      return;
+    }
+    if (suggestion is QuerySuggestion) {
+      _closeSearchUi();
+      _controller.textController
+        ..text = suggestion.displayText
+        ..selection = TextSelection.collapsed(
+          offset: suggestion.displayText.length,
+        );
+      widget.onQuerySelection?.call(suggestion);
+      _controller.resetSession();
+      return;
+    }
+    if (suggestion is! PlaceSuggestion) {
+      return;
+    }
     _closeSearchUi();
     final initialSelection = PlaceSelection(suggestion: suggestion);
     _controller.setSelection(initialSelection);
@@ -373,6 +429,9 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       return;
     }
     try {
+      setState(() {
+        _selectionLoading = true;
+      });
       final place = await widget.client.fetchPlace(
         PlaceDetailsRequest(
           placeId: suggestion.placeId,
@@ -406,8 +465,48 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     } catch (error) {
       widget.onError?.call(error);
     } finally {
+      if (mounted) {
+        setState(() {
+          _selectionLoading = false;
+        });
+      }
       _controller.resetSession();
     }
+  }
+
+  KeyEventResult _handleSuggestionKeyEvent(FocusNode node, KeyEvent event) {
+    if (!_searchUiVisible || _suggestions.isEmpty || event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      _moveHighlightedSuggestion(1);
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      _moveHighlightedSuggestion(-1);
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter) {
+      final index = _highlightedSuggestionIndex;
+      if (index >= 0 && index < _suggestions.length) {
+        unawaited(_handleSuggestionTap(_suggestions[index]));
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _moveHighlightedSuggestion(int delta) {
+    if (_suggestions.isEmpty) {
+      return;
+    }
+    setState(() {
+      _highlightedSuggestionIndex =
+          (_highlightedSuggestionIndex + delta) % _suggestions.length;
+      if (_highlightedSuggestionIndex < 0) {
+        _highlightedSuggestionIndex += _suggestions.length;
+      }
+    });
   }
 
   Future<void> _openOverlay() async {
@@ -443,6 +542,8 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       selectionTimeZoneAt: widget.selectionTimeZoneAt,
       selectionTimeZoneLanguageCode: widget.selectionTimeZoneLanguageCode,
       maxSuggestions: widget.maxSuggestions,
+      includeQueryPredictions: widget.includeQueryPredictions,
+      onQuerySelection: widget.onQuerySelection,
       onError: widget.onError,
     );
 
@@ -459,111 +560,187 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     final theme = Theme.of(context);
     final decoration = _buildDecoration();
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        TextField(
-          controller: _controller.textController,
-          focusNode: _controller.focusNode,
-          canRequestFocus: !_isLauncherMode,
-          enabled: widget.enabled,
-          readOnly: _isLauncherMode,
-          autofocus: widget.autofocus,
-          onChanged: _onUserInputChanged,
-          onTap: _isLauncherMode && widget.enabled ? _openOverlay : null,
-          decoration: decoration,
-        ),
-        if (_searchUiVisible) ...<Widget>[
-          const SizedBox(height: 8),
-          if (_loading)
-            _InfoTile(
-              child: Row(
-                children: <Widget>[
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(child: Text(widget.strings.loadingText)),
-                ],
-              ),
-            )
-          else if (_error != null)
-            _InfoTile(child: Text(widget.strings.errorText))
-          else if (_suggestions.isEmpty &&
-              _controller.textController.text.trim().isNotEmpty)
-            _InfoTile(child: Text(widget.strings.noResultsText))
-          else if (_suggestions.isNotEmpty)
-            Material(
-              color: theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(12),
-              child: Listener(
-                onPointerDown: (_) {
-                  _suggestionPointerDown = true;
-                },
-                onPointerUp: (_) {
-                  _suggestionPointerDown = false;
-                },
-                onPointerCancel: (_) {
-                  _suggestionPointerDown = false;
-                },
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+    return Focus(
+      onKeyEvent: _handleSuggestionKeyEvent,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          TextField(
+            controller: _controller.textController,
+            focusNode: _controller.focusNode,
+            canRequestFocus: !_isLauncherMode,
+            enabled: widget.enabled && !_selectionLoading,
+            readOnly: _isLauncherMode,
+            autofocus: widget.autofocus,
+            onChanged: _onUserInputChanged,
+            onTap: _isLauncherMode && widget.enabled ? _openOverlay : null,
+            decoration: decoration,
+          ),
+          if (_selectionLoading) const LinearProgressIndicator(),
+          if (_searchUiVisible) ...<Widget>[
+            const SizedBox(height: 8),
+            if (_loading)
+              _InfoTile(
+                child: Row(
                   children: <Widget>[
-                    for (final suggestion in _suggestions)
-                      ListTile(
-                        onTap: () => _handleSuggestionTap(suggestion),
-                        title:
-                            widget.suggestionBuilder?.call(
-                              context,
-                              suggestion,
-                            ) ??
-                            Text(suggestion.primaryText.text),
-                        subtitle: suggestion.secondaryText == null
-                            ? null
-                            : Text(suggestion.secondaryText!.text),
-                        trailing: suggestion.distanceMeters == null
-                            ? null
-                            : Text('${suggestion.distanceMeters} m'),
-                      ),
-                    if (widget.showPoweredByGoogle)
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
-                        child: Align(
-                          alignment: AlignmentDirectional.centerEnd,
-                          child: _PoweredByGoogleAttribution(),
-                        ),
-                      ),
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(widget.strings.loadingText)),
                   ],
                 ),
+              )
+            else if (_error != null)
+              _InfoTile(child: Text(widget.strings.errorText))
+            else if (_suggestions.isEmpty &&
+                _controller.textController.text.trim().isNotEmpty)
+              _InfoTile(child: Text(widget.strings.noResultsText))
+            else if (_suggestions.isNotEmpty)
+              Material(
+                color: theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+                child: Listener(
+                  onPointerDown: (_) {
+                    _suggestionPointerDown = true;
+                  },
+                  onPointerUp: (_) {
+                    _suggestionPointerDown = false;
+                  },
+                  onPointerCancel: (_) {
+                    _suggestionPointerDown = false;
+                  },
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      for (final indexed in _suggestions.indexed)
+                        _buildSuggestionTile(context, indexed.$2, indexed.$1),
+                      if (widget.showPoweredByGoogle)
+                        const Padding(
+                          padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
+                          child: Align(
+                            alignment: AlignmentDirectional.centerEnd,
+                            child: _PoweredByGoogleAttribution(),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
-            ),
+          ],
         ],
-      ],
+      ),
     );
+  }
+
+  Widget _buildSuggestionTile(
+    BuildContext context,
+    AutocompleteSuggestion suggestion,
+    int index,
+  ) {
+    final theme = Theme.of(context);
+    final selected = index == _highlightedSuggestionIndex;
+    final backgroundColor = selected
+        ? theme.colorScheme.secondaryContainer.withValues(alpha: 0.55)
+        : null;
+
+    if (suggestion is QuerySuggestion) {
+      return Semantics(
+        button: true,
+        label:
+            '${widget.strings.querySuggestionLabel}: '
+            '${suggestion.displayText}',
+        child: ListTile(
+          selected: selected,
+          tileColor: backgroundColor,
+          leading: const Icon(Icons.search),
+          onTap: () => _handleSuggestionTap(suggestion),
+          title: _structuredText(suggestion.fullText, theme),
+        ),
+      );
+    }
+
+    final place = suggestion as PlaceSuggestion;
+    return Semantics(
+      button: true,
+      label: '${widget.strings.placeSuggestionLabel}: ${place.displayText}',
+      child: ListTile(
+        selected: selected,
+        tileColor: backgroundColor,
+        onTap: () => _handleSuggestionTap(place),
+        title:
+            widget.suggestionBuilder?.call(context, place) ??
+            _structuredText(place.primaryText, theme),
+        subtitle: place.secondaryText == null
+            ? null
+            : _structuredText(place.secondaryText!, theme),
+        trailing: place.distanceMeters == null
+            ? null
+            : Text('${place.distanceMeters} m'),
+      ),
+    );
+  }
+
+  Widget _structuredText(StructuredText value, ThemeData theme) {
+    if (value.matches.isEmpty) {
+      return Text(value.text);
+    }
+    final baseStyle = theme.textTheme.bodyLarge;
+    final highlightStyle = baseStyle?.copyWith(fontWeight: FontWeight.w700);
+    final spans = <TextSpan>[];
+    var cursor = 0;
+    for (final match in value.matches) {
+      final start = match.startOffset.clamp(0, value.text.length);
+      final end = match.endOffset.clamp(start, value.text.length);
+      if (start > cursor) {
+        spans.add(TextSpan(text: value.text.substring(cursor, start)));
+      }
+      if (end > start) {
+        spans.add(
+          TextSpan(
+            text: value.text.substring(start, end),
+            style: highlightStyle,
+          ),
+        );
+      }
+      cursor = end;
+    }
+    if (cursor < value.text.length) {
+      spans.add(TextSpan(text: value.text.substring(cursor)));
+    }
+    return Text.rich(TextSpan(style: baseStyle, children: spans));
   }
 
   InputDecoration _buildDecoration() {
     final baseDecoration = widget.decoration ?? const InputDecoration();
-    final clearButton = IconButton(
-      onPressed: widget.enabled ? _clearField : null,
-      icon: const Icon(Icons.clear),
-      tooltip: widget.strings.clearLabel,
-    );
+    final clearButton = _hasText
+        ? IconButton(
+            onPressed: widget.enabled && !_selectionLoading
+                ? _clearField
+                : null,
+            icon: const Icon(Icons.clear),
+            tooltip: widget.strings.clearLabel,
+          )
+        : null;
 
     final userSuffix = baseDecoration.suffix;
     final userSuffixIcon = baseDecoration.suffixIcon;
+    final effectiveSuffix = clearButton == null
+        ? userSuffix
+        : _mergeSuffix(
+            suffix: userSuffix,
+            suffixIcon: userSuffixIcon,
+            suffixIconConstraints: baseDecoration.suffixIconConstraints,
+          );
+    final effectiveSuffixIcon = clearButton ?? userSuffixIcon;
 
     return baseDecoration.copyWith(
       hintText: baseDecoration.hintText ?? widget.strings.searchHint,
-      suffix: _mergeSuffix(
-        suffix: userSuffix,
-        suffixIcon: userSuffixIcon,
-        suffixIconConstraints: baseDecoration.suffixIconConstraints,
-      ),
-      suffixIcon: clearButton,
+      suffix: effectiveSuffix,
+      suffixIcon: effectiveSuffixIcon,
     );
   }
 
@@ -620,8 +797,8 @@ class _PoweredByGoogleAttribution extends StatelessWidget {
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
     final assetName = brightness == Brightness.dark
-        ? 'assets/google_black.png'
-        : 'assets/google_white.png';
+        ? 'assets/google_dark.png'
+        : 'assets/google_light.png';
     return Image.asset(
       assetName,
       package: 'google_places_sdk_flutter',

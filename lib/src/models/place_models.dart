@@ -287,7 +287,14 @@ enum PlaceField {
   goodForGroups('goodForGroups'),
   paymentOptions('paymentOptions'),
   parkingOptions('parkingOptions'),
-  accessibilityOptions('accessibilityOptions');
+  accessibilityOptions('accessibilityOptions'),
+  addressDescriptor('addressDescriptor'),
+  evChargeOptions('evChargeOptions'),
+  fuelOptions('fuelOptions'),
+  generativeSummary('generativeSummary'),
+  pureServiceAreaBusiness('pureServiceAreaBusiness'),
+  movedPlace('movedPlace'),
+  movedPlaceId('movedPlaceId');
 
   const PlaceField(this.apiName);
 
@@ -394,7 +401,7 @@ class LocalizedText {
     if (source is String) {
       return LocalizedText(text: source);
     }
-    final json = (source as Map?)?.cast<String, Object?>();
+    final json = (source as Map<Object?, Object?>?)?.cast<String, Object?>();
     return LocalizedText(
       text: (json?['text'] ?? '') as String,
       languageCode: json?['languageCode'] as String?,
@@ -434,9 +441,11 @@ class StructuredText {
     if (source is String) {
       return StructuredText(text: source);
     }
-    final json = (source as Map?)?.cast<String, Object?>();
+    final json = (source as Map<Object?, Object?>?)?.cast<String, Object?>();
     final matches = ((json?['matches'] as List?) ?? <Object?>[])
-        .map((match) => (match as Map).cast<String, Object?>())
+        .map(
+          (match) => (match as Map<Object?, Object?>).cast<String, Object?>(),
+        )
         .map(
           (match) => TextMatch(
             startOffset: (match['startOffset'] as num?)?.toInt() ?? 0,
@@ -454,17 +463,44 @@ class StructuredText {
 }
 
 @immutable
-/// Lightweight autocomplete suggestion returned by Places API (New).
-class PlaceSuggestion {
+/// Base type for autocomplete suggestions returned by Places API (New).
+sealed class AutocompleteSuggestion {
+  /// Creates a generic autocomplete suggestion.
+  const AutocompleteSuggestion({
+    required this.fullText,
+    this.rawData = const <String, Object?>{},
+  });
+
+  /// Full display text returned by Google for this suggestion.
+  final StructuredText fullText;
+
+  /// Raw suggestion payload from Google.
+  final Map<String, Object?> rawData;
+
+  /// Plain text value of [fullText].
+  String get displayText => fullText.text;
+
+  /// Parses either a place or query prediction from a REST suggestion object.
+  factory AutocompleteSuggestion.fromRestJson(Map<String, Object?> json) {
+    if (json['queryPrediction'] != null) {
+      return QuerySuggestion.fromRestJson(json);
+    }
+    return PlaceSuggestion.fromRestJson(json);
+  }
+}
+
+@immutable
+/// Lightweight place autocomplete suggestion returned by Places API (New).
+class PlaceSuggestion extends AutocompleteSuggestion {
   const PlaceSuggestion({
     required this.placeId,
     required this.placeResourceName,
-    required this.fullText,
+    required super.fullText,
     required this.primaryText,
     this.secondaryText,
     this.distanceMeters,
     this.types = const <String>[],
-    this.rawData = const <String, Object?>{},
+    super.rawData = const <String, Object?>{},
   });
 
   /// Stable Google place id for the suggested place.
@@ -472,9 +508,6 @@ class PlaceSuggestion {
 
   /// Full Google resource name, such as `places/ChIJ...`.
   final String placeResourceName;
-
-  /// Full display text returned by Google for this suggestion.
-  final StructuredText fullText;
 
   /// Primary display text, typically the place name.
   final StructuredText primaryText;
@@ -488,17 +521,14 @@ class PlaceSuggestion {
   /// Place types returned for this suggestion.
   final List<String> types;
 
-  /// Raw suggestion payload from Google.
-  final Map<String, Object?> rawData;
-
-  /// Plain text value of [fullText].
-  String get displayText => fullText.text;
-
   factory PlaceSuggestion.fromRestJson(Map<String, Object?> json) {
     final prediction =
-        (json['placePrediction'] as Map?)?.cast<String, Object?>() ?? json;
-    final structuredFormat = (prediction['structuredFormat'] as Map?)
-        ?.cast<String, Object?>();
+        (json['placePrediction'] as Map<Object?, Object?>?)
+            ?.cast<String, Object?>() ??
+        json;
+    final structuredFormat =
+        (prediction['structuredFormat'] as Map<Object?, Object?>?)
+            ?.cast<String, Object?>();
 
     return PlaceSuggestion(
       placeId: (prediction['placeId'] ?? '') as String,
@@ -514,6 +544,33 @@ class PlaceSuggestion {
       types: ((prediction['types'] as List?) ?? <Object?>[])
           .whereType<String>()
           .toList(growable: false),
+      rawData: Map<String, Object?>.unmodifiable(prediction),
+    );
+  }
+}
+
+@immutable
+/// Query autocomplete suggestion returned when query predictions are enabled.
+class QuerySuggestion extends AutocompleteSuggestion {
+  /// Creates a query suggestion.
+  const QuerySuggestion({
+    required super.fullText,
+    this.matches = const <TextMatch>[],
+    super.rawData = const <String, Object?>{},
+  });
+
+  /// Match ranges returned for the suggested query text.
+  final List<TextMatch> matches;
+
+  factory QuerySuggestion.fromRestJson(Map<String, Object?> json) {
+    final prediction =
+        (json['queryPrediction'] as Map<Object?, Object?>?)
+            ?.cast<String, Object?>() ??
+        json;
+    final fullText = StructuredText.fromJson(prediction['text']);
+    return QuerySuggestion(
+      fullText: fullText,
+      matches: fullText.matches,
       rawData: Map<String, Object?>.unmodifiable(prediction),
     );
   }
@@ -768,10 +825,88 @@ class PlacePhoto {
     heightPx: (json['heightPx'] as num?)?.toInt(),
     googleMapsUri: json['googleMapsUri'] as String?,
     authorAttributions: ((json['authorAttributions'] as List?) ?? <Object?>[])
-        .whereType<Map>()
+        .whereType<Map<Object?, Object?>>()
         .map((item) => item.cast<String, Object?>())
         .toList(growable: false),
   );
+}
+
+@immutable
+/// Request payload for Place Photos (New) media lookup.
+class PhotoMediaRequest {
+  /// Creates a photo media request.
+  const PhotoMediaRequest({
+    required this.name,
+    this.maxWidthPx,
+    this.maxHeightPx,
+  });
+
+  /// Photo resource name, such as `places/{placeId}/photos/{photoId}`.
+  final String name;
+
+  /// Maximum requested image width in pixels.
+  final int? maxWidthPx;
+
+  /// Maximum requested image height in pixels.
+  final int? maxHeightPx;
+
+  /// Validates request invariants before serialization.
+  void validate() {
+    if (name.trim().isEmpty) {
+      throw const PlacesException('Photo media name cannot be empty.');
+    }
+    if (maxWidthPx == null && maxHeightPx == null) {
+      throw const PlacesException(
+        'Photo media requests require maxWidthPx, maxHeightPx, or both.',
+      );
+    }
+    if ((maxWidthPx ?? 1) <= 0 || (maxHeightPx ?? 1) <= 0) {
+      throw const PlacesException('Photo media dimensions must be positive.');
+    }
+  }
+
+  /// Resource path used by Places Photo Media requests.
+  String get mediaPath {
+    final trimmed = name.startsWith('/') ? name.substring(1) : name;
+    return trimmed.endsWith('/media') ? trimmed : '$trimmed/media';
+  }
+
+  /// Query parameters for the Places Photo Media endpoint.
+  Map<String, String> toQueryParameters({bool skipHttpRedirect = true}) {
+    validate();
+    return <String, String>{
+      if (maxWidthPx != null) 'maxWidthPx': maxWidthPx!.toString(),
+      if (maxHeightPx != null) 'maxHeightPx': maxHeightPx!.toString(),
+      if (skipHttpRedirect) 'skipHttpRedirect': 'true',
+    };
+  }
+}
+
+@immutable
+/// Response payload for Place Photos (New) media lookup.
+class PlacePhotoMedia {
+  /// Creates a photo media response.
+  const PlacePhotoMedia({
+    required this.name,
+    required this.photoUri,
+    this.rawData = const <String, Object?>{},
+  });
+
+  /// Photo media resource name.
+  final String name;
+
+  /// Resolved URI for the photo media.
+  final String photoUri;
+
+  /// Full raw payload from Google.
+  final Map<String, Object?> rawData;
+
+  factory PlacePhotoMedia.fromJson(Map<String, Object?> json) =>
+      PlacePhotoMedia(
+        name: (json['name'] ?? '') as String,
+        photoUri: (json['photoUri'] ?? '') as String,
+        rawData: Map<String, Object?>.unmodifiable(json),
+      );
 }
 
 @immutable
@@ -806,8 +941,9 @@ class PlaceReview {
   final LocalizedText? originalText;
 
   factory PlaceReview.fromJson(Map<String, Object?> json) {
-    final authorAttribution = (json['authorAttribution'] as Map?)
-        ?.cast<String, Object?>();
+    final authorAttribution =
+        (json['authorAttribution'] as Map<Object?, Object?>?)
+            ?.cast<String, Object?>();
     return PlaceReview(
       authorName: (authorAttribution?['displayName'] ?? '') as String,
       text: LocalizedText.fromJson(json['text']),
@@ -867,6 +1003,13 @@ class PlaceData {
     this.goodForGroups,
     this.currentOpeningHours,
     this.regularOpeningHours,
+    this.addressDescriptor,
+    this.evChargeOptions,
+    this.fuelOptions,
+    this.generativeSummary,
+    this.pureServiceAreaBusiness,
+    this.movedPlace,
+    this.movedPlaceId,
     this.reviews = const <PlaceReview>[],
     this.photos = const <PlacePhoto>[],
     this.rawData = const <String, Object?>{},
@@ -992,6 +1135,27 @@ class PlaceData {
   /// Regular opening-hours payload returned by Google.
   final Map<String, Object?>? regularOpeningHours;
 
+  /// Address descriptor payload returned by Google, when available.
+  final Map<String, Object?>? addressDescriptor;
+
+  /// EV charging options payload returned by Google, when available.
+  final Map<String, Object?>? evChargeOptions;
+
+  /// Fuel options payload returned by Google, when available.
+  final Map<String, Object?>? fuelOptions;
+
+  /// AI-generated place summary payload returned by Google, when requested.
+  final Map<String, Object?>? generativeSummary;
+
+  /// Whether this place is a pure service-area business.
+  final bool? pureServiceAreaBusiness;
+
+  /// Resource name of the moved-to place when this place has moved.
+  final String? movedPlace;
+
+  /// Place id of the moved-to place when this place has moved.
+  final String? movedPlaceId;
+
   /// Reviews returned when review fields are requested.
   final List<PlaceReview> reviews;
 
@@ -1059,13 +1223,14 @@ class PlaceData {
         : LocalizedText.fromJson(json['displayName']),
     formattedAddress: json['formattedAddress'] as String?,
     shortFormattedAddress: json['shortFormattedAddress'] as String?,
-    postalAddress: (json['postalAddress'] as Map?) == null
+    postalAddress: (json['postalAddress'] as Map<Object?, Object?>?) == null
         ? null
         : PlacePostalAddress.fromJson(
-            (json['postalAddress'] as Map).cast<String, Object?>(),
+            (json['postalAddress'] as Map<Object?, Object?>)
+                .cast<String, Object?>(),
           ),
     addressComponents: ((json['addressComponents'] as List?) ?? <Object?>[])
-        .whereType<Map>()
+        .whereType<Map<Object?, Object?>>()
         .map(
           (component) =>
               PlaceAddressComponent.fromJson(component.cast<String, Object?>()),
@@ -1106,16 +1271,27 @@ class PlaceData {
     restroom: json['restroom'] as bool?,
     goodForChildren: json['goodForChildren'] as bool?,
     goodForGroups: json['goodForGroups'] as bool?,
-    currentOpeningHours: (json['currentOpeningHours'] as Map?)
+    currentOpeningHours: (json['currentOpeningHours'] as Map<Object?, Object?>?)
         ?.cast<String, Object?>(),
-    regularOpeningHours: (json['regularOpeningHours'] as Map?)
+    regularOpeningHours: (json['regularOpeningHours'] as Map<Object?, Object?>?)
         ?.cast<String, Object?>(),
+    addressDescriptor: (json['addressDescriptor'] as Map<Object?, Object?>?)
+        ?.cast<String, Object?>(),
+    evChargeOptions: (json['evChargeOptions'] as Map<Object?, Object?>?)
+        ?.cast<String, Object?>(),
+    fuelOptions: (json['fuelOptions'] as Map<Object?, Object?>?)
+        ?.cast<String, Object?>(),
+    generativeSummary: (json['generativeSummary'] as Map<Object?, Object?>?)
+        ?.cast<String, Object?>(),
+    pureServiceAreaBusiness: json['pureServiceAreaBusiness'] as bool?,
+    movedPlace: json['movedPlace'] as String?,
+    movedPlaceId: json['movedPlaceId'] as String?,
     reviews: ((json['reviews'] as List?) ?? <Object?>[])
-        .whereType<Map>()
+        .whereType<Map<Object?, Object?>>()
         .map((review) => PlaceReview.fromJson(review.cast<String, Object?>()))
         .toList(growable: false),
     photos: ((json['photos'] as List?) ?? <Object?>[])
-        .whereType<Map>()
+        .whereType<Map<Object?, Object?>>()
         .map((photo) => PlacePhoto.fromJson(photo.cast<String, Object?>()))
         .toList(growable: false),
     rawData: Map<String, Object?>.unmodifiable(json),
@@ -1164,6 +1340,7 @@ class AutocompleteRequest {
     this.includedPrimaryTypes = const <String>[],
     this.includedRegionCodes = const <String>[],
     this.includePureServiceAreaBusinesses = false,
+    this.includeQueryPredictions = false,
   });
 
   /// User-entered search text.
@@ -1222,6 +1399,13 @@ class AutocompleteRequest {
   /// Whether pure service-area businesses should be included in results.
   final bool includePureServiceAreaBusinesses;
 
+  /// Whether query predictions should be included alongside place predictions.
+  ///
+  /// [PlacesClient.autocomplete] keeps returning only [PlaceSuggestion] values.
+  /// Use [PlacesClient.autocompleteSuggestions] to receive both place and
+  /// query suggestions.
+  final bool includeQueryPredictions;
+
   /// Validates request invariants before serialization.
   void validate() {
     if (input.trim().isEmpty) {
@@ -1252,6 +1436,7 @@ class AutocompleteRequest {
       if (includedRegionCodes.isNotEmpty)
         'includedRegionCodes': includedRegionCodes,
       'includePureServiceAreaBusinesses': includePureServiceAreaBusinesses,
+      if (includeQueryPredictions) 'includeQueryPredictions': true,
     };
   }
 }
@@ -1509,7 +1694,7 @@ PlaceCoordinates? _parseCoordinates(Object? source) {
   if (source == null) {
     return null;
   }
-  final json = (source as Map).cast<String, Object?>();
+  final json = (source as Map<Object?, Object?>).cast<String, Object?>();
   return PlaceCoordinates(
     latitude: _toDouble(json['latitude'] ?? json['lat']) ?? 0,
     longitude: _toDouble(json['longitude'] ?? json['lng']) ?? 0,
@@ -1520,7 +1705,7 @@ PlaceViewport? _parseViewport(Object? source) {
   if (source == null) {
     return null;
   }
-  final json = (source as Map).cast<String, Object?>();
+  final json = (source as Map<Object?, Object?>).cast<String, Object?>();
   final northeast = _parseCoordinates(json['northeast'] ?? json['high']);
   final southwest = _parseCoordinates(json['southwest'] ?? json['low']);
   if (northeast == null || southwest == null) {

@@ -35,6 +35,32 @@ void main() {
       });
     });
 
+    test('serializes query prediction opt-in', () {
+      const request = AutocompleteRequest(
+        input: 'coffee',
+        includeQueryPredictions: true,
+      );
+
+      expect(request.toRestJson()['includeQueryPredictions'], isTrue);
+    });
+
+    test('parses query predictions', () {
+      final suggestion = AutocompleteSuggestion.fromRestJson(<String, Object?>{
+        'queryPrediction': <String, Object?>{
+          'text': <String, Object?>{
+            'text': 'coffee near me',
+            'matches': <Map<String, Object?>>[
+              <String, Object?>{'startOffset': 0, 'endOffset': 6},
+            ],
+          },
+        },
+      });
+
+      expect(suggestion, isA<QuerySuggestion>());
+      expect(suggestion.displayText, 'coffee near me');
+      expect((suggestion as QuerySuggestion).matches.single.endOffset, 6);
+    });
+
     test('rejects simultaneous bias and restriction', () {
       final request = AutocompleteRequest(
         input: 'coffee',
@@ -108,6 +134,15 @@ void main() {
       'location': <String, Object?>{'latitude': 1.2, 'longitude': 3.4},
       'rating': 4.7,
       'userRatingCount': 128,
+      'addressDescriptor': <String, Object?>{'landmarks': <Object?>[]},
+      'evChargeOptions': <String, Object?>{'connectorCount': 2},
+      'fuelOptions': <String, Object?>{'fuelPrices': <Object?>[]},
+      'generativeSummary': <String, Object?>{
+        'overview': <String, Object?>{'text': 'A popular coffee shop.'},
+      },
+      'pureServiceAreaBusiness': false,
+      'movedPlace': 'places/place-2',
+      'movedPlaceId': 'place-2',
       'photos': <Map<String, Object?>>[
         <String, Object?>{'name': 'photo-1', 'widthPx': 800, 'heightPx': 600},
       ],
@@ -134,6 +169,64 @@ void main() {
     expect(place.countryCode, 'US');
     expect(place.countryCodeShort, 'US');
     expect(place.photos, hasLength(1));
+    expect(place.addressDescriptor, isNotNull);
+    expect(place.evChargeOptions?['connectorCount'], 2);
+    expect(place.fuelOptions, isNotNull);
+    expect(place.generativeSummary, isNotNull);
+    expect(place.pureServiceAreaBusiness, isFalse);
+    expect(place.movedPlace, 'places/place-2');
+    expect(place.movedPlaceId, 'place-2');
+  });
+
+  test('exposes newer Places fields in field masks', () {
+    const fields = <PlaceField>{
+      PlaceField.addressDescriptor,
+      PlaceField.evChargeOptions,
+      PlaceField.fuelOptions,
+      PlaceField.generativeSummary,
+      PlaceField.pureServiceAreaBusiness,
+      PlaceField.movedPlace,
+      PlaceField.movedPlaceId,
+    };
+
+    final detailsRequest = PlaceDetailsRequest(
+      placeId: 'place-1',
+      fields: fields,
+    );
+    final searchRequest = TextSearchRequest(
+      textQuery: 'coffee',
+      fields: fields,
+    );
+
+    expect(
+      detailsRequest.detailsFieldMask,
+      'addressDescriptor,evChargeOptions,fuelOptions,generativeSummary,'
+      'pureServiceAreaBusiness,movedPlace,movedPlaceId',
+    );
+    expect(
+      searchRequest.searchFieldMask,
+      'places.addressDescriptor,places.evChargeOptions,places.fuelOptions,'
+      'places.generativeSummary,places.pureServiceAreaBusiness,'
+      'places.movedPlace,places.movedPlaceId',
+    );
+  });
+
+  test('validates and serializes photo media requests', () {
+    const request = PhotoMediaRequest(
+      name: 'places/place-1/photos/photo-1',
+      maxWidthPx: 400,
+    );
+
+    expect(request.mediaPath, 'places/place-1/photos/photo-1/media');
+    expect(request.toQueryParameters(), <String, String>{
+      'maxWidthPx': '400',
+      'skipHttpRedirect': 'true',
+    });
+
+    expect(
+      () => const PhotoMediaRequest(name: 'photo').toQueryParameters(),
+      throwsA(isA<PlacesException>()),
+    );
   });
 
   test('parses time-zone data', () {

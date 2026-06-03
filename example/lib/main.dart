@@ -45,6 +45,7 @@ class _ExampleAppState extends State<ExampleApp> {
   Object? _lastError;
   WidgetType _widgetType = WidgetType.textField;
   bool _fetchTimeZoneOnSelection = false;
+  bool _includeQueryPredictions = false;
 
   @override
   void dispose() {
@@ -167,6 +168,19 @@ class _ExampleAppState extends State<ExampleApp> {
             });
           },
         ),
+        SwitchListTile(
+          dense: true,
+          value: _includeQueryPredictions,
+          title: const Text('Include query predictions'),
+          subtitle: const Text(
+            'Shows suggested searches from Autocomplete (New) alongside places.',
+          ),
+          onChanged: (value) {
+            setState(() {
+              _includeQueryPredictions = value;
+            });
+          },
+        ),
         const SizedBox(height: 8),
         if (_widgetType == WidgetType.textField) ...[
           const Text('Text Field Type', textAlign: TextAlign.center),
@@ -211,11 +225,19 @@ class _ExampleAppState extends State<ExampleApp> {
             fetchTimeZoneOnSelection: _fetchTimeZoneOnSelection,
             selectionFields: PlaceFieldPresets.rich,
             fieldMode: _fieldMode,
+            includeQueryPredictions: _includeQueryPredictions,
             onSelection: (selection) {
               setState(() {
                 _selection = selection;
                 _lastError = null;
               });
+            },
+            onQuerySelection: (selection) {
+              setState(() {
+                _selection = null;
+                _lastError = null;
+              });
+              debugPrint('Query suggestion: ${selection.displayText}');
             },
             onClearField: () {
               setState(() {
@@ -336,6 +358,14 @@ class _ExampleAppState extends State<ExampleApp> {
       selectionFields: mode == PlacesAutocompleteOverlayMode.dialog
           ? PlaceFieldPresets.recommended
           : PlaceFieldPresets.minimal,
+      includeQueryPredictions: _includeQueryPredictions,
+      onQuerySelection: (selection) {
+        setState(() {
+          _selection = null;
+          _lastError = null;
+        });
+        debugPrint('Query suggestion: ${selection.displayText}');
+      },
       onError: (error) {
         setState(() {
           _lastError = error;

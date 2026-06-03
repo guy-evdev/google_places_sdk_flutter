@@ -52,11 +52,23 @@ class PlacesClient {
   Future<List<PlaceSuggestion>> autocomplete(AutocompleteRequest request) =>
       _backend.autocomplete(request);
 
+  /// Fetches autocomplete place and query suggestions for the supplied request.
+  ///
+  /// To receive [QuerySuggestion] values, set
+  /// [AutocompleteRequest.includeQueryPredictions] to `true`.
+  Future<List<AutocompleteSuggestion>> autocompleteSuggestions(
+    AutocompleteRequest request,
+  ) => _backend.autocompleteSuggestions(request);
+
   /// Resolves a place id into rich place details.
   ///
   /// This is the canonical standalone place-details API for the package.
   Future<PlaceData> fetchPlace(PlaceDetailsRequest request) =>
       _backend.fetchPlace(request);
+
+  /// Resolves a Places photo resource into a media URI.
+  Future<PlacePhotoMedia> fetchPhotoMedia(PhotoMediaRequest request) =>
+      _backend.fetchPhotoMedia(request);
 
   /// Resolves a place id into rich place details without requiring a suggestion.
   ///

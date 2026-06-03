@@ -12,6 +12,11 @@ class _RecordingBackend implements PlacesBackend {
   ) async => const <PlaceSuggestion>[];
 
   @override
+  Future<List<AutocompleteSuggestion>> autocompleteSuggestions(
+    AutocompleteRequest request,
+  ) async => const <AutocompleteSuggestion>[];
+
+  @override
   Future<void> close() async {}
 
   @override
@@ -19,6 +24,13 @@ class _RecordingBackend implements PlacesBackend {
     lastPlaceRequest = request;
     return const PlaceData(id: 'place-1');
   }
+
+  @override
+  Future<PlacePhotoMedia> fetchPhotoMedia(PhotoMediaRequest request) async =>
+      const PlacePhotoMedia(
+        name: 'places/place-1/photos/photo-1/media',
+        photoUri: 'https://example.com/photo.jpg',
+      );
 
   @override
   Future<PlaceTimeZoneData> fetchTimeZone(TimeZoneRequest request) async {

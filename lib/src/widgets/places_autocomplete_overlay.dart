@@ -43,7 +43,9 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     this.selectionTimeZoneAt,
     this.selectionTimeZoneLanguageCode,
     this.maxSuggestions = 5,
+    this.includeQueryPredictions = false,
     this.onSelection,
+    this.onQuerySelection,
     this.onError,
   });
 
@@ -112,9 +114,15 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   /// above `5` are clamped to the upstream response limit.
   final int maxSuggestions;
 
+  /// Whether autocomplete should include query suggestions as well as places.
+  final bool includeQueryPredictions;
+
   /// Called when the user selects a suggestion, optionally with resolved place
   /// details.
   final ValueChanged<PlaceSelection>? onSelection;
+
+  /// Called when the user selects a query suggestion.
+  final ValueChanged<QuerySuggestion>? onQuerySelection;
 
   /// Called when autocomplete, place-details, or time-zone loading fails.
   final ValueChanged<Object>? onError;
@@ -151,7 +159,9 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     DateTime? selectionTimeZoneAt,
     String? selectionTimeZoneLanguageCode,
     int maxSuggestions = 5,
+    bool includeQueryPredictions = false,
     ValueChanged<PlaceSelection>? onSelection,
+    ValueChanged<QuerySuggestion>? onQuerySelection,
     ValueChanged<Object>? onError,
   }) async {
     final ownedController = controller == null
@@ -180,10 +190,12 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       selectionTimeZoneAt: selectionTimeZoneAt,
       selectionTimeZoneLanguageCode: selectionTimeZoneLanguageCode,
       maxSuggestions: maxSuggestions,
+      includeQueryPredictions: includeQueryPredictions,
       onSelection: (selection) {
         navigator.pop(selection);
         onSelection?.call(selection);
       },
+      onQuerySelection: onQuerySelection,
       onError: onError,
     );
 
@@ -242,7 +254,9 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       selectionTimeZoneAt: selectionTimeZoneAt,
       selectionTimeZoneLanguageCode: selectionTimeZoneLanguageCode,
       maxSuggestions: maxSuggestions,
+      includeQueryPredictions: includeQueryPredictions,
       onSelection: onSelection,
+      onQuerySelection: onQuerySelection,
       onError: onError,
       autofocus: true,
     );

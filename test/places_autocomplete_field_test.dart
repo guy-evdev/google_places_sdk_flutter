@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
 import 'package:google_places_sdk_flutter/src/internal/backend.dart';
@@ -30,6 +31,23 @@ class _FakeBackend implements PlacesBackend {
   }
 
   @override
+  Future<List<AutocompleteSuggestion>> autocompleteSuggestions(
+    AutocompleteRequest request,
+  ) async {
+    final places = await autocomplete(request);
+    return <AutocompleteSuggestion>[
+      places.first,
+      const QuerySuggestion(
+        fullText: StructuredText(
+          text: 'coffee near me',
+          matches: <TextMatch>[TextMatch(startOffset: 0, endOffset: 6)],
+        ),
+      ),
+      ...places.skip(1),
+    ];
+  }
+
+  @override
   Future<void> close() async {}
 
   @override
@@ -41,6 +59,13 @@ class _FakeBackend implements PlacesBackend {
       location: PlaceCoordinates(latitude: 40.7128, longitude: -74.0060),
     );
   }
+
+  @override
+  Future<PlacePhotoMedia> fetchPhotoMedia(PhotoMediaRequest request) async =>
+      const PlacePhotoMedia(
+        name: 'places/place-1/photos/photo-1/media',
+        photoUri: 'https://example.com/photo.jpg',
+      );
 
   @override
   Future<PlaceTimeZoneData> fetchTimeZone(TimeZoneRequest request) async {
@@ -83,6 +108,17 @@ class _RecordingNavigatorObserver extends NavigatorObserver {
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
     popCount++;
     super.didPop(route, previousRoute);
+  }
+}
+
+class _SlowDetailsBackend extends _FakeBackend {
+  final Completer<PlaceData> completer = Completer<PlaceData>();
+  int fetchPlaceCount = 0;
+
+  @override
+  Future<PlaceData> fetchPlace(PlaceDetailsRequest request) {
+    fetchPlaceCount++;
+    return completer.future;
   }
 }
 
@@ -226,6 +262,28 @@ void main() {
     expect(didClear, isTrue);
   });
 
+  testWidgets('clear button is only visible while the field has text', (
+    tester,
+  ) async {
+    final client = PlacesClient.testing(
+      apiKey: 'test',
+      backend: _FakeBackend(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: PlacesAutocompleteField(client: client)),
+      ),
+    );
+
+    expect(find.byIcon(Icons.clear), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'cof');
+    await tester.pump();
+
+    expect(find.byIcon(Icons.clear), findsOneWidget);
+  });
+
   testWidgets(
     'merges user decoration styling with package hint and clear button',
     (tester) async {
@@ -259,8 +317,14 @@ void main() {
       expect(decoration.floatingLabelBehavior, FloatingLabelBehavior.always);
       expect(decoration.hintText, 'Search demo');
       expect(decoration.suffixIcon, isNotNull);
-      expect(decoration.suffix, isNotNull);
 
+      expect(find.byIcon(Icons.favorite), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), 'cof');
+      await tester.pump();
+
+      final updatedTextField = tester.widget<TextField>(find.byType(TextField));
+      expect(updatedTextField.decoration!.suffix, isNotNull);
       expect(find.byIcon(Icons.clear), findsOneWidget);
       expect(find.byIcon(Icons.favorite), findsOneWidget);
     },
@@ -321,6 +385,118 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Coffee Lab'), findsOneWidget);
+    },
+  );
+
+  testWidgets('shows query suggestions when explicitly enabled', (
+    tester,
+  ) async {
+    final client = PlacesClient.testing(
+      apiKey: 'test',
+      backend: _FakeBackend(),
+    );
+    QuerySuggestion? querySelection;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlacesAutocompleteField(
+            client: client,
+            includeQueryPredictions: true,
+            onQuerySelection: (selection) {
+              querySelection = selection;
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), 'cof');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    expect(find.text('coffee near me'), findsOneWidget);
+
+    await tester.tap(find.text('coffee near me'));
+    await tester.pumpAndSettle();
+
+    expect(querySelection, isNotNull);
+    expect(querySelection!.displayText, 'coffee near me');
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      'coffee near me',
+    );
+  });
+
+  testWidgets('Enter selects the highlighted suggestion', (tester) async {
+    final client = PlacesClient.testing(
+      apiKey: 'test',
+      backend: _FakeBackend(),
+    );
+    PlaceSelection? selection;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlacesAutocompleteField(
+            client: client,
+            onSelection: (value) {
+              selection = value;
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), 'cof');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(selection, isNotNull);
+    expect(selection!.placeId, 'place-1');
+  });
+
+  testWidgets(
+    'shows selection loading and prevents duplicate details requests',
+    (tester) async {
+      final backend = _SlowDetailsBackend();
+      final client = PlacesClient.testing(apiKey: 'test', backend: backend);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PlacesAutocompleteField(
+              client: client,
+              fetchPlaceDetailsOnSelection: true,
+            ),
+          ),
+        ),
+      );
+
+      await tester.enterText(find.byType(TextField), 'cof');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Coffee Lab'));
+      await tester.pump();
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(backend.fetchPlaceCount, 1);
+
+      backend.completer.complete(
+        const PlaceData(
+          id: 'place-1',
+          displayName: LocalizedText(text: 'Coffee Lab'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LinearProgressIndicator), findsNothing);
     },
   );
 

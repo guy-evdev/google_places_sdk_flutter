@@ -25,6 +25,8 @@ class PlacesStrings {
     this.overlayTitle = 'Search places',
     this.closeLabel = 'Close',
     this.clearLabel = 'Clear search',
+    this.placeSuggestionLabel = 'Place suggestion',
+    this.querySuggestionLabel = 'Query suggestion',
   });
 
   /// Placeholder text shown in the search field.
@@ -53,4 +55,10 @@ class PlacesStrings {
 
   /// Tooltip/semantic label for the field clear button.
   final String clearLabel;
+
+  /// Semantic label prefix for place suggestions.
+  final String placeSuggestionLabel;
+
+  /// Semantic label prefix for query suggestions.
+  final String querySuggestionLabel;
 }

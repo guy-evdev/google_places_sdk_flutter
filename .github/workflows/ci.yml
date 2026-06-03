@@ -8,7 +8,33 @@ on:
   pull_request:
 
 jobs:
-  flutter:
+  flutter-344:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.1
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build example web
+        working-directory: example
+        run: flutter build web --dart-define=GOOGLE_MAPS_API_KEY=ci-placeholder
+
+  flutter-stable:
     runs-on: ubuntu-latest
 
     steps:
@@ -19,6 +45,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
 
       - name: Install dependencies
         run: flutter pub get

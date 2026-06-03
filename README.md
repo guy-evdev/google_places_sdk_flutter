@@ -3,49 +3,38 @@
 [![pub package](https://img.shields.io/pub/v/google_places_sdk_flutter.svg)](https://pub.dev/packages/google_places_sdk_flutter)
 [![CI](https://github.com/guy-evdev/google_places_sdk_flutter/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/guy-evdev/google_places_sdk_flutter/actions/workflows/ci.yml)
 
-
-Cross-platform Google Places client and widget toolkit for Flutter, built on Places API (New).
-
-The package includes package-owned request and response models, a
+Cross-platform Google Places client and widget toolkit for Flutter, built on
+Places API (New). The package includes typed request/response models, a
 cross-platform `PlacesClient`, and autocomplete widgets for inline, form,
-dialog, and fullscreen flows. The widget layer is locale-aware, RTL-friendly,
-and designed to work consistently across Android, iOS, web, macOS, Windows,
-and Linux.
+dialog, and fullscreen flows.
+
+## Contents
+
+- [Preview](#preview)
+- [Features](#features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Client APIs](#client-apis)
+- [Options](#options)
+- [Example App](#example-app)
+- [API Reference](#api-reference)
 
 ## Preview
 
-[//]: # (Overview:)
-[//]: # ()
 <p>
   <img src="https://raw.githubusercontent.com/guy-evdev/google_places_sdk_flutter/main/assets/readme/example.gif" alt="Package example" width="320" />
 </p>
 
-[//]: # (Sample flows &#40;Inline field, dialog launcher, fullscreen launcher, and rich result payload&#41;:)
-
-[//]: # ()
-[//]: # (<p>)
-
-[//]: # (  <img src="https://raw.githubusercontent.com/guy-evdev/google_places_sdk_flutter/main/assets/readme/text_field_mode.png" alt="Inline field mode" width="190" />)
-
-[//]: # (  <img src="https://raw.githubusercontent.com/guy-evdev/google_places_sdk_flutter/main/assets/readme/dialog_mode.png" alt="Dialog mode" width="190" />)
-
-[//]: # (  <img src="https://raw.githubusercontent.com/guy-evdev/google_places_sdk_flutter/main/assets/readme/fullscreen_mode.png" alt="Fullscreen mode" width="190" />)
-
-[//]: # (  <img src="https://raw.githubusercontent.com/guy-evdev/google_places_sdk_flutter/main/assets/readme/rich_result.png" alt="Rich result payload" width="190" />)
-
-[//]: # (</p>)
-
 ## Features
 
-- Places API (New) autocomplete
-- Optional place-details fetch on selection
-- Optional Google Time Zone API fetch on selection
+- Places API (New) autocomplete with optional query predictions
+- Optional place-details and Google Time Zone API lookup on selection
+- Place Photos (New) media URI lookup
 - Text search and nearby search client APIs
-- Inline field, dialog launcher, and fullscreen launcher modes
-- Customizable strings and `InputDecoration`
-- Locale support with `languageCode` and `regionCode`
-- Rich field-mask control with `PlaceField` and `PlaceFieldPresets`
-- Typed address support through `postalAddress`, `addressComponents`, and convenience getters
+- Inline, form, dialog, and fullscreen autocomplete UI
+- Locale support with `languageCode`, `regionCode`, custom strings, and RTL
+- Field-mask control through `PlaceField` and `PlaceFieldPresets`
+- Typed address support and typed-light access to newer Places fields
 
 ## Installation
 
@@ -56,7 +45,7 @@ dependencies:
   google_places_sdk_flutter: latest_version
 ```
 
-Then create a client with your Google Maps Platform API key:
+Create a client with your Google Maps Platform API key:
 
 ```dart
 final client = PlacesClient(
@@ -64,29 +53,29 @@ final client = PlacesClient(
 );
 ```
 
+On web, the package uses the Google Maps JavaScript Places library behind the
+same `PlacesClient` API.
+
 Official Google docs:
 - [Places API (New)](https://developers.google.com/maps/documentation/places/web-service)
 - [Place Autocomplete (New)](https://developers.google.com/maps/documentation/places/web-service/place-autocomplete)
 - [Place Details (New)](https://developers.google.com/maps/documentation/places/web-service/place-details)
 - [Time Zone API](https://developers.google.com/maps/documentation/timezone/requests-timezone)
 
-On web, the package uses the Google Maps JavaScript Places library behind the
-same `PlacesClient` API.
-
-## Minimal Example
+## Quick Start
 
 ```dart
 import 'package:flutter/material.dart';
 import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
 
-class MinimalPlacesField extends StatefulWidget {
-  const MinimalPlacesField({super.key});
+class PlacesSearchField extends StatefulWidget {
+  const PlacesSearchField({super.key});
 
   @override
-  State<MinimalPlacesField> createState() => _MinimalPlacesFieldState();
+  State<PlacesSearchField> createState() => _PlacesSearchFieldState();
 }
 
-class _MinimalPlacesFieldState extends State<MinimalPlacesField> {
+class _PlacesSearchFieldState extends State<PlacesSearchField> {
   final _client = PlacesClient(
     apiKey: const String.fromEnvironment('GOOGLE_MAPS_API_KEY'),
   );
@@ -101,239 +90,118 @@ class _MinimalPlacesFieldState extends State<MinimalPlacesField> {
   Widget build(BuildContext context) {
     return PlacesAutocompleteField(
       client: _client,
+      decoration: const InputDecoration(
+        labelText: 'Place',
+        border: OutlineInputBorder(),
+      ),
+      languageCode: 'en',
+      regionCode: 'us',
+      fetchPlaceDetailsOnSelection: true,
+      selectionFields: PlaceFieldPresets.recommended,
       onSelection: (selection) {
         debugPrint(selection.displayText);
+        debugPrint(selection.place?.formattedAddress);
       },
     );
   }
 }
 ```
 
-## Common Widget Example
+For form validation, use `PlacesAutocompleteFormField`. For a dedicated search
+surface, use `PlacesAutocompleteOverlay.show()` with `dialog` or `fullscreen`
+mode.
+
+## Client APIs
+
+Use `autocomplete()` for place-only autocomplete results:
 
 ```dart
-final controller = PlacesAutocompleteController();
-
-PlacesAutocompleteField(
-  client: client,
-  controller: controller,
-  fieldMode: PlacesAutocompleteFieldMode.inline,
-  strings: const PlacesStrings(
-    searchHint: 'Search for a place',
-  ),
-  decoration: const InputDecoration(
-    labelText: 'Place',
-    border: OutlineInputBorder(),
-  ),
-  languageCode: 'en',
-  regionCode: 'us',
-  includedPrimaryTypes: const <String>['restaurant', 'cafe'],
-  includedRegionCodes: const <String>['us'],
-  fetchPlaceDetailsOnSelection: true,
-  fetchTimeZoneOnSelection: true,
-  selectionFields: PlaceFieldPresets.rich,
-  onSelection: (selection) {
-    debugPrint(selection.displayText);
-    debugPrint(selection.place?.formattedAddress);
-    debugPrint(selection.timeZone?.timeZoneId);
-  },
-  onClearField: () {
-    debugPrint('Cleared');
-  },
-  onError: (error) {
-    debugPrint(error.toString());
-  },
-)
+final places = await client.autocomplete(
+  const AutocompleteRequest(input: 'coffee'),
+);
 ```
 
-## Form Example
-
-Use `PlacesAutocompleteFormField` when autocomplete selection should
-participate in form validation and saving.
+Use `autocompleteSuggestions()` when you want query predictions as well:
 
 ```dart
-final formKey = GlobalKey<FormState>();
-
-Form(
-  key: formKey,
-  child: PlacesAutocompleteFormField(
-    client: client,
-    decoration: const InputDecoration(
-      labelText: 'Place',
-      border: OutlineInputBorder(),
-    ),
-    fetchPlaceDetailsOnSelection: true,
-    selectionFields: PlaceFieldPresets.recommended,
-    validator: (selection) {
-      if (selection == null) {
-        return 'Please choose a place';
-      }
-      return null;
-    },
-    onSaved: (selection) {
-      debugPrint(selection?.placeId);
-    },
+final suggestions = await client.autocompleteSuggestions(
+  const AutocompleteRequest(
+    input: 'coffee',
+    includeQueryPredictions: true,
   ),
-)
-```
+);
 
-## Field Options
-
-`PlacesAutocompleteField` supports the following public options:
-
-```dart
-PlacesAutocompleteField(
-  key: key,
-  client: client,
-  controller: controller,
-  decoration: decoration,
-  strings: strings,
-  languageCode: languageCode,
-  regionCode: regionCode,
-  locationBias: locationBias,
-  locationRestriction: locationRestriction,
-  includedPrimaryTypes: includedPrimaryTypes,
-  includedRegionCodes: includedRegionCodes,
-  includePureServiceAreaBusinesses: includePureServiceAreaBusinesses,
-  fetchPlaceDetailsOnSelection: fetchPlaceDetailsOnSelection,
-  fetchTimeZoneOnSelection: fetchTimeZoneOnSelection,
-  selectionFields: selectionFields,
-  selectionLanguageCode: selectionLanguageCode,
-  selectionRegionCode: selectionRegionCode,
-  selectionTimeZoneAt: selectionTimeZoneAt,
-  selectionTimeZoneLanguageCode: selectionTimeZoneLanguageCode,
-  fieldMode: fieldMode,
-  onSelection: onSelection,
-  onClearField: onClearField,
-  onError: onError,
-  maxSuggestions: maxSuggestions,
-  enabled: enabled,
-  autofocus: autofocus,
-  showPoweredByGoogle: showPoweredByGoogle,
-  suggestionBuilder: suggestionBuilder,
-)
-```
-
-In practice:
-- `fieldMode` can be `inline`, `dialog`, or `fullscreen`
-- `includedPrimaryTypes` uses Google Places primary type strings such as `'restaurant'`, `'cafe'`, or `'(cities)'`
-- `selectionFields` controls which fields are fetched when details loading is enabled
-- `maxSuggestions` is a display cap and is effectively limited to `5` by Google Autocomplete (New)
-- if you pass a custom `InputDecoration`, the package preserves your styling and still keeps the clear action available
-
-Google primary type reference:
-- [includedPrimaryTypes](https://developers.google.com/maps/documentation/places/web-service/place-autocomplete#includedPrimaryTypes)
-
-## Selection Model
-
-All widget flows return a package-owned `PlaceSelection`:
-
-```dart
-class PlaceSelection {
-  final PlaceSuggestion suggestion;
-  final PlaceData? place;
-  final PlaceTimeZoneData? timeZone;
+for (final suggestion in suggestions) {
+  switch (suggestion) {
+    case PlaceSuggestion():
+      debugPrint('Place: ${suggestion.placeId}');
+    case QuerySuggestion():
+      debugPrint('Query: ${suggestion.displayText}');
+  }
 }
 ```
 
-This means:
-- `suggestion` is always available
-- `place` is available when `fetchPlaceDetailsOnSelection` is enabled
-- `timeZone` is available when `fetchTimeZoneOnSelection` is enabled
-
-## Standalone Client Calls
-
-Use the client directly when you already have a place id or want to resolve
-time-zone data separately from the widget flow.
-
-Fetch rich place details from a place id:
+Fetch details, time-zone data, search results, or photo media directly:
 
 ```dart
 final place = await client.fetchPlaceById(
   'ChIJmQJIxlVYwokRLgeuocVOGVU',
   fields: PlaceFieldPresets.rich,
-  languageCode: 'en',
-  regionCode: 'us',
+);
+
+final timeZone = await client.fetchTimeZoneForPlace(place);
+
+final results = await client.searchText(
+  const TextSearchRequest(textQuery: 'coffee near me'),
+);
+
+final media = await client.fetchPhotoMedia(
+  PhotoMediaRequest(
+    name: place.photos.first.name,
+    maxWidthPx: 800,
+  ),
 );
 ```
 
-Fetch time-zone data from resolved place details:
+## Options
 
-```dart
-final timeZone = await client.fetchTimeZoneForPlace(
-  place,
-  timestamp: DateTime.now().toUtc(),
-  languageCode: 'en',
-);
+Common widget options:
 
-debugPrint(timeZone.timeZoneId);
-debugPrint(timeZone.timeZoneName);
-```
+| Option | Default | Use when |
+| --- | --- | --- |
+| `fieldMode` | `PlacesAutocompleteFieldMode.inline` | You want inline, dialog, or fullscreen search UI. |
+| `languageCode` | `null` | You want localized results. |
+| `regionCode` | `null` | You want region-aware ranking/formatting. |
+| `locationBias` | `null` | You prefer results near an area without excluding others. |
+| `locationRestriction` | `null` | You only want results inside an area. |
+| `includedPrimaryTypes` | `const <String>[]` | You want types such as `restaurant`, `cafe`, or `(cities)`. |
+| `fetchPlaceDetailsOnSelection` | `false` | You need `PlaceData` after selection. |
+| `fetchTimeZoneOnSelection` | `false` | You need time-zone metadata after selection. |
+| `selectionFields` | `PlaceFieldPresets.recommended` | You want to control Place Details payload size. |
+| `includeQueryPredictions` | `false` | You want suggested search phrases alongside places. |
+| `maxSuggestions` | `5` | You want to display fewer than Google's five suggestions. |
+| `showPoweredByGoogle` | `true` | You want the package to render Google attribution. |
 
-Time-zone lookups use Google Time Zone API, which is separate from Places API
-and may be billed separately.
-
-## Typed Address Details
-
-When you request `PlaceField.postalAddress` and/or
-`PlaceField.addressComponents`, `PlaceData` exposes typed address structures
-and convenience getters for common legacy-style fields:
-
-```dart
-final place = await client.fetchPlaceById(
-  'ChIJmQJIxlVYwokRLgeuocVOGVU',
-  fields: <PlaceField>{
-    ...PlaceFieldPresets.rich,
-    PlaceField.postalAddress,
-    PlaceField.addressComponents,
-  },
-);
-
-debugPrint(place.route);
-debugPrint(place.streetNumber);
-debugPrint(place.locality);
-debugPrint(place.administrativeArea);
-debugPrint(place.postalCode);
-debugPrint(place.country);
-debugPrint(place.countryCode);
-```
-
-Google references:
-- [Place resource: postalAddress](https://developers.google.com/maps/documentation/places/web-service/reference/rest/v1/places#PostalAddress)
-- [Place resource: addressComponents](https://developers.google.com/maps/documentation/places/web-service/reference/rest/v1/places#AddressComponent)
-
-## Overlay Usage
-
-Use `PlacesAutocompleteOverlay.show()` when search should happen in a dedicated
-route instead of inline:
-
-```dart
-final selection = await PlacesAutocompleteOverlay.show(
-  context,
-  client: client,
-  mode: PlacesAutocompleteOverlayMode.fullscreen,
-  languageCode: 'en',
-  regionCode: 'us',
-  fetchPlaceDetailsOnSelection: true,
-  fetchTimeZoneOnSelection: true,
-  selectionFields: PlaceFieldPresets.rich,
-);
-```
+`locationBias` and `locationRestriction` cannot be used together. Query
+predictions are additive; keep place predictions for flows where users must
+select a concrete place id.
 
 ## Example App
 
-The `/example` app demonstrates:
-- inline autocomplete
-- form integration
-- dialog and fullscreen launcher modes
-- rich place-details loading
-- optional time-zone loading
-- custom strings
-- locale switching
-- RTL layout
+The `/example` app demonstrates inline autocomplete, form integration, dialog
+and fullscreen launchers, query predictions, rich place-details loading,
+optional time-zone loading, custom strings, locale switching, and RTL layout.
 
 Run it with:
 
 ```sh
 flutter run --dart-define=GOOGLE_MAPS_API_KEY=your_key_here
 ```
+
+## API Reference
+
+See [doc/api_reference.md](doc/api_reference.md) for:
+
+- Full widget, overlay, client, and request defaults
+- `PlaceField` API names
+- `PlaceFieldPresets.minimal`, `recommended`, and `rich` membership
