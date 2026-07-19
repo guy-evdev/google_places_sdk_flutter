@@ -2,56 +2,67 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [main, master]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  flutter-344:
+  minimum-sdk:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          flutter-version: 3.44.1
+          persist-credentials: false
+      - name: Set up minimum Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: 3.35.7
           cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
 
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Analyze
-        run: flutter analyze
-
-      - name: Test
-        run: flutter test
-
-      - name: Build example web
-        working-directory: example
-        run: flutter build web --dart-define=GOOGLE_MAPS_API_KEY=ci-placeholder
-
-  flutter-stable:
+  release-gates:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Set up latest stable Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           channel: stable
           cache: true
-
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Analyze
-        run: flutter analyze
-
-      - name: Test
+      - run: flutter pub get
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed .
+      - run: flutter analyze
+      - name: VM tests with coverage
+        run: flutter test --coverage
+      - name: Enforce 85% line coverage
+        run: |
+          awk -F '[:,]' '$1 == "DA" { total++; covered += ($3 > 0) } END { if (total == 0 || covered * 100 / total < 85) exit 1; printf "Line coverage: %.2f%%\n", covered * 100 / total }' coverage/lcov.info
+      - name: Chrome tests
+        run: flutter test --platform chrome
+      - name: Dartdoc
+        run: dart doc --dry-run
+      - name: Example tests
+        working-directory: example
         run: flutter test
+      - name: Example web build
+        working-directory: example
+        run: flutter build web --dart-define=GOOGLE_MAPS_API_KEY=ci-placeholder
+      - name: Publish validation
+        run: flutter pub publish --dry-run
+      - name: Pana
+        run: |
+          dart pub global activate pana
+          dart pub global run pana:pana --no-warning

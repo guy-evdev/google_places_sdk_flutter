@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/place_models.dart';
 import '../places_client.dart';
+import '../places_cancellation_token.dart';
 import 'places_autocomplete_controller.dart';
 import 'places_autocomplete_overlay.dart';
 import 'places_strings.dart';
@@ -213,6 +215,11 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   bool _hasText = false;
   int _highlightedSuggestionIndex = -1;
   int _searchGeneration = 0;
+  int _selectionGeneration = 0;
+  bool _selectionInProgress = false;
+  PlacesCancellationToken? _searchCancellationToken;
+  PlacesCancellationToken? _selectionCancellationToken;
+  AutocompleteSessionToken? _observedSessionToken;
 
   PlacesAutocompleteController get _controller =>
       widget.controller ??
@@ -234,27 +241,74 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   @override
   void initState() {
     super.initState();
-    _controller.focusNode.addListener(_onFocusChanged);
-    _controller.textController.addListener(_onTextControllerChanged);
-    _hasText = _controller.textController.text.isNotEmpty;
+    _attachController(_controller);
     _syncFocusMode();
   }
 
   @override
   void didUpdateWidget(PlacesAutocompleteField oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != widget.controller) {
-      (oldWidget.controller ?? _ownedController)?.focusNode.removeListener(
-        _onFocusChanged,
-      );
-      (oldWidget.controller ?? _ownedController)?.textController.removeListener(
-        _onTextControllerChanged,
-      );
-      _controller.focusNode.addListener(_onFocusChanged);
-      _controller.textController.addListener(_onTextControllerChanged);
-      _hasText = _controller.textController.text.isNotEmpty;
+    final controllerChanged = oldWidget.controller != widget.controller;
+    final clientChanged = oldWidget.client != widget.client;
+    final requestChanged = _requestConfigurationChanged(oldWidget);
+
+    if (controllerChanged) {
+      final previousController = oldWidget.controller ?? _ownedController!;
+      _endObservedSession(oldWidget.client);
+      _detachController(previousController);
+      _invalidateAsyncWork();
+      _attachController(_controller);
+    } else if (clientChanged || requestChanged) {
+      _endObservedSession(clientChanged ? oldWidget.client : widget.client);
+      _controller.resetSession(notify: false);
+      _observedSessionToken = _controller.sessionToken;
+      _invalidateAsyncWork();
     }
     _syncFocusMode();
+  }
+
+  bool _requestConfigurationChanged(PlacesAutocompleteField oldWidget) {
+    return oldWidget.languageCode != widget.languageCode ||
+        oldWidget.regionCode != widget.regionCode ||
+        oldWidget.locationBias != widget.locationBias ||
+        oldWidget.locationRestriction != widget.locationRestriction ||
+        !listEquals(
+          oldWidget.includedPrimaryTypes,
+          widget.includedPrimaryTypes,
+        ) ||
+        !listEquals(
+          oldWidget.includedRegionCodes,
+          widget.includedRegionCodes,
+        ) ||
+        oldWidget.includePureServiceAreaBusinesses !=
+            widget.includePureServiceAreaBusinesses ||
+        oldWidget.fetchPlaceDetailsOnSelection !=
+            widget.fetchPlaceDetailsOnSelection ||
+        oldWidget.fetchTimeZoneOnSelection != widget.fetchTimeZoneOnSelection ||
+        !setEquals(oldWidget.selectionFields, widget.selectionFields) ||
+        oldWidget.selectionLanguageCode != widget.selectionLanguageCode ||
+        oldWidget.selectionRegionCode != widget.selectionRegionCode ||
+        oldWidget.selectionTimeZoneAt != widget.selectionTimeZoneAt ||
+        oldWidget.selectionTimeZoneLanguageCode !=
+            widget.selectionTimeZoneLanguageCode ||
+        oldWidget.includeQueryPredictions != widget.includeQueryPredictions ||
+        oldWidget.maxSuggestions != widget.maxSuggestions ||
+        oldWidget.enabled != widget.enabled ||
+        oldWidget.fieldMode != widget.fieldMode;
+  }
+
+  void _attachController(PlacesAutocompleteController controller) {
+    controller.focusNode.addListener(_onFocusChanged);
+    controller.textController.addListener(_onTextControllerChanged);
+    controller.addListener(_onControllerChanged);
+    _observedSessionToken = controller.sessionToken;
+    _hasText = controller.textController.text.isNotEmpty;
+  }
+
+  void _detachController(PlacesAutocompleteController controller) {
+    controller.focusNode.removeListener(_onFocusChanged);
+    controller.textController.removeListener(_onTextControllerChanged);
+    controller.removeListener(_onControllerChanged);
   }
 
   void _syncFocusMode() {
@@ -269,20 +323,73 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   @override
   void dispose() {
     _debounce?.cancel();
-    _controller.focusNode.removeListener(_onFocusChanged);
-    _controller.textController.removeListener(_onTextControllerChanged);
+    _searchCancellationToken?.cancel();
+    _selectionCancellationToken?.cancel();
+    _searchGeneration++;
+    _selectionGeneration++;
+    final controller = _controller;
+    _endObservedSession(widget.client);
+    _detachController(controller);
     _ownedController?.dispose();
     super.dispose();
+  }
+
+  void _onControllerChanged() {
+    final currentToken = _controller.sessionToken;
+    final previousToken = _observedSessionToken;
+    if (previousToken?.value == currentToken.value) {
+      return;
+    }
+    _observedSessionToken = currentToken;
+    if (previousToken != null) {
+      unawaited(widget.client.endAutocompleteSession(previousToken));
+    }
+    _invalidateAsyncWork();
+  }
+
+  void _endObservedSession(PlacesClient client) {
+    final token = _observedSessionToken;
+    _observedSessionToken = null;
+    if (token != null) {
+      unawaited(client.endAutocompleteSession(token));
+    }
+  }
+
+  void _invalidateAsyncWork() {
+    _debounce?.cancel();
+    _searchCancellationToken?.cancel();
+    _searchCancellationToken = null;
+    _selectionCancellationToken?.cancel();
+    _selectionCancellationToken = null;
+    _searchGeneration++;
+    _selectionGeneration++;
+    _selectionInProgress = false;
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _searchUiVisible = false;
+      _loading = false;
+      _selectionLoading = false;
+      _error = null;
+      _suggestions = const <AutocompleteSuggestion>[];
+      _highlightedSuggestionIndex = -1;
+    });
   }
 
   void _onFocusChanged() {
     if (_controller.focusNode.hasFocus || _isLauncherMode) {
       return;
     }
-    if (_suggestionPointerDown) {
+    if (_suggestionPointerDown || _selectionInProgress) {
       return;
     }
+    final hadActiveSession =
+        _searchUiVisible || _loading || _suggestions.isNotEmpty;
     _closeSearchUi();
+    if (hadActiveSession) {
+      _controller.resetSession();
+    }
   }
 
   void _onTextControllerChanged() {
@@ -299,10 +406,19 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     if (_isLauncherMode) {
       return;
     }
+    if (_controller.selectedSelection != null) {
+      _controller.clearSelection();
+      widget.onClearField?.call();
+    }
     _debounce?.cancel();
     final input = value.trim();
     if (input.isEmpty) {
+      final hadActiveSession =
+          _searchUiVisible || _loading || _suggestions.isNotEmpty;
       _closeSearchUi();
+      if (hadActiveSession) {
+        _controller.resetSession();
+      }
       return;
     }
     setState(() {
@@ -318,6 +434,8 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   }
 
   void _invalidateSearches() {
+    _searchCancellationToken?.cancel();
+    _searchCancellationToken = null;
     _searchGeneration++;
   }
 
@@ -325,6 +443,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     return mounted &&
         generation == _searchGeneration &&
         _searchUiVisible &&
+        widget.enabled &&
         !_isLauncherMode &&
         _controller.focusNode.hasFocus &&
         _controller.textController.text.trim() == input;
@@ -349,6 +468,9 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     if (!_isActiveSearch(input, generation)) {
       return;
     }
+    _searchCancellationToken?.cancel();
+    final cancellationToken = PlacesCancellationToken();
+    _searchCancellationToken = cancellationToken;
     try {
       setState(() {
         _loading = true;
@@ -356,6 +478,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       });
       final request = AutocompleteRequest(
         input: input,
+        inputOffset: _unicodeInputOffset(input),
         sessionToken: _controller.sessionToken,
         languageCode: widget.languageCode,
         regionCode: widget.regionCode,
@@ -368,8 +491,14 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
         includeQueryPredictions: widget.includeQueryPredictions,
       );
       final suggestions = widget.includeQueryPredictions
-          ? await widget.client.autocompleteSuggestions(request)
-          : await widget.client.autocomplete(request);
+          ? await widget.client.autocompleteSuggestions(
+              request,
+              cancellationToken: cancellationToken,
+            )
+          : await widget.client.autocomplete(
+              request,
+              cancellationToken: cancellationToken,
+            );
       if (!_isActiveSearch(input, generation)) {
         return;
       }
@@ -392,7 +521,34 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
         _highlightedSuggestionIndex = -1;
       });
       widget.onError?.call(error);
+    } finally {
+      if (identical(_searchCancellationToken, cancellationToken)) {
+        _searchCancellationToken = null;
+      }
     }
+  }
+
+  void _retrySearch() {
+    final input = _controller.textController.text.trim();
+    if (input.isEmpty || !_controller.focusNode.hasFocus) {
+      return;
+    }
+    final generation = ++_searchGeneration;
+    unawaited(_search(input, generation));
+  }
+
+  int? _unicodeInputOffset(String input) {
+    final rawInput = _controller.textController.text;
+    final selectionOffset = _controller.textController.selection.extentOffset;
+    final inputStart = rawInput.indexOf(input);
+    if (selectionOffset < 0 || inputStart < 0) {
+      return null;
+    }
+    final localCodeUnitOffset = (selectionOffset - inputStart).clamp(
+      0,
+      input.length,
+    );
+    return input.substring(0, localCodeUnitOffset).runes.length;
   }
 
   void _clearField() {
@@ -402,7 +558,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   }
 
   Future<void> _handleSuggestionTap(AutocompleteSuggestion suggestion) async {
-    if (_selectionLoading) {
+    if (_selectionInProgress) {
       return;
     }
     if (suggestion is QuerySuggestion) {
@@ -419,59 +575,101 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     if (suggestion is! PlaceSuggestion) {
       return;
     }
+    final client = widget.client;
+    final controller = _controller;
+    final sessionToken = controller.sessionToken;
+    final generation = ++_selectionGeneration;
+    _selectionCancellationToken?.cancel();
+    final cancellationToken = PlacesCancellationToken();
+    _selectionCancellationToken = cancellationToken;
+    _selectionInProgress = true;
     _closeSearchUi();
-    final initialSelection = PlaceSelection(suggestion: suggestion);
-    _controller.setSelection(initialSelection);
-    _controller.focusNode.unfocus();
-    if (!_shouldResolvePlaceOnSelection) {
-      widget.onSelection?.call(initialSelection);
-      _controller.resetSession();
-      return;
-    }
+    final initialSelection = PlaceSelection(
+      suggestion: suggestion,
+      sessionToken: sessionToken,
+    );
+    controller.setSelection(initialSelection);
+    controller.focusNode.unfocus();
     try {
+      if (!_shouldResolvePlaceOnSelection) {
+        if (_isActiveSelection(generation, client, controller)) {
+          widget.onSelection?.call(initialSelection);
+        }
+        return;
+      }
       setState(() {
         _selectionLoading = true;
       });
-      final place = await widget.client.fetchPlace(
+      final place = await client.fetchPlace(
         PlaceDetailsRequest(
           placeId: suggestion.placeId,
           fields: _effectiveSelectionFields,
           languageCode: widget.selectionLanguageCode ?? widget.languageCode,
           regionCode: widget.selectionRegionCode ?? widget.regionCode,
-          sessionToken: _controller.sessionToken,
+          sessionToken: sessionToken,
         ),
+        cancellationToken: cancellationToken,
       );
-      if (!mounted) {
+      if (!_isActiveSelection(generation, client, controller)) {
         return;
       }
       PlaceTimeZoneData? timeZone;
       if (widget.fetchTimeZoneOnSelection) {
-        timeZone = await widget.client.fetchTimeZoneForPlace(
+        timeZone = await client.fetchTimeZoneForPlace(
           place,
           timestamp: widget.selectionTimeZoneAt,
           languageCode:
               widget.selectionTimeZoneLanguageCode ??
               widget.selectionLanguageCode ??
               widget.languageCode,
+          cancellationToken: cancellationToken,
         );
+        if (!_isActiveSelection(generation, client, controller)) {
+          return;
+        }
       }
       final resolvedSelection = PlaceSelection(
         suggestion: suggestion,
+        sessionToken: sessionToken,
         place: place,
         timeZone: timeZone,
       );
-      _controller.setSelection(resolvedSelection, updateText: false);
+      controller.setSelection(resolvedSelection, updateText: false);
       widget.onSelection?.call(resolvedSelection);
     } catch (error) {
-      widget.onError?.call(error);
+      if (_isActiveSelection(generation, client, controller)) {
+        widget.onError?.call(error);
+      }
     } finally {
-      if (mounted) {
+      if (identical(_selectionCancellationToken, cancellationToken)) {
+        _selectionCancellationToken = null;
+      }
+      if (_isActiveSelection(generation, client, controller)) {
+        _selectionInProgress = false;
         setState(() {
           _selectionLoading = false;
         });
       }
-      _controller.resetSession();
+      if (controller.sessionToken.value == sessionToken.value &&
+          mounted &&
+          identical(controller, _controller) &&
+          identical(client, widget.client)) {
+        controller.resetSession();
+      } else {
+        unawaited(client.endAutocompleteSession(sessionToken));
+      }
     }
+  }
+
+  bool _isActiveSelection(
+    int generation,
+    PlacesClient client,
+    PlacesAutocompleteController controller,
+  ) {
+    return mounted &&
+        generation == _selectionGeneration &&
+        identical(client, widget.client) &&
+        identical(controller, _controller);
   }
 
   KeyEventResult _handleSuggestionKeyEvent(FocusNode node, KeyEvent event) {
@@ -595,7 +793,17 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
                 ),
               )
             else if (_error != null)
-              _InfoTile(child: Text(widget.strings.errorText))
+              _InfoTile(
+                child: Row(
+                  children: <Widget>[
+                    Expanded(child: Text(widget.strings.errorText)),
+                    TextButton(
+                      onPressed: _retrySearch,
+                      child: Text(widget.strings.retryText),
+                    ),
+                  ],
+                ),
+              )
             else if (_suggestions.isEmpty &&
                 _controller.textController.text.trim().isNotEmpty)
               _InfoTile(child: Text(widget.strings.noResultsText))
@@ -619,11 +827,14 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
                       for (final indexed in _suggestions.indexed)
                         _buildSuggestionTile(context, indexed.$2, indexed.$1),
                       if (widget.showPoweredByGoogle)
-                        const Padding(
-                          padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                           child: Align(
                             alignment: AlignmentDirectional.centerEnd,
-                            child: _PoweredByGoogleAttribution(),
+                            child: _PoweredByGoogleAttribution(
+                              semanticLabel:
+                                  widget.strings.poweredByGoogleLabel,
+                            ),
                           ),
                         ),
                     ],
@@ -791,7 +1002,9 @@ class _InfoTile extends StatelessWidget {
 }
 
 class _PoweredByGoogleAttribution extends StatelessWidget {
-  const _PoweredByGoogleAttribution();
+  const _PoweredByGoogleAttribution({required this.semanticLabel});
+
+  final String semanticLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -803,7 +1016,7 @@ class _PoweredByGoogleAttribution extends StatelessWidget {
       assetName,
       package: 'google_places_sdk_flutter',
       height: 18,
-      semanticLabel: const PlacesStrings().poweredByGoogleLabel,
+      semanticLabel: semanticLabel,
     );
   }
 }

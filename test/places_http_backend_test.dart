@@ -6,12 +6,305 @@ import 'package:google_places_sdk_flutter/src/internal/places_http_backend.dart'
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+class _CloseTrackingClient extends http.BaseClient {
+  _CloseTrackingClient(this.delegate);
+
+  final http.Client delegate;
+  bool closed = false;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) =>
+      delegate.send(request);
+
+  @override
+  void close() {
+    closed = true;
+    delegate.close();
+  }
+}
+
+class _AbortTrackingClient extends http.BaseClient {
+  bool sawAbortableRequest = false;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    sawAbortableRequest = request is http.AbortableRequest;
+    final trigger = (request as http.AbortableRequest).abortTrigger!;
+    await trigger;
+    throw http.RequestAbortedException(request.url);
+  }
+}
+
 void main() {
+  test('caller cancellation aborts the underlying HTTP request', () async {
+    final httpClient = _AbortTrackingClient();
+    final backend = PlacesHttpBackend(
+      apiKey: 'api-key',
+      httpClient: httpClient,
+    );
+    final cancellationToken = PlacesCancellationToken();
+
+    final operation = backend.autocomplete(
+      const AutocompleteRequest(input: 'coffee'),
+      cancellationToken: cancellationToken,
+    );
+    await Future<void>.delayed(Duration.zero);
+    cancellationToken.cancel();
+
+    await expectLater(
+      operation,
+      throwsA(
+        isA<PlacesException>()
+            .having((error) => error.kind, 'kind', PlacesErrorKind.cancellation)
+            .having((error) => error.code, 'code', 'request_cancelled'),
+      ),
+    );
+    expect(httpClient.sawAbortableRequest, isTrue);
+  });
+
+  test('adds direct Android application restriction headers', () async {
+    late http.Request sentRequest;
+    final backend = PlacesHttpBackend(
+      apiKey: 'api-key',
+      options: const PlacesClientOptions(
+        applicationIdentity: PlacesApplicationIdentity.android(
+          'com.example.places',
+          'BB:0D:AC:74:D3:21:E1:43:67:71:9B:62:91:AF:A1:66:6E:44:5D:75',
+        ),
+      ),
+      httpClient: MockClient((request) async {
+        sentRequest = request;
+        return http.Response('{"places": []}', 200);
+      }),
+    );
+
+    await backend.searchText(const TextSearchRequest(textQuery: 'coffee'));
+
+    expect(sentRequest.headers['X-Goog-Api-Key'], 'api-key');
+    expect(sentRequest.headers['X-Android-Package'], 'com.example.places');
+    expect(
+      sentRequest.headers['X-Android-Cert'],
+      'BB:0D:AC:74:D3:21:E1:43:67:71:9B:62:91:AF:A1:66:6E:44:5D:75',
+    );
+  });
+
+  test('authenticated proxy requests never forward a Google key', () async {
+    final sentRequests = <http.Request>[];
+    var authenticationCalls = 0;
+    PlacesProxyRequest? authenticationRequest;
+    final backend = PlacesHttpBackend(
+      apiKey: 'must-not-be-forwarded',
+      proxyConfiguration: PlacesProxyConfiguration(
+        placesEndpoint: Uri.parse('https://proxy.example.test/maps/places/v1'),
+        authentication: (request) {
+          authenticationRequest = request;
+          authenticationCalls++;
+          return <String, String>{
+            'Authorization': 'Bearer app-token-$authenticationCalls',
+          };
+        },
+      ),
+      httpClient: MockClient((request) async {
+        sentRequests.add(request);
+        return http.Response('{"places": []}', 200);
+      }),
+    );
+
+    await backend.searchText(const TextSearchRequest(textQuery: 'coffee'));
+    await backend.searchText(const TextSearchRequest(textQuery: 'bakery'));
+
+    expect(
+      sentRequests.first.url.toString(),
+      'https://proxy.example.test/maps/places/v1/places:searchText',
+    );
+    for (final request in sentRequests) {
+      expect(request.url.queryParameters, isNot(contains('key')));
+      expect(request.headers, isNot(contains('X-Goog-Api-Key')));
+    }
+    expect(sentRequests.first.headers['Authorization'], 'Bearer app-token-1');
+    expect(sentRequests.last.headers['Authorization'], 'Bearer app-token-2');
+    expect(authenticationCalls, 2);
+    expect(authenticationRequest!.method, 'POST');
+    expect(authenticationRequest!.operation, PlacesOperation.textSearch);
+  });
+
+  test('keyless proxy photo and Time Zone requests omit Google keys', () async {
+    final requests = <http.Request>[];
+    final backend = PlacesHttpBackend(
+      apiKey: '',
+      proxyConfiguration: PlacesProxyConfiguration(
+        placesEndpoint: Uri.parse('https://proxy.example.test/places/v1'),
+        timeZoneEndpoint: Uri.parse('https://proxy.example.test/timezone'),
+        authentication: (_) => <String, String>{'X-App-Token': 'token'},
+      ),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.url.path == '/timezone') {
+          return http.Response(
+            '{"status":"OK","timeZoneId":"Etc/UTC",'
+            '"timeZoneName":"UTC","rawOffset":0,"dstOffset":0}',
+            200,
+          );
+        }
+        return http.Response(
+          '{"name":"places/p/photos/x/media",'
+          '"photoUri":"https://example.test/photo"}',
+          200,
+        );
+      }),
+    );
+
+    await backend.fetchPhotoMedia(
+      const PhotoMediaRequest(name: 'places/p/photos/x', maxWidthPx: 100),
+    );
+    await backend.fetchTimeZone(
+      const TimeZoneRequest(
+        location: PlaceCoordinates(latitude: 1, longitude: 2),
+      ),
+    );
+
+    expect(requests, hasLength(2));
+    for (final request in requests) {
+      expect(request.url.queryParameters, isNot(contains('key')));
+      expect(request.headers, isNot(contains('X-Goog-Api-Key')));
+      expect(request.headers['X-App-Token'], 'token');
+    }
+    expect(requests.last.url.path, '/timezone');
+  });
+
+  test('proxy authentication cannot override credential headers', () async {
+    final backend = PlacesHttpBackend(
+      apiKey: '',
+      proxyConfiguration: PlacesProxyConfiguration(
+        placesEndpoint: Uri.parse('https://proxy.example.test/v1'),
+        authentication: (_) => <String, String>{
+          'X-Goog-Api-Key': 'must-not-pass',
+        },
+      ),
+      httpClient: MockClient((request) async => http.Response('{}', 200)),
+    );
+
+    await expectLater(
+      backend.searchText(const TextSearchRequest(textQuery: 'coffee')),
+      throwsA(
+        isA<PlacesException>().having(
+          (error) => error.code,
+          'code',
+          'unsafe_proxy_authentication_header',
+        ),
+      ),
+    );
+  });
+
+  test(
+    'proxy authentication is bounded and redacts callback failures',
+    () async {
+      final timeoutBackend = PlacesHttpBackend(
+        apiKey: '',
+        proxyConfiguration: PlacesProxyConfiguration(
+          placesEndpoint: Uri.parse('https://proxy.example.test/v1'),
+          authentication: (_) async {
+            await Future<void>.delayed(const Duration(milliseconds: 30));
+            return <String, String>{};
+          },
+        ),
+        options: const PlacesClientOptions(
+          requestTimeout: Duration(milliseconds: 1),
+        ),
+        httpClient: MockClient((request) async => http.Response('{}', 200)),
+      );
+      await expectLater(
+        timeoutBackend.searchText(const TextSearchRequest(textQuery: 'coffee')),
+        throwsA(
+          isA<PlacesException>().having(
+            (error) => error.kind,
+            'kind',
+            PlacesErrorKind.timeout,
+          ),
+        ),
+      );
+
+      final failingBackend = PlacesHttpBackend(
+        apiKey: '',
+        proxyConfiguration: PlacesProxyConfiguration(
+          placesEndpoint: Uri.parse('https://proxy.example.test/v1'),
+          authentication: (_) => throw StateError('secret callback detail'),
+        ),
+        httpClient: MockClient((request) async => http.Response('{}', 200)),
+      );
+      await expectLater(
+        failingBackend.searchText(const TextSearchRequest(textQuery: 'coffee')),
+        throwsA(
+          isA<PlacesException>()
+              .having((error) => error.kind, 'kind', PlacesErrorKind.proxy)
+              .having(
+                (error) => error.toString(),
+                'diagnostic',
+                isNot(contains('secret callback detail')),
+              ),
+        ),
+      );
+    },
+  );
+
+  test('legacy proxy URL no longer receives the Google key', () async {
+    late http.Request sentRequest;
+    final backend = PlacesHttpBackend(
+      apiKey: 'must-not-be-forwarded',
+      proxyBaseUrl: 'https://proxy.example.test/v1',
+      httpClient: MockClient((request) async {
+        sentRequest = request;
+        return http.Response('{"places": []}', 200);
+      }),
+    );
+
+    await backend.searchText(const TextSearchRequest(textQuery: 'coffee'));
+
+    expect(sentRequest.headers, isNot(contains('X-Goog-Api-Key')));
+    expect(sentRequest.url.queryParameters, isNot(contains('key')));
+  });
+
+  test('keyless proxy requires an explicit Time Zone endpoint', () async {
+    final backend = PlacesHttpBackend(
+      apiKey: '',
+      proxyConfiguration: PlacesProxyConfiguration(
+        placesEndpoint: Uri.parse('https://proxy.example.test/v1'),
+      ),
+      httpClient: MockClient((request) async => http.Response('{}', 200)),
+    );
+
+    await expectLater(
+      backend.fetchTimeZone(
+        const TimeZoneRequest(
+          location: PlaceCoordinates(latitude: 1, longitude: 2),
+        ),
+      ),
+      throwsA(
+        isA<PlacesException>().having(
+          (error) => error.code,
+          'code',
+          'missing_proxy_time_zone_endpoint',
+        ),
+      ),
+    );
+  });
+
   test('autocompleteSuggestions parses place and query predictions', () async {
     final backend = PlacesHttpBackend(
       apiKey: 'api-key',
       httpClient: MockClient((request) async {
         expect(request.url.path, '/v1/places:autocomplete');
+        expect(
+          request.headers['X-Goog-FieldMask'],
+          'suggestions.placePrediction.place,'
+          'suggestions.placePrediction.placeId,'
+          'suggestions.placePrediction.text,'
+          'suggestions.placePrediction.structuredFormat.mainText,'
+          'suggestions.placePrediction.structuredFormat.secondaryText,'
+          'suggestions.placePrediction.distanceMeters,'
+          'suggestions.placePrediction.types,'
+          'suggestions.queryPrediction.text',
+        );
         final body = jsonDecode(request.body) as Map<String, Object?>;
         expect(body['includeQueryPredictions'], isTrue);
         return http.Response(
@@ -51,6 +344,10 @@ void main() {
       final backend = PlacesHttpBackend(
         apiKey: 'api-key',
         httpClient: MockClient((request) async {
+          expect(
+            request.headers['X-Goog-FieldMask'],
+            isNot(contains('queryPrediction')),
+          );
           return http.Response(
             jsonEncode(<String, Object?>{
               'suggestions': <Map<String, Object?>>[
@@ -74,10 +371,7 @@ void main() {
       );
 
       final suggestions = await backend.autocomplete(
-        const AutocompleteRequest(
-          input: 'coffee',
-          includeQueryPredictions: true,
-        ),
+        const AutocompleteRequest(input: 'coffee'),
       );
 
       expect(suggestions, hasLength(1));
@@ -128,13 +422,181 @@ void main() {
       }),
     );
 
-    expect(
-      () => backend.fetchPhotoMedia(
+    await expectLater(
+      backend.fetchPhotoMedia(
         const PhotoMediaRequest(name: 'places/p/photos/x', maxWidthPx: 100),
       ),
-      throwsA(isA<PlacesException>()),
+      throwsA(
+        isA<PlacesException>()
+            .having((error) => error.kind, 'kind', PlacesErrorKind.googleApi)
+            .having((error) => error.statusCode, 'statusCode', 400)
+            .having(
+              (error) => error.operation,
+              'operation',
+              PlacesOperation.photoMedia,
+            ),
+      ),
     );
   });
+
+  test(
+    'normalizes malformed, empty, and non-object success responses',
+    () async {
+      for (final body in <String>['', '<html>bad gateway</html>', '[]']) {
+        final backend = PlacesHttpBackend(
+          apiKey: 'api-key',
+          httpClient: MockClient((request) async => http.Response(body, 200)),
+        );
+
+        await expectLater(
+          backend.searchText(const TextSearchRequest(textQuery: 'coffee')),
+          throwsA(
+            isA<PlacesException>()
+                .having(
+                  (error) => error.kind,
+                  'kind',
+                  PlacesErrorKind.googleApi,
+                )
+                .having(
+                  (error) => error.operation,
+                  'operation',
+                  PlacesOperation.textSearch,
+                ),
+          ),
+        );
+      }
+    },
+  );
+
+  test('classifies malformed proxy responses separately', () async {
+    final backend = PlacesHttpBackend(
+      apiKey: 'api-key',
+      proxyBaseUrl: 'https://proxy.example.test',
+      httpClient: MockClient(
+        (request) async => http.Response('<html>bad gateway</html>', 502),
+      ),
+    );
+
+    await expectLater(
+      backend.searchText(const TextSearchRequest(textQuery: 'coffee')),
+      throwsA(
+        isA<PlacesException>()
+            .having((error) => error.kind, 'kind', PlacesErrorKind.proxy)
+            .having((error) => error.code, 'code', 'malformed_json'),
+      ),
+    );
+  });
+
+  test('normalizes network failures and request timeouts', () async {
+    final networkBackend = PlacesHttpBackend(
+      apiKey: 'api-key',
+      httpClient: MockClient((request) async {
+        throw http.ClientException('private transport details');
+      }),
+    );
+    await expectLater(
+      networkBackend.searchText(const TextSearchRequest(textQuery: 'coffee')),
+      throwsA(
+        isA<PlacesException>()
+            .having((error) => error.kind, 'kind', PlacesErrorKind.network)
+            .having((error) => error.retryable, 'retryable', isTrue),
+      ),
+    );
+
+    final timeoutBackend = PlacesHttpBackend(
+      apiKey: 'api-key',
+      options: const PlacesClientOptions(
+        requestTimeout: Duration(milliseconds: 1),
+      ),
+      httpClient: MockClient((request) async {
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        return http.Response('{}', 200);
+      }),
+    );
+    await expectLater(
+      timeoutBackend.searchText(const TextSearchRequest(textQuery: 'coffee')),
+      throwsA(
+        isA<PlacesException>()
+            .having((error) => error.kind, 'kind', PlacesErrorKind.timeout)
+            .having((error) => error.retryable, 'retryable', isTrue),
+      ),
+    );
+  });
+
+  test('reports missing keys and invalid timeout configuration', () async {
+    final missingKeyBackend = PlacesHttpBackend(
+      apiKey: '',
+      httpClient: MockClient((request) async => http.Response('{}', 200)),
+    );
+    await expectLater(
+      missingKeyBackend.searchText(
+        const TextSearchRequest(textQuery: 'coffee'),
+      ),
+      throwsA(
+        isA<PlacesException>()
+            .having(
+              (error) => error.kind,
+              'kind',
+              PlacesErrorKind.configuration,
+            )
+            .having(
+              (error) => error.operation,
+              'operation',
+              PlacesOperation.textSearch,
+            ),
+      ),
+    );
+
+    final invalidTimeoutBackend = PlacesHttpBackend(
+      apiKey: 'api-key',
+      options: const PlacesClientOptions(requestTimeout: Duration.zero),
+      httpClient: MockClient((request) async => http.Response('{}', 200)),
+    );
+    await expectLater(
+      invalidTimeoutBackend.searchText(
+        const TextSearchRequest(textQuery: 'coffee'),
+      ),
+      throwsA(
+        isA<PlacesException>()
+            .having(
+              (error) => error.kind,
+              'kind',
+              PlacesErrorKind.configuration,
+            )
+            .having((error) => error.code, 'code', 'invalid_request_timeout'),
+      ),
+    );
+  });
+
+  test(
+    'closes injected HTTP clients only when ownership is transferred',
+    () async {
+      final callerOwned = _CloseTrackingClient(
+        MockClient((request) async => http.Response('{}', 200)),
+      );
+      final packageOwned = _CloseTrackingClient(
+        MockClient((request) async => http.Response('{}', 200)),
+      );
+      final callerOwnedBackend = PlacesHttpBackend(
+        apiKey: 'api-key',
+        httpClient: callerOwned,
+      );
+      final packageOwnedBackend = PlacesHttpBackend(
+        apiKey: 'api-key',
+        options: const PlacesClientOptions(
+          httpClientOwnership: PlacesHttpClientOwnership.placesClient,
+        ),
+        httpClient: packageOwned,
+      );
+
+      await callerOwnedBackend.close();
+      await packageOwnedBackend.close();
+
+      expect(callerOwned.closed, isFalse);
+      expect(packageOwned.closed, isTrue);
+      callerOwned.close();
+    },
+  );
 
   test('fetchTimeZone builds the expected Google Time Zone request', () async {
     late Uri requestUri;
@@ -200,5 +662,73 @@ void main() {
       ),
       throwsA(isA<PlacesException>()),
     );
+  });
+
+  test(
+    'searchTextPage preserves pagination metadata and request fields',
+    () async {
+      final backend = PlacesHttpBackend(
+        apiKey: 'api-key',
+        httpClient: MockClient((request) async {
+          expect(request.url.path, '/v1/places:searchText');
+          expect(
+            request.headers['X-Goog-FieldMask'],
+            contains('nextPageToken,searchUri'),
+          );
+          final body = jsonDecode(request.body) as Map<String, Object?>;
+          expect(body['pageSize'], 5);
+          expect(body['pageToken'], 'page-2');
+          expect(body['includeFutureOpeningBusinesses'], isTrue);
+          expect(body['priceLevels'], <String>['PRICE_LEVEL_MODERATE']);
+          return http.Response(
+            jsonEncode(<String, Object?>{
+              'places': <Map<String, Object?>>[
+                <String, Object?>{'id': 'place-1'},
+              ],
+              'nextPageToken': 'page-3',
+              'searchUri': 'https://www.google.com/maps/search/coffee',
+            }),
+            200,
+          );
+        }),
+      );
+
+      final page = await backend.searchTextPage(
+        const TextSearchRequest(
+          textQuery: 'coffee',
+          pageSize: 5,
+          pageToken: 'page-2',
+          priceLevels: <PlacePriceLevel>[PlacePriceLevel.moderate],
+          includeFutureOpeningBusinesses: true,
+        ),
+      );
+
+      expect(page.results.single.id, 'place-1');
+      expect(page.nextPageToken, 'page-3');
+      expect(page.searchUri, contains('/maps/search/coffee'));
+    },
+  );
+
+  test('searchText remains a result-list convenience', () async {
+    final backend = PlacesHttpBackend(
+      apiKey: 'api-key',
+      httpClient: MockClient((request) async {
+        return http.Response(
+          jsonEncode(<String, Object?>{
+            'places': <Map<String, Object?>>[
+              <String, Object?>{'id': 'place-1'},
+            ],
+            'nextPageToken': 'ignored-by-convenience',
+          }),
+          200,
+        );
+      }),
+    );
+
+    final results = await backend.searchText(
+      const TextSearchRequest(textQuery: 'coffee'),
+    );
+
+    expect(results.single.id, 'place-1');
   });
 }

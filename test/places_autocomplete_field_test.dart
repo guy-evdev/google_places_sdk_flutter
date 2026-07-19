@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,10 +8,16 @@ import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
 import 'package:google_places_sdk_flutter/src/internal/backend.dart';
 
 class _FakeBackend implements PlacesBackend {
+  final List<AutocompleteSessionToken> endedSessions =
+      <AutocompleteSessionToken>[];
+  AutocompleteRequest? lastAutocompleteRequest;
+
   @override
   Future<List<PlaceSuggestion>> autocomplete(
-    AutocompleteRequest request,
-  ) async {
+    AutocompleteRequest request, {
+    PlacesCancellationToken? cancellationToken,
+  }) async {
+    lastAutocompleteRequest = request;
     return <PlaceSuggestion>[
       PlaceSuggestion(
         placeId: 'place-1',
@@ -32,8 +39,9 @@ class _FakeBackend implements PlacesBackend {
 
   @override
   Future<List<AutocompleteSuggestion>> autocompleteSuggestions(
-    AutocompleteRequest request,
-  ) async {
+    AutocompleteRequest request, {
+    PlacesCancellationToken? cancellationToken,
+  }) async {
     final places = await autocomplete(request);
     return <AutocompleteSuggestion>[
       places.first,
@@ -51,7 +59,15 @@ class _FakeBackend implements PlacesBackend {
   Future<void> close() async {}
 
   @override
-  Future<PlaceData> fetchPlace(PlaceDetailsRequest request) async {
+  Future<void> endAutocompleteSession(AutocompleteSessionToken token) async {
+    endedSessions.add(token);
+  }
+
+  @override
+  Future<PlaceData> fetchPlace(
+    PlaceDetailsRequest request, {
+    PlacesCancellationToken? cancellationToken,
+  }) async {
     return const PlaceData(
       id: 'place-1',
       displayName: LocalizedText(text: 'Coffee Lab'),
@@ -61,14 +77,19 @@ class _FakeBackend implements PlacesBackend {
   }
 
   @override
-  Future<PlacePhotoMedia> fetchPhotoMedia(PhotoMediaRequest request) async =>
-      const PlacePhotoMedia(
-        name: 'places/place-1/photos/photo-1/media',
-        photoUri: 'https://example.com/photo.jpg',
-      );
+  Future<PlacePhotoMedia> fetchPhotoMedia(
+    PhotoMediaRequest request, {
+    PlacesCancellationToken? cancellationToken,
+  }) async => const PlacePhotoMedia(
+    name: 'places/place-1/photos/photo-1/media',
+    photoUri: 'https://example.com/photo.jpg',
+  );
 
   @override
-  Future<PlaceTimeZoneData> fetchTimeZone(TimeZoneRequest request) async {
+  Future<PlaceTimeZoneData> fetchTimeZone(
+    TimeZoneRequest request, {
+    PlacesCancellationToken? cancellationToken,
+  }) async {
     return PlaceTimeZoneData(
       dstOffset: const Duration(hours: 1),
       rawOffset: const Duration(hours: -5),
@@ -86,12 +107,22 @@ class _FakeBackend implements PlacesBackend {
   }
 
   @override
-  Future<List<PlaceData>> searchNearby(NearbySearchRequest request) async =>
-      const <PlaceData>[];
+  Future<List<PlaceData>> searchNearby(
+    NearbySearchRequest request, {
+    PlacesCancellationToken? cancellationToken,
+  }) async => const <PlaceData>[];
 
   @override
-  Future<List<PlaceData>> searchText(TextSearchRequest request) async =>
-      const <PlaceData>[];
+  Future<List<PlaceData>> searchText(
+    TextSearchRequest request, {
+    PlacesCancellationToken? cancellationToken,
+  }) async => const <PlaceData>[];
+
+  @override
+  Future<TextSearchPage> searchTextPage(
+    TextSearchRequest request, {
+    PlacesCancellationToken? cancellationToken,
+  }) async => TextSearchPage(results: const <PlaceData>[]);
 }
 
 class _RecordingNavigatorObserver extends NavigatorObserver {
@@ -116,9 +147,69 @@ class _SlowDetailsBackend extends _FakeBackend {
   int fetchPlaceCount = 0;
 
   @override
-  Future<PlaceData> fetchPlace(PlaceDetailsRequest request) {
+  Future<PlaceData> fetchPlace(
+    PlaceDetailsRequest request, {
+    PlacesCancellationToken? cancellationToken,
+  }) {
     fetchPlaceCount++;
     return completer.future;
+  }
+}
+
+class _SlowTimeZoneBackend extends _FakeBackend {
+  final Completer<PlaceTimeZoneData> completer = Completer<PlaceTimeZoneData>();
+  int fetchTimeZoneCount = 0;
+
+  @override
+  Future<PlaceTimeZoneData> fetchTimeZone(
+    TimeZoneRequest request, {
+    PlacesCancellationToken? cancellationToken,
+  }) {
+    fetchTimeZoneCount++;
+    return completer.future;
+  }
+}
+
+class _SlowAutocompleteBackend extends _FakeBackend {
+  final Completer<List<PlaceSuggestion>> completer =
+      Completer<List<PlaceSuggestion>>();
+  int autocompleteCount = 0;
+
+  @override
+  Future<List<PlaceSuggestion>> autocomplete(
+    AutocompleteRequest request, {
+    PlacesCancellationToken? cancellationToken,
+  }) {
+    autocompleteCount++;
+    return completer.future;
+  }
+}
+
+class _RetryBackend extends _FakeBackend {
+  int attempts = 0;
+  final Completer<List<PlaceSuggestion>> firstAttempt =
+      Completer<List<PlaceSuggestion>>();
+
+  void failFirstAttempt() {
+    firstAttempt.completeError(
+      const PlacesException(
+        'Temporary failure.',
+        kind: PlacesErrorKind.network,
+        retryable: true,
+      ),
+    );
+  }
+
+  @override
+  Future<List<PlaceSuggestion>> autocomplete(
+    AutocompleteRequest request, {
+    PlacesCancellationToken? cancellationToken,
+  }) {
+    attempts++;
+    if (attempts == 1) {
+      return firstAttempt.future;
+    }
+    return super.autocomplete(request, cancellationToken: cancellationToken);
   }
 }
 
@@ -150,13 +241,37 @@ void main() {
     expect(find.text('Main Street'), findsWidgets);
   });
 
+  testWidgets('sends the current Unicode cursor offset', (tester) async {
+    final backend = _FakeBackend();
+    final client = PlacesClient.testing(apiKey: 'test', backend: backend);
+    final controller = PlacesAutocompleteController();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlacesAutocompleteField(client: client, controller: controller),
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), '😀 cafe');
+    controller.textController.selection = const TextSelection.collapsed(
+      offset: 2,
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    expect(backend.lastAutocompleteRequest, isNotNull);
+    expect(backend.lastAutocompleteRequest!.inputOffset, 1);
+  });
+
   testWidgets('emits a unified selection with resolved place data', (
     tester,
   ) async {
-    final client = PlacesClient.testing(
-      apiKey: 'test',
-      backend: _FakeBackend(),
-    );
+    final backend = _FakeBackend();
+    final client = PlacesClient.testing(apiKey: 'test', backend: backend);
+    final controller = PlacesAutocompleteController();
+    final sessionToken = controller.sessionToken;
     PlaceSelection? selection;
 
     await tester.pumpWidget(
@@ -164,6 +279,7 @@ void main() {
         home: Scaffold(
           body: PlacesAutocompleteField(
             client: client,
+            controller: controller,
             fetchPlaceDetailsOnSelection: true,
             selectionFields: PlaceFieldPresets.rich,
             onSelection: (value) {
@@ -184,12 +300,18 @@ void main() {
 
     expect(selection, isNotNull);
     expect(selection!.suggestion.placeId, 'place-1');
+    expect(selection!.sessionToken, sessionToken);
     expect(selection!.place, isNotNull);
     expect(selection!.place!.formattedAddress, 'Main Street');
     expect(find.byType(ListTile), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.text(const PlacesStrings().noResultsText), findsNothing);
     expect(find.text('Main Street'), findsNothing);
+    expect(
+      backend.endedSessions.map((token) => token.value),
+      contains(sessionToken.value),
+    );
+    expect(controller.sessionToken.value, isNot(sessionToken.value));
   });
 
   testWidgets('can enrich the selection with time-zone data', (tester) async {
@@ -429,10 +551,10 @@ void main() {
   });
 
   testWidgets('Enter selects the highlighted suggestion', (tester) async {
-    final client = PlacesClient.testing(
-      apiKey: 'test',
-      backend: _FakeBackend(),
-    );
+    final backend = _FakeBackend();
+    final client = PlacesClient.testing(apiKey: 'test', backend: backend);
+    final controller = PlacesAutocompleteController();
+    final sessionToken = controller.sessionToken;
     PlaceSelection? selection;
 
     await tester.pumpWidget(
@@ -440,6 +562,7 @@ void main() {
         home: Scaffold(
           body: PlacesAutocompleteField(
             client: client,
+            controller: controller,
             onSelection: (value) {
               selection = value;
             },
@@ -457,6 +580,208 @@ void main() {
 
     expect(selection, isNotNull);
     expect(selection!.placeId, 'place-1');
+    expect(selection!.sessionToken, sessionToken);
+    expect(
+      backend.endedSessions.map((token) => token.value),
+      contains(sessionToken.value),
+    );
+  });
+
+  testWidgets('external session reset ends the prior backend session', (
+    tester,
+  ) async {
+    final backend = _FakeBackend();
+    final client = PlacesClient.testing(apiKey: 'test', backend: backend);
+    final controller = PlacesAutocompleteController();
+    final initialToken = controller.sessionToken;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlacesAutocompleteField(client: client, controller: controller),
+        ),
+      ),
+    );
+
+    controller.resetSession();
+    await tester.pump();
+
+    expect(
+      backend.endedSessions.map((token) => token.value),
+      contains(initialToken.value),
+    );
+  });
+
+  testWidgets('disposal invalidates an in-flight details selection', (
+    tester,
+  ) async {
+    final backend = _SlowDetailsBackend();
+    final client = PlacesClient.testing(apiKey: 'test', backend: backend);
+    final controller = PlacesAutocompleteController();
+    final sessionToken = controller.sessionToken;
+    var selectionCount = 0;
+    var errorCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlacesAutocompleteField(
+            client: client,
+            controller: controller,
+            fetchPlaceDetailsOnSelection: true,
+            onSelection: (_) => selectionCount++,
+            onError: (_) => errorCount++,
+          ),
+        ),
+      ),
+    );
+    await tester.enterText(find.byType(TextField), 'cof');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Coffee Lab'));
+    await tester.pump();
+    expect(backend.fetchPlaceCount, 1);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    backend.completer.complete(const PlaceData(id: 'place-1'));
+    await tester.pump();
+
+    expect(selectionCount, 0);
+    expect(errorCount, 0);
+    expect(
+      backend.endedSessions.map((token) => token.value),
+      contains(sessionToken.value),
+    );
+  });
+
+  testWidgets('disposal invalidates an in-flight time-zone selection', (
+    tester,
+  ) async {
+    final backend = _SlowTimeZoneBackend();
+    final client = PlacesClient.testing(apiKey: 'test', backend: backend);
+    var selectionCount = 0;
+    var errorCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlacesAutocompleteField(
+            client: client,
+            fetchTimeZoneOnSelection: true,
+            onSelection: (_) => selectionCount++,
+            onError: (_) => errorCount++,
+          ),
+        ),
+      ),
+    );
+    await tester.enterText(find.byType(TextField), 'cof');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Coffee Lab'));
+    await tester.pump();
+    expect(backend.fetchTimeZoneCount, 1);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    backend.completer.complete(
+      PlaceTimeZoneData(
+        dstOffset: Duration.zero,
+        rawOffset: Duration.zero,
+        timeZoneId: 'UTC',
+        timeZoneName: 'Coordinated Universal Time',
+        timestamp: DateTime.utc(2026, 7, 19),
+      ),
+    );
+    await tester.pump();
+
+    expect(selectionCount, 0);
+    expect(errorCount, 0);
+  });
+
+  testWidgets('replacing the client invalidates an in-flight selection', (
+    tester,
+  ) async {
+    final firstBackend = _SlowDetailsBackend();
+    final firstClient = PlacesClient.testing(
+      apiKey: 'first',
+      backend: firstBackend,
+    );
+    final secondClient = PlacesClient.testing(
+      apiKey: 'second',
+      backend: _FakeBackend(),
+    );
+    var selectionCount = 0;
+
+    Widget buildField(PlacesClient client) {
+      return MaterialApp(
+        home: Scaffold(
+          body: PlacesAutocompleteField(
+            key: const ValueKey<String>('field'),
+            client: client,
+            fetchPlaceDetailsOnSelection: true,
+            onSelection: (_) => selectionCount++,
+          ),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(buildField(firstClient));
+    await tester.enterText(find.byType(TextField), 'cof');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Coffee Lab'));
+    await tester.pump();
+    expect(firstBackend.fetchPlaceCount, 1);
+
+    await tester.pumpWidget(buildField(secondClient));
+    firstBackend.completer.complete(const PlaceData(id: 'place-1'));
+    await tester.pump();
+
+    expect(selectionCount, 0);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+  });
+
+  testWidgets('replacing the client rejects stale autocomplete results', (
+    tester,
+  ) async {
+    final firstBackend = _SlowAutocompleteBackend();
+    final firstClient = PlacesClient.testing(
+      apiKey: 'first',
+      backend: firstBackend,
+    );
+    final secondClient = PlacesClient.testing(
+      apiKey: 'second',
+      backend: _FakeBackend(),
+    );
+
+    Widget buildField(PlacesClient client) {
+      return MaterialApp(
+        home: Scaffold(
+          body: PlacesAutocompleteField(
+            key: const ValueKey<String>('field'),
+            client: client,
+          ),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(buildField(firstClient));
+    await tester.enterText(find.byType(TextField), 'cof');
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(firstBackend.autocompleteCount, 1);
+
+    await tester.pumpWidget(buildField(secondClient));
+    firstBackend.completer.complete(<PlaceSuggestion>[
+      const PlaceSuggestion(
+        placeId: 'stale-place',
+        placeResourceName: 'places/stale-place',
+        fullText: StructuredText(text: 'Stale result'),
+        primaryText: StructuredText(text: 'Stale result'),
+        secondaryText: StructuredText(text: 'Old client'),
+      ),
+    ]);
+    await tester.pump();
+
+    expect(find.text('Stale result'), findsNothing);
   });
 
   testWidgets(
@@ -649,5 +974,209 @@ void main() {
 
     expect(find.byType(ListTile), findsNWidgets(5));
     expect(find.text('Coffee Lab 6'), findsNothing);
+  });
+
+  testWidgets('form reset restores initial selection and calls onReset', (
+    tester,
+  ) async {
+    final formKey = GlobalKey<FormState>();
+    final controller = PlacesAutocompleteController();
+    var resetCount = 0;
+    final selection = PlaceSelection(
+      suggestion: const PlaceSuggestion(
+        placeId: 'initial-place',
+        placeResourceName: 'places/initial-place',
+        fullText: StructuredText(text: 'Initial Place'),
+        primaryText: StructuredText(text: 'Initial Place'),
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Form(
+            key: formKey,
+            child: PlacesAutocompleteFormField(
+              client: PlacesClient.testing(
+                apiKey: 'test',
+                backend: _FakeBackend(),
+              ),
+              controller: controller,
+              initialValue: selection,
+              onReset: () => resetCount++,
+            ),
+          ),
+        ),
+      ),
+    );
+    // External controllers are synchronized after the current build so a
+    // shared controller cannot notify another field while widgets mount.
+    await tester.pump();
+
+    expect(controller.textController.text, 'Initial Place');
+    await tester.tap(find.byTooltip('Clear search'));
+    await tester.pump();
+    expect(controller.textController.text, isEmpty);
+
+    formKey.currentState!.reset();
+    await tester.pump();
+
+    expect(controller.textController.text, 'Initial Place');
+    expect(controller.selectedSelection, same(selection));
+    expect(resetCount, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+    controller.dispose();
+  });
+
+  testWidgets(
+    'switching a shared controller from field to form is build-safe',
+    (tester) async {
+      final controller = PlacesAutocompleteController(initialText: 'draft');
+      final client = PlacesClient.testing(
+        apiKey: 'test',
+        backend: _FakeBackend(),
+      );
+      var showForm = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StatefulBuilder(
+            builder: (context, setState) => Scaffold(
+              body: ListView(
+                children: <Widget>[
+                  TextButton(
+                    onPressed: () => setState(() => showForm = true),
+                    child: const Text('Show form'),
+                  ),
+                  if (!showForm) ...<Widget>[
+                    const Text('Regular field'),
+                    const SizedBox(height: 8),
+                    PlacesAutocompleteField(
+                      client: client,
+                      controller: controller,
+                    ),
+                  ],
+                  if (showForm) ...<Widget>[
+                    const Text('Form field'),
+                    PlacesAutocompleteFormField(
+                      client: client,
+                      controller: controller,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show form'));
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(PlacesAutocompleteFormField), findsOneWidget);
+      expect(controller.textController.text, isEmpty);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      controller.dispose();
+      await client.close();
+    },
+  );
+
+  testWidgets('form exposes forceErrorText, errorBuilder, and enabled', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlacesAutocompleteFormField(
+            client: PlacesClient.testing(
+              apiKey: 'test',
+              backend: _FakeBackend(),
+            ),
+            enabled: false,
+            forceErrorText: 'required place',
+            errorBuilder: (context, errorText) => Text('custom: $errorText'),
+            restorationId: 'place-field',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('custom: required place'), findsOneWidget);
+    expect(tester.widget<TextField>(find.byType(TextField)).enabled, isFalse);
+  });
+
+  testWidgets(
+    'error state exposes a localized retry action',
+    (tester) async {
+      final backend = _RetryBackend();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PlacesAutocompleteField(
+              client: PlacesClient.testing(apiKey: 'test', backend: backend),
+              strings: const PlacesStrings(retryText: 'Try again'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.enterText(find.byType(TextField), 'coffee');
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump();
+      expect(backend.attempts, 1);
+      backend.failFirstAttempt();
+      await tester.pump();
+      expect(find.text('Try again'), findsOneWidget);
+
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+
+      expect(backend.attempts, 2);
+      expect(find.text('Coffee Lab'), findsOneWidget);
+    },
+    // Synthetic Future errors are reported as uncaught by the browser test
+    // harness before the widget consumes them. The real Chrome UI path is
+    // covered by the remaining field tests; retry behavior is covered on VM.
+    skip: kIsWeb,
+  );
+
+  testWidgets('dialog and Google attribution use localized semantics', (
+    tester,
+  ) async {
+    final client = PlacesClient.testing(
+      apiKey: 'test',
+      backend: _FakeBackend(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () => PlacesAutocompleteOverlay.show(
+              context,
+              client: client,
+              strings: const PlacesStrings(
+                closeLabel: 'Dismiss places',
+                poweredByGoogleLabel: 'Google attribution localized',
+              ),
+            ),
+            child: const Text('Open'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Dismiss places'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'coffee');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsLabel('Google attribution localized'),
+      findsOneWidget,
+    );
   });
 }

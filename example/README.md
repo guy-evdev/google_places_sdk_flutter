@@ -1,17 +1,63 @@
-# example
+# google_places_sdk_flutter example
 
-A new Flutter project.
+This app demonstrates inline, Form/reset, dialog, and fullscreen autocomplete;
+place and query suggestions; details and time-zone enrichment; localized RTL
+UI; and the paged Text Search and current stable Place resource fields added in
+package version `0.6.0`.
 
-## Getting Started
+Run it with a Google Maps Platform key:
 
-This project is a starting point for a Flutter application.
+```shell
+flutter run --dart-define=GOOGLE_MAPS_API_KEY=your-key
+```
 
-A few resources to get you started if this is your first Flutter project:
+Or run the keyless proxy path:
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+```shell
+flutter run \
+  --dart-define=PLACES_PROXY_URL=https://api.example.com/maps/places/v1 \
+  --dart-define=PLACES_PROXY_TIME_ZONE_URL=https://api.example.com/maps/timezone \
+  --dart-define=PLACES_PROXY_ACCESS_TOKEN=development-token
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+The static access token is only an example-app convenience. Production apps
+should obtain a short-lived user/app token at runtime. The proxy must verify it
+and add the Google credential server-side. See the package
+[security and transport guide](../doc/security_and_transports.md).
+
+## Using the demo
+
+The main page starts with a compact summary of the active options. Select
+**Configuration** to change the language, autocomplete widget, or Text Search
+mode. Apply commits the draft; Cancel or dismissing the sheet leaves the active
+demo unchanged.
+
+Enter any query in **Text Search** and press Search. Single-page mode uses
+`searchText()` and returns a simple list. Paged mode uses `searchTextPage()`,
+shows response metadata, and adds **Load more** while Google returns a
+`nextPageToken`. The configured page size is preserved for every page. Use the
+clear action inside the query field to remove both the query and its results.
+
+The advanced configuration section contains optional Place Details, Time Zone,
+query-prediction, and page-size controls. These are kept out of the main flow so
+the simplest widget and Text Search examples remain easy to follow. Paged Text
+Search uses the package's HTTP/proxy route on web; see the package
+[0.6.0 extended release notes](../doc/whats_new_0_6_0.md) for the transport
+note.
+
+Select **Form** to validate a required `PlaceSelection` and exercise
+`FormState.reset()` with an external `PlacesAutocompleteController`.
+
+The selection details card requests and displays typed opening dates, Google
+Maps links, price ranges, embedded Place time zones, attributions, and transit
+station data. These fields are opt-in so applications can keep their own field
+masks and billing payloads narrow.
+
+After a place is selected, the app also confirms that
+`PlaceSelection.sessionToken` was preserved. It intentionally does not display
+the token value. The package widgets manage selection and abandonment cleanup
+automatically.
+
+The client also demonstrates `PlacesClientOptions.requestTimeout`. Errors are
+rendered using the safe `PlacesException.kind`, `operation`, `code`, and
+`retryable` fields rather than raw request or credential data.

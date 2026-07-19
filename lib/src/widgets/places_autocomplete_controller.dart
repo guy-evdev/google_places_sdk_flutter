@@ -43,6 +43,15 @@ class PlacesAutocompleteController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Clears only the selected value while preserving the current input text.
+  void clearSelection() {
+    if (selectedSelection == null) {
+      return;
+    }
+    selectedSelection = null;
+    notifyListeners();
+  }
+
   /// Resets the autocomplete session token for a new search flow.
   void resetSession({bool notify = true}) {
     _sessionToken = AutocompleteSessionToken.generate();
@@ -60,6 +69,28 @@ class PlacesAutocompleteController extends ChangeNotifier {
         ..selection = TextSelection.collapsed(
           offset: selection.displayText.length,
         );
+    }
+    notifyListeners();
+  }
+
+  /// Restores [selection] without beginning a new user selection flow.
+  ///
+  /// Form wrappers use this to synchronize initial and reset values. Passing
+  /// `null` clears both the selected value and visible text.
+  void restoreSelection(PlaceSelection? selection) {
+    final text = selection?.displayText ?? '';
+    final selectionChanged = !identical(selectedSelection, selection);
+    final textChanged = textController.text != text;
+    if (!selectionChanged && !textChanged) {
+      return;
+    }
+
+    selectedSelection = selection;
+    if (textChanged) {
+      textController.value = TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
     }
     notifyListeners();
   }

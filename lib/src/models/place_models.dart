@@ -3,23 +3,122 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+/// Stable categories exposed by [PlacesException].
+enum PlacesErrorKind {
+  /// A request failed package-side validation before any operation was sent.
+  validation,
+
+  /// Client or transport configuration is invalid.
+  configuration,
+
+  /// The underlying network transport failed before receiving a response.
+  network,
+
+  /// The configured operation deadline elapsed.
+  timeout,
+
+  /// Work was explicitly cancelled by the caller or package lifecycle.
+  cancellation,
+
+  /// A non-success HTTP response did not contain a Google API error payload.
+  http,
+
+  /// Google returned a structured API error.
+  googleApi,
+
+  /// A configured proxy returned an invalid or proxy-specific response.
+  proxy,
+
+  /// Maps JavaScript loading or invocation failed.
+  javascript,
+
+  /// The failure could not be classified more specifically.
+  unknown,
+}
+
+/// Public operations that can be attached to a [PlacesException].
+enum PlacesOperation {
+  autocomplete,
+  placeDetails,
+  photoMedia,
+  timeZone,
+  textSearch,
+  nearbySearch,
+  clientInitialization,
+}
+
 @immutable
 /// Exception thrown for invalid requests or Places API failures.
 class PlacesException implements Exception {
   /// Creates an exception representing a request validation or API failure.
-  const PlacesException(this.message, {this.statusCode, this.details});
+  const PlacesException(
+    this.message, {
+    this.kind = PlacesErrorKind.unknown,
+    this.statusCode,
+    this.code,
+    this.retryable = false,
+    this.operation,
+    this.details,
+    this.metadata = const <String, Object?>{},
+  });
+
+  /// Creates a package-side validation error.
+  const PlacesException.validation(
+    this.message, {
+    this.operation,
+    this.code = 'invalid_request',
+    this.metadata = const <String, Object?>{},
+  }) : kind = PlacesErrorKind.validation,
+       statusCode = null,
+       retryable = false,
+       details = null;
+
+  /// Creates a client configuration error.
+  const PlacesException.configuration(
+    this.message, {
+    this.operation = PlacesOperation.clientInitialization,
+    this.code = 'invalid_configuration',
+    this.metadata = const <String, Object?>{},
+  }) : kind = PlacesErrorKind.configuration,
+       statusCode = null,
+       retryable = false,
+       details = null;
 
   /// Human-readable description of the failure.
   final String message;
 
+  /// Stable failure category suitable for programmatic handling.
+  final PlacesErrorKind kind;
+
   /// Optional HTTP status code when the error came from a network request.
   final int? statusCode;
 
+  /// Optional stable package or Google error code.
+  final String? code;
+
+  /// Whether retrying later may reasonably succeed.
+  final bool retryable;
+
+  /// Package operation that failed, when known.
+  final PlacesOperation? operation;
+
   /// Optional structured details returned by Google.
+  ///
+  /// This field is retained for source compatibility. Package-generated
+  /// exceptions keep it free of request credentials and session tokens.
   final Object? details;
 
+  /// Redacted structured context safe to include in diagnostics.
+  final Map<String, Object?> metadata;
+
   @override
-  String toString() => 'PlacesException($statusCode): $message';
+  String toString() {
+    final operationLabel = operation == null ? '' : ', ${operation!.name}';
+    final statusLabel = statusCode == null ? '' : ', HTTP $statusCode';
+    final codeLabel = code == null ? '' : ', $code';
+    return 'PlacesException(${kind.name}$operationLabel$statusLabel'
+        '$codeLabel): $message';
+  }
 }
 
 @immutable
@@ -51,8 +150,19 @@ class AutocompleteSessionToken {
   factory AutocompleteSessionToken.fromValue(String value) =>
       AutocompleteSessionToken._(value);
 
+  /// Validates Google's URL- and filename-safe token requirement.
+  void validate({PlacesOperation? operation}) {
+    if (value.isEmpty || !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(value)) {
+      throw PlacesException.validation(
+        'Autocomplete session tokens must be non-empty URL-safe strings.',
+        operation: operation,
+        code: 'invalid_session_token',
+      );
+    }
+  }
+
   @override
-  String toString() => value;
+  String toString() => 'AutocompleteSessionToken(<redacted>)';
 }
 
 @immutable
@@ -66,6 +176,24 @@ class PlaceCoordinates {
 
   /// Longitude in decimal degrees.
   final double longitude;
+
+  /// Validates the documented latitude and longitude ranges.
+  void validate({PlacesOperation? operation}) {
+    if (!latitude.isFinite || latitude < -90 || latitude > 90) {
+      throw PlacesException.validation(
+        'Latitude must be finite and between -90 and 90.',
+        operation: operation,
+        code: 'invalid_latitude',
+      );
+    }
+    if (!longitude.isFinite || longitude < -180 || longitude > 180) {
+      throw PlacesException.validation(
+        'Longitude must be finite and between -180 and 180.',
+        operation: operation,
+        code: 'invalid_longitude',
+      );
+    }
+  }
 
   /// Serializes coordinates using the Places HTTP API field names.
   Map<String, Object?> toJson() => <String, Object?>{
@@ -251,18 +379,25 @@ enum PlaceField {
   types('types'),
   primaryType('primaryType'),
   primaryTypeDisplayName('primaryTypeDisplayName'),
+  googleMapsTypeLabel('googleMapsTypeLabel'),
   businessStatus('businessStatus'),
+  openingDate('openingDate'),
   googleMapsUri('googleMapsUri'),
+  googleMapsLinks('googleMapsLinks'),
   websiteUri('websiteUri'),
   nationalPhoneNumber('nationalPhoneNumber'),
   internationalPhoneNumber('internationalPhoneNumber'),
   rating('rating'),
   userRatingCount('userRatingCount'),
   priceLevel('priceLevel'),
+  priceRange('priceRange'),
   plusCode('plusCode'),
+  attributions('attributions'),
   iconMaskBaseUri('iconMaskBaseUri'),
   iconBackgroundColor('iconBackgroundColor'),
   utcOffsetMinutes('utcOffsetMinutes'),
+  timeZone('timeZone'),
+  editorialSummary('editorialSummary'),
   currentOpeningHours('currentOpeningHours'),
   regularOpeningHours('regularOpeningHours'),
   currentSecondaryOpeningHours('currentSecondaryOpeningHours'),
@@ -270,21 +405,31 @@ enum PlaceField {
   photos('photos'),
   reviews('reviews'),
   addressComponents('addressComponents'),
+  containingPlaces('containingPlaces'),
+  subDestinations('subDestinations'),
   delivery('delivery'),
   dineIn('dineIn'),
   takeout('takeout'),
+  curbsidePickup('curbsidePickup'),
   reservable('reservable'),
   servesBreakfast('servesBreakfast'),
   servesLunch('servesLunch'),
   servesDinner('servesDinner'),
   servesBeer('servesBeer'),
   servesWine('servesWine'),
+  servesBrunch('servesBrunch'),
+  servesVegetarianFood('servesVegetarianFood'),
+  servesCocktails('servesCocktails'),
   servesDessert('servesDessert'),
   servesCoffee('servesCoffee'),
   outdoorSeating('outdoorSeating'),
+  liveMusic('liveMusic'),
+  menuForChildren('menuForChildren'),
+  allowsDogs('allowsDogs'),
   restroom('restroom'),
   goodForChildren('goodForChildren'),
   goodForGroups('goodForGroups'),
+  goodForWatchingSports('goodForWatchingSports'),
   paymentOptions('paymentOptions'),
   parkingOptions('parkingOptions'),
   accessibilityOptions('accessibilityOptions'),
@@ -292,6 +437,11 @@ enum PlaceField {
   evChargeOptions('evChargeOptions'),
   fuelOptions('fuelOptions'),
   generativeSummary('generativeSummary'),
+  reviewSummary('reviewSummary'),
+  evChargeAmenitySummary('evChargeAmenitySummary'),
+  neighborhoodSummary('neighborhoodSummary'),
+  consumerAlert('consumerAlert'),
+  transitStation('transitStation'),
   pureServiceAreaBusiness('pureServiceAreaBusiness'),
   movedPlace('movedPlace'),
   movedPlaceId('movedPlaceId');
@@ -382,6 +532,25 @@ enum SearchNearbyRankPreference {
   const SearchNearbyRankPreference(this.restName);
 
   /// Raw enum value expected by the Places nearby search API.
+  final String restName;
+}
+
+/// Price levels accepted by Places Text Search (New).
+///
+/// [free] is returned by Google for free places, but is not accepted as a Text
+/// Search filter. [unspecified] is included for forward-compatible response
+/// mapping and is likewise not a valid request filter.
+enum PlacePriceLevel {
+  unspecified('PRICE_LEVEL_UNSPECIFIED'),
+  free('PRICE_LEVEL_FREE'),
+  inexpensive('PRICE_LEVEL_INEXPENSIVE'),
+  moderate('PRICE_LEVEL_MODERATE'),
+  expensive('PRICE_LEVEL_EXPENSIVE'),
+  veryExpensive('PRICE_LEVEL_VERY_EXPENSIVE');
+
+  const PlacePriceLevel(this.restName);
+
+  /// Raw enum value expected by the Places HTTP API.
   final String restName;
 }
 
@@ -636,10 +805,21 @@ class PlaceTimeZoneData {
 /// [place] may also be populated. When time-zone fetching is enabled,
 /// [timeZone] may also be populated.
 class PlaceSelection {
-  const PlaceSelection({required this.suggestion, this.place, this.timeZone});
+  const PlaceSelection({
+    required this.suggestion,
+    this.sessionToken,
+    this.place,
+    this.timeZone,
+  });
 
   /// The lightweight autocomplete suggestion the user selected.
   final PlaceSuggestion suggestion;
+
+  /// Autocomplete session token active when [suggestion] was selected.
+  ///
+  /// This remains available after the controller starts its next session so
+  /// headless and deferred-details flows can preserve session identity.
+  final AutocompleteSessionToken? sessionToken;
 
   /// Rich place details resolved for the selection, if requested.
   final PlaceData? place;
@@ -647,10 +827,10 @@ class PlaceSelection {
   /// Time-zone data resolved for the selection, if requested.
   final PlaceTimeZoneData? timeZone;
 
-  /// Convenience getter for [suggestion.placeId].
+  /// Convenience getter for the selected [PlaceSuggestion.placeId].
   String get placeId => suggestion.placeId;
 
-  /// Convenience getter for [suggestion.displayText].
+  /// Convenience getter for the selected [AutocompleteSuggestion.displayText].
   String get displayText => suggestion.displayText;
 
   /// Whether [place] is available.
@@ -661,11 +841,13 @@ class PlaceSelection {
 
   PlaceSelection copyWith({
     PlaceSuggestion? suggestion,
+    AutocompleteSessionToken? sessionToken,
     PlaceData? place,
     PlaceTimeZoneData? timeZone,
   }) {
     return PlaceSelection(
       suggestion: suggestion ?? this.suggestion,
+      sessionToken: sessionToken ?? this.sessionToken,
       place: place ?? this.place,
       timeZone: timeZone ?? this.timeZone,
     );
@@ -793,6 +975,36 @@ class PlacePostalAddress {
 }
 
 @immutable
+/// Author attribution that must be shown with a displayed place photo.
+class PlacePhotoAuthorAttribution {
+  /// Creates a photo author attribution.
+  const PlacePhotoAuthorAttribution({
+    required this.displayName,
+    this.uri,
+    this.photoUri,
+  });
+
+  /// Author name to display with the photo.
+  final String displayName;
+
+  /// Link to the author's Google Maps profile, when provided.
+  final String? uri;
+
+  /// Author profile-photo URI, when provided.
+  final String? photoUri;
+
+  /// Parses Google's author-attribution payload.
+  factory PlacePhotoAuthorAttribution.fromJson(Object? source) {
+    final json = _jsonMap(source);
+    return PlacePhotoAuthorAttribution(
+      displayName: (json?['displayName'] ?? '') as String,
+      uri: json?['uri'] as String?,
+      photoUri: (json?['photoUri'] ?? json?['photoURI']) as String?,
+    );
+  }
+}
+
+@immutable
 /// Photo metadata returned in rich place details.
 class PlacePhoto {
   /// Creates a photo metadata object.
@@ -819,11 +1031,19 @@ class PlacePhoto {
   /// Attribution blocks that should accompany the photo.
   final List<Map<String, Object?>> authorAttributions;
 
+  /// Typed author attributions that must be rendered with a displayed photo.
+  ///
+  /// Google requires every non-empty attribution returned with a photo to be
+  /// shown wherever that photo is displayed.
+  List<PlacePhotoAuthorAttribution> get authors => List.unmodifiable(
+    authorAttributions.map(PlacePhotoAuthorAttribution.fromJson),
+  );
+
   factory PlacePhoto.fromJson(Map<String, Object?> json) => PlacePhoto(
     name: (json['name'] ?? '') as String,
     widthPx: (json['widthPx'] as num?)?.toInt(),
     heightPx: (json['heightPx'] as num?)?.toInt(),
-    googleMapsUri: json['googleMapsUri'] as String?,
+    googleMapsUri: (json['googleMapsUri'] ?? json['googleMapsURI']) as String?,
     authorAttributions: ((json['authorAttributions'] as List?) ?? <Object?>[])
         .whereType<Map<Object?, Object?>>()
         .map((item) => item.cast<String, Object?>())
@@ -853,15 +1073,36 @@ class PhotoMediaRequest {
   /// Validates request invariants before serialization.
   void validate() {
     if (name.trim().isEmpty) {
-      throw const PlacesException('Photo media name cannot be empty.');
-    }
-    if (maxWidthPx == null && maxHeightPx == null) {
-      throw const PlacesException(
-        'Photo media requests require maxWidthPx, maxHeightPx, or both.',
+      throw const PlacesException.validation(
+        'Photo media name cannot be empty.',
+        operation: PlacesOperation.photoMedia,
+        code: 'empty_photo_name',
       );
     }
-    if ((maxWidthPx ?? 1) <= 0 || (maxHeightPx ?? 1) <= 0) {
-      throw const PlacesException('Photo media dimensions must be positive.');
+    final normalizedName = name.startsWith('/') ? name.substring(1) : name;
+    if (!RegExp(
+      r'^places/[^/]+/photos/[^/]+(?:/media)?$',
+    ).hasMatch(normalizedName)) {
+      throw const PlacesException.validation(
+        'Photo media name must match places/{placeId}/photos/{photoId}.',
+        operation: PlacesOperation.photoMedia,
+        code: 'invalid_photo_name',
+      );
+    }
+    if (maxWidthPx == null && maxHeightPx == null) {
+      throw const PlacesException.validation(
+        'Photo media requests require maxWidthPx, maxHeightPx, or both.',
+        operation: PlacesOperation.photoMedia,
+        code: 'missing_photo_dimensions',
+      );
+    }
+    if (!_validPhotoDimension(maxWidthPx) ||
+        !_validPhotoDimension(maxHeightPx)) {
+      throw const PlacesException.validation(
+        'Photo media dimensions must be between 1 and 4800 pixels.',
+        operation: PlacesOperation.photoMedia,
+        code: 'invalid_photo_dimensions',
+      );
     }
   }
 
@@ -950,10 +1191,476 @@ class PlaceReview {
       rating: _toDouble(json['rating']),
       relativePublishTimeDescription:
           json['relativePublishTimeDescription'] as String?,
-      googleMapsUri: json['googleMapsUri'] as String?,
+      googleMapsUri:
+          (json['googleMapsUri'] ?? json['googleMapsURI']) as String?,
       originalText: json['originalText'] == null
           ? null
           : LocalizedText.fromJson(json['originalText']),
+    );
+  }
+}
+
+@immutable
+/// Whole or partial Gregorian calendar date returned by Places API.
+class PlaceDate {
+  const PlaceDate({required this.year, required this.month, required this.day});
+
+  final int year;
+  final int month;
+  final int day;
+
+  /// Whether this value contains a complete year, month, and day.
+  bool get isComplete => year > 0 && month > 0 && day > 0;
+
+  factory PlaceDate.fromJson(Object? source) {
+    if (source is String) {
+      final parsed = DateTime.tryParse(source);
+      if (parsed != null) {
+        return PlaceDate(
+          year: parsed.year,
+          month: parsed.month,
+          day: parsed.day,
+        );
+      }
+    }
+    final json = _jsonMap(source);
+    return PlaceDate(
+      year: (json?['year'] as num?)?.toInt() ?? 0,
+      month: (json?['month'] as num?)?.toInt() ?? 0,
+      day: (json?['day'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+@immutable
+/// Open Location Code values for a place.
+class PlacePlusCode {
+  const PlacePlusCode({this.globalCode, this.compoundCode});
+
+  final String? globalCode;
+  final String? compoundCode;
+
+  factory PlacePlusCode.fromJson(Object? source) {
+    final json = _jsonMap(source);
+    return PlacePlusCode(
+      globalCode: json?['globalCode'] as String?,
+      compoundCode: json?['compoundCode'] as String?,
+    );
+  }
+}
+
+@immutable
+/// IANA time-zone identity embedded in a Place response.
+class PlaceTimeZone {
+  const PlaceTimeZone({required this.id, this.version});
+
+  final String id;
+  final String? version;
+
+  factory PlaceTimeZone.fromJson(Object? source) {
+    final json = _jsonMap(source);
+    return PlaceTimeZone(
+      id: (json?['id'] ?? '') as String,
+      version: json?['version'] as String?,
+    );
+  }
+}
+
+@immutable
+/// Data-provider attribution that must be displayed with a place.
+class PlaceAttribution {
+  const PlaceAttribution({required this.provider, this.providerUri});
+
+  final String provider;
+  final String? providerUri;
+
+  factory PlaceAttribution.fromJson(Object? source) {
+    final json = _jsonMap(source);
+    return PlaceAttribution(
+      provider: (json?['provider'] ?? '') as String,
+      providerUri: (json?['providerUri'] ?? json?['providerURI']) as String?,
+    );
+  }
+}
+
+@immutable
+/// Payment methods accepted by a place.
+class PlacePaymentOptions {
+  const PlacePaymentOptions({
+    this.acceptsCreditCards,
+    this.acceptsDebitCards,
+    this.acceptsCashOnly,
+    this.acceptsNfc,
+  });
+
+  final bool? acceptsCreditCards;
+  final bool? acceptsDebitCards;
+  final bool? acceptsCashOnly;
+  final bool? acceptsNfc;
+
+  factory PlacePaymentOptions.fromJson(Object? source) {
+    final json = _jsonMap(source);
+    return PlacePaymentOptions(
+      acceptsCreditCards: json?['acceptsCreditCards'] as bool?,
+      acceptsDebitCards: json?['acceptsDebitCards'] as bool?,
+      acceptsCashOnly: json?['acceptsCashOnly'] as bool?,
+      acceptsNfc: (json?['acceptsNfc'] ?? json?['acceptsNFC']) as bool?,
+    );
+  }
+}
+
+@immutable
+/// Parking options offered by a place.
+class PlaceParkingOptions {
+  const PlaceParkingOptions({
+    this.freeParkingLot,
+    this.paidParkingLot,
+    this.freeStreetParking,
+    this.paidStreetParking,
+    this.valetParking,
+    this.freeGarageParking,
+    this.paidGarageParking,
+  });
+
+  final bool? freeParkingLot;
+  final bool? paidParkingLot;
+  final bool? freeStreetParking;
+  final bool? paidStreetParking;
+  final bool? valetParking;
+  final bool? freeGarageParking;
+  final bool? paidGarageParking;
+
+  factory PlaceParkingOptions.fromJson(Object? source) {
+    final json = _jsonMap(source);
+    return PlaceParkingOptions(
+      freeParkingLot:
+          (json?['freeParkingLot'] ?? json?['hasFreeParkingLot']) as bool?,
+      paidParkingLot:
+          (json?['paidParkingLot'] ?? json?['hasPaidParkingLot']) as bool?,
+      freeStreetParking:
+          (json?['freeStreetParking'] ?? json?['hasFreeStreetParking'])
+              as bool?,
+      paidStreetParking:
+          (json?['paidStreetParking'] ?? json?['hasPaidStreetParking'])
+              as bool?,
+      valetParking:
+          (json?['valetParking'] ?? json?['hasValetParking']) as bool?,
+      freeGarageParking:
+          (json?['freeGarageParking'] ?? json?['hasFreeGarageParking'])
+              as bool?,
+      paidGarageParking:
+          (json?['paidGarageParking'] ?? json?['hasPaidGarageParking'])
+              as bool?,
+    );
+  }
+}
+
+@immutable
+/// Wheelchair accessibility options offered by a place.
+class PlaceAccessibilityOptions {
+  const PlaceAccessibilityOptions({
+    this.wheelchairAccessibleParking,
+    this.wheelchairAccessibleEntrance,
+    this.wheelchairAccessibleRestroom,
+    this.wheelchairAccessibleSeating,
+  });
+
+  final bool? wheelchairAccessibleParking;
+  final bool? wheelchairAccessibleEntrance;
+  final bool? wheelchairAccessibleRestroom;
+  final bool? wheelchairAccessibleSeating;
+
+  factory PlaceAccessibilityOptions.fromJson(Object? source) {
+    final json = _jsonMap(source);
+    return PlaceAccessibilityOptions(
+      wheelchairAccessibleParking:
+          (json?['wheelchairAccessibleParking'] ??
+                  json?['hasWheelchairAccessibleParking'])
+              as bool?,
+      wheelchairAccessibleEntrance:
+          (json?['wheelchairAccessibleEntrance'] ??
+                  json?['hasWheelchairAccessibleEntrance'])
+              as bool?,
+      wheelchairAccessibleRestroom:
+          (json?['wheelchairAccessibleRestroom'] ??
+                  json?['hasWheelchairAccessibleRestroom'])
+              as bool?,
+      wheelchairAccessibleSeating:
+          (json?['wheelchairAccessibleSeating'] ??
+                  json?['hasWheelchairAccessibleSeating'])
+              as bool?,
+    );
+  }
+}
+
+@immutable
+/// Place id and resource-name reference used for containing/sub-destinations.
+class PlaceResourceReference {
+  const PlaceResourceReference({required this.id, required this.resourceName});
+
+  final String id;
+  final String resourceName;
+
+  factory PlaceResourceReference.fromJson(Object? source) {
+    final json = _jsonMap(source);
+    return PlaceResourceReference(
+      id: (json?['id'] ?? '') as String,
+      resourceName: (json?['name'] ?? json?['resourceName'] ?? '') as String,
+    );
+  }
+}
+
+@immutable
+/// Google Maps action links associated with a place.
+class PlaceGoogleMapsLinks {
+  const PlaceGoogleMapsLinks({
+    this.directionsUri,
+    this.placeUri,
+    this.writeAReviewUri,
+    this.reviewsUri,
+    this.photosUri,
+  });
+
+  final String? directionsUri;
+  final String? placeUri;
+  final String? writeAReviewUri;
+  final String? reviewsUri;
+  final String? photosUri;
+
+  factory PlaceGoogleMapsLinks.fromJson(Object? source) {
+    final json = _jsonMap(source);
+    return PlaceGoogleMapsLinks(
+      directionsUri:
+          (json?['directionsUri'] ?? json?['directionsURI']) as String?,
+      placeUri: (json?['placeUri'] ?? json?['placeURI']) as String?,
+      writeAReviewUri:
+          (json?['writeAReviewUri'] ?? json?['writeAReviewURI']) as String?,
+      reviewsUri: (json?['reviewsUri'] ?? json?['reviewsURI']) as String?,
+      photosUri: (json?['photosUri'] ?? json?['photosURI']) as String?,
+    );
+  }
+}
+
+@immutable
+/// Currency amount returned inside a place price range.
+class PlaceMoney {
+  const PlaceMoney({
+    required this.currencyCode,
+    required this.units,
+    required this.nanos,
+  });
+
+  final String currencyCode;
+
+  /// Whole units preserved as an int64-compatible decimal string.
+  final String units;
+
+  final int nanos;
+
+  factory PlaceMoney.fromJson(Object? source) {
+    final json = _jsonMap(source);
+    return PlaceMoney(
+      currencyCode: (json?['currencyCode'] ?? '') as String,
+      units: (json?['units'] ?? '0').toString(),
+      nanos: (json?['nanos'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+@immutable
+/// Inclusive start and optional exclusive end price for a place.
+class PlacePriceRange {
+  const PlacePriceRange({this.startPrice, this.endPrice});
+
+  final PlaceMoney? startPrice;
+  final PlaceMoney? endPrice;
+
+  factory PlacePriceRange.fromJson(Object? source) {
+    final json = _jsonMap(source);
+    return PlacePriceRange(
+      startPrice: json?['startPrice'] == null
+          ? null
+          : PlaceMoney.fromJson(json?['startPrice']),
+      endPrice: json?['endPrice'] == null
+          ? null
+          : PlaceMoney.fromJson(json?['endPrice']),
+    );
+  }
+}
+
+@immutable
+/// Icon metadata for a transit agency, line, or vehicle.
+class PlaceTransitIcon {
+  const PlaceTransitIcon({this.url, this.nameIncluded});
+
+  final String? url;
+  final bool? nameIncluded;
+
+  factory PlaceTransitIcon.fromJson(Object? source) {
+    final json = _jsonMap(source);
+    return PlaceTransitIcon(
+      url: json?['url'] as String?,
+      nameIncluded: json?['nameIncluded'] as bool?,
+    );
+  }
+}
+
+@immutable
+/// Transit line serving a station.
+class PlaceTransitLine {
+  const PlaceTransitLine({
+    required this.id,
+    this.vehicleType,
+    this.displayName,
+    this.shortDisplayName,
+    this.textColor,
+    this.backgroundColor,
+    this.url,
+    this.icon,
+    this.vehicleIcon,
+  });
+
+  final String id;
+  final String? vehicleType;
+  final LocalizedText? displayName;
+  final LocalizedText? shortDisplayName;
+  final String? textColor;
+  final String? backgroundColor;
+  final String? url;
+  final PlaceTransitIcon? icon;
+  final PlaceTransitIcon? vehicleIcon;
+
+  factory PlaceTransitLine.fromJson(Object? source) {
+    final json = _jsonMap(source);
+    return PlaceTransitLine(
+      id: (json?['id'] ?? '') as String,
+      vehicleType: json?['vehicleType'] as String?,
+      displayName: json?['displayName'] == null
+          ? null
+          : LocalizedText.fromJson(json?['displayName']),
+      shortDisplayName: json?['shortDisplayName'] == null
+          ? null
+          : LocalizedText.fromJson(json?['shortDisplayName']),
+      textColor: json?['textColor'] as String?,
+      backgroundColor: json?['backgroundColor'] as String?,
+      url: json?['url'] as String?,
+      icon: json?['icon'] == null
+          ? null
+          : PlaceTransitIcon.fromJson(json?['icon']),
+      vehicleIcon: json?['vehicleIcon'] == null
+          ? null
+          : PlaceTransitIcon.fromJson(json?['vehicleIcon']),
+    );
+  }
+}
+
+@immutable
+/// Transit agency serving a station.
+class PlaceTransitAgency {
+  PlaceTransitAgency({
+    this.displayName,
+    this.url,
+    this.fareUrl,
+    this.icon,
+    List<PlaceTransitLine> lines = const <PlaceTransitLine>[],
+  }) : lines = List<PlaceTransitLine>.unmodifiable(lines);
+
+  final LocalizedText? displayName;
+  final String? url;
+  final String? fareUrl;
+  final PlaceTransitIcon? icon;
+  final List<PlaceTransitLine> lines;
+
+  factory PlaceTransitAgency.fromJson(Object? source) {
+    final json = _jsonMap(source);
+    return PlaceTransitAgency(
+      displayName: json?['displayName'] == null
+          ? null
+          : LocalizedText.fromJson(json?['displayName']),
+      url: json?['url'] as String?,
+      fareUrl: (json?['fareUrl'] ?? json?['fareURL'])?.toString(),
+      icon: json?['icon'] == null
+          ? null
+          : PlaceTransitIcon.fromJson(json?['icon']),
+      lines: _jsonList(
+        json?['lines'],
+      ).map(PlaceTransitLine.fromJson).toList(growable: false),
+    );
+  }
+}
+
+@immutable
+/// Boarding/alighting location within a transit station.
+class PlaceTransitStop {
+  const PlaceTransitStop({
+    required this.id,
+    this.displayName,
+    this.platformCode,
+    this.signageText,
+    this.stopCode,
+    this.location,
+    this.wheelchairAccessibleEntrance,
+  });
+
+  final String id;
+  final LocalizedText? displayName;
+  final LocalizedText? platformCode;
+  final LocalizedText? signageText;
+  final LocalizedText? stopCode;
+  final PlaceCoordinates? location;
+  final bool? wheelchairAccessibleEntrance;
+
+  factory PlaceTransitStop.fromJson(Object? source) {
+    final json = _jsonMap(source);
+    return PlaceTransitStop(
+      id: (json?['id'] ?? '') as String,
+      displayName: json?['displayName'] == null
+          ? null
+          : LocalizedText.fromJson(json?['displayName']),
+      platformCode: json?['platformCode'] == null
+          ? null
+          : LocalizedText.fromJson(json?['platformCode']),
+      signageText: json?['signageText'] == null
+          ? null
+          : LocalizedText.fromJson(json?['signageText']),
+      stopCode: json?['stopCode'] == null
+          ? null
+          : LocalizedText.fromJson(json?['stopCode']),
+      location: _parseCoordinates(json?['location']),
+      wheelchairAccessibleEntrance:
+          (json?['wheelchairAccessibleEntrance'] ??
+                  json?['hasWheelchairAccessibleEntrance'])
+              as bool?,
+    );
+  }
+}
+
+@immutable
+/// Transit-specific information for a place.
+class PlaceTransitStation {
+  PlaceTransitStation({
+    this.displayName,
+    List<PlaceTransitAgency> agencies = const <PlaceTransitAgency>[],
+    List<PlaceTransitStop> stops = const <PlaceTransitStop>[],
+  }) : agencies = List<PlaceTransitAgency>.unmodifiable(agencies),
+       stops = List<PlaceTransitStop>.unmodifiable(stops);
+
+  final LocalizedText? displayName;
+  final List<PlaceTransitAgency> agencies;
+  final List<PlaceTransitStop> stops;
+
+  factory PlaceTransitStation.fromJson(Object? source) {
+    final json = _jsonMap(source);
+    return PlaceTransitStation(
+      displayName: json?['displayName'] == null
+          ? null
+          : LocalizedText.fromJson(json?['displayName']),
+      agencies: _jsonList(
+        json?['agencies'],
+      ).map(PlaceTransitAgency.fromJson).toList(growable: false),
+      stops: _jsonList(
+        json?['stops'],
+      ).map(PlaceTransitStop.fromJson).toList(growable: false),
     );
   }
 }
@@ -968,45 +1675,74 @@ class PlaceData {
     this.displayName,
     this.formattedAddress,
     this.shortFormattedAddress,
+    this.adrFormatAddress,
     this.postalAddress,
     this.addressComponents = const <PlaceAddressComponent>[],
+    this.plusCode,
     this.location,
     this.viewport,
     this.types = const <String>[],
     this.primaryType,
     this.primaryTypeDisplayName,
+    this.googleMapsTypeLabel,
     this.googleMapsUri,
+    this.googleMapsLinks,
     this.websiteUri,
     this.nationalPhoneNumber,
     this.internationalPhoneNumber,
     this.rating,
     this.userRatingCount,
     this.priceLevel,
+    this.priceRange,
     this.businessStatus,
+    this.openingDate,
+    this.attributions = const <PlaceAttribution>[],
     this.iconMaskBaseUri,
     this.iconBackgroundColor,
     this.utcOffsetMinutes,
     this.delivery,
     this.dineIn,
     this.takeout,
+    this.curbsidePickup,
     this.reservable,
     this.servesBreakfast,
     this.servesLunch,
     this.servesDinner,
     this.servesBeer,
     this.servesWine,
+    this.servesBrunch,
+    this.servesVegetarianFood,
+    this.servesCocktails,
     this.servesDessert,
     this.servesCoffee,
     this.outdoorSeating,
+    this.liveMusic,
+    this.menuForChildren,
+    this.allowsDogs,
     this.restroom,
     this.goodForChildren,
     this.goodForGroups,
+    this.goodForWatchingSports,
     this.currentOpeningHours,
     this.regularOpeningHours,
+    this.currentSecondaryOpeningHours = const <Map<String, Object?>>[],
+    this.regularSecondaryOpeningHours = const <Map<String, Object?>>[],
+    this.timeZone,
+    this.editorialSummary,
+    this.paymentOptions,
+    this.parkingOptions,
+    this.accessibilityOptions,
+    this.subDestinations = const <PlaceResourceReference>[],
+    this.containingPlaces = const <PlaceResourceReference>[],
     this.addressDescriptor,
     this.evChargeOptions,
     this.fuelOptions,
     this.generativeSummary,
+    this.reviewSummary,
+    this.evChargeAmenitySummary,
+    this.neighborhoodSummary,
+    this.consumerAlert,
+    this.transitStation,
     this.pureServiceAreaBusiness,
     this.movedPlace,
     this.movedPlaceId,
@@ -1030,11 +1766,17 @@ class PlaceData {
   /// Short formatted address returned by Google.
   final String? shortFormattedAddress;
 
+  /// Address formatted using the `adr` microformat.
+  final String? adrFormatAddress;
+
   /// Structured postal-address representation, when requested.
   final PlacePostalAddress? postalAddress;
 
   /// Structured address components, when requested.
   final List<PlaceAddressComponent> addressComponents;
+
+  /// Open Location Code for this place.
+  final PlacePlusCode? plusCode;
 
   /// Geographic coordinates for the place.
   final PlaceCoordinates? location;
@@ -1051,8 +1793,14 @@ class PlaceData {
   /// Localized display text for the primary type.
   final LocalizedText? primaryTypeDisplayName;
 
+  /// Localized type label shown for the place on Google Maps.
+  final LocalizedText? googleMapsTypeLabel;
+
   /// Google Maps URI for this place.
   final String? googleMapsUri;
+
+  /// Links to Google Maps actions for this place.
+  final PlaceGoogleMapsLinks? googleMapsLinks;
 
   /// Website URI for this place, when available.
   final String? websiteUri;
@@ -1072,8 +1820,17 @@ class PlaceData {
   /// Price level returned by Google.
   final String? priceLevel;
 
+  /// Typed price range returned by Google.
+  final PlacePriceRange? priceRange;
+
   /// Business status returned by Google.
   final String? businessStatus;
+
+  /// Anticipated opening date for a future-opening business.
+  final PlaceDate? openingDate;
+
+  /// Data-provider attributions that must be displayed with this place.
+  final List<PlaceAttribution> attributions;
 
   /// Base URI for the place icon mask.
   final String? iconMaskBaseUri;
@@ -1093,6 +1850,9 @@ class PlaceData {
   /// Whether takeout is available.
   final bool? takeout;
 
+  /// Whether curbside pickup is available.
+  final bool? curbsidePickup;
+
   /// Whether reservations are supported.
   final bool? reservable;
 
@@ -1111,6 +1871,15 @@ class PlaceData {
   /// Whether wine is served.
   final bool? servesWine;
 
+  /// Whether brunch is served.
+  final bool? servesBrunch;
+
+  /// Whether vegetarian food is served.
+  final bool? servesVegetarianFood;
+
+  /// Whether cocktails are served.
+  final bool? servesCocktails;
+
   /// Whether dessert is served.
   final bool? servesDessert;
 
@@ -1119,6 +1888,15 @@ class PlaceData {
 
   /// Whether outdoor seating is available.
   final bool? outdoorSeating;
+
+  /// Whether live music is available.
+  final bool? liveMusic;
+
+  /// Whether a children's menu is available.
+  final bool? menuForChildren;
+
+  /// Whether dogs are allowed.
+  final bool? allowsDogs;
 
   /// Whether restrooms are available.
   final bool? restroom;
@@ -1129,11 +1907,41 @@ class PlaceData {
   /// Whether the place is good for groups.
   final bool? goodForGroups;
 
+  /// Whether the place is suitable for watching sports.
+  final bool? goodForWatchingSports;
+
   /// Current opening-hours payload returned by Google.
   final Map<String, Object?>? currentOpeningHours;
 
   /// Regular opening-hours payload returned by Google.
   final Map<String, Object?>? regularOpeningHours;
+
+  /// Current secondary opening-hours payloads, deeply immutable.
+  final List<Map<String, Object?>> currentSecondaryOpeningHours;
+
+  /// Regular secondary opening-hours payloads, deeply immutable.
+  final List<Map<String, Object?>> regularSecondaryOpeningHours;
+
+  /// IANA time-zone identity embedded in the place resource.
+  final PlaceTimeZone? timeZone;
+
+  /// Editorial summary that must be displayed without modification.
+  final LocalizedText? editorialSummary;
+
+  /// Payment methods accepted by the place.
+  final PlacePaymentOptions? paymentOptions;
+
+  /// Parking options offered by the place.
+  final PlaceParkingOptions? parkingOptions;
+
+  /// Wheelchair accessibility options offered by the place.
+  final PlaceAccessibilityOptions? accessibilityOptions;
+
+  /// Specific destinations associated with this place.
+  final List<PlaceResourceReference> subDestinations;
+
+  /// Places that contain this place.
+  final List<PlaceResourceReference> containingPlaces;
 
   /// Address descriptor payload returned by Google, when available.
   final Map<String, Object?>? addressDescriptor;
@@ -1146,6 +1954,21 @@ class PlaceData {
 
   /// AI-generated place summary payload returned by Google, when requested.
   final Map<String, Object?>? generativeSummary;
+
+  /// AI-generated review summary payload, deeply immutable.
+  final Map<String, Object?>? reviewSummary;
+
+  /// AI-generated nearby EV amenity summary payload, deeply immutable.
+  final Map<String, Object?>? evChargeAmenitySummary;
+
+  /// AI-generated neighborhood summary payload, deeply immutable.
+  final Map<String, Object?>? neighborhoodSummary;
+
+  /// Consumer alert payload, deeply immutable.
+  final Map<String, Object?>? consumerAlert;
+
+  /// Transit station data for this place.
+  final PlaceTransitStation? transitStation;
 
   /// Whether this place is a pure service-area business.
   final bool? pureServiceAreaBusiness;
@@ -1215,6 +2038,25 @@ class PlaceData {
   String? get countryCodeShort =>
       _addressComponent('country')?.shortText ?? countryCode;
 
+  /// Typed representation of [priceLevel], when Google returns a known value.
+  ///
+  /// [priceLevel] remains available as its original string for source
+  /// compatibility and forward compatibility with future Google values.
+  PlacePriceLevel? get priceLevelValue {
+    final value = priceLevel;
+    if (value == null) {
+      return null;
+    }
+    for (final level in PlacePriceLevel.values) {
+      if (level.restName == value ||
+          level.restName.replaceFirst('PRICE_LEVEL_', '') ==
+              value.toUpperCase()) {
+        return level;
+      }
+    }
+    return null;
+  }
+
   factory PlaceData.fromJson(Map<String, Object?> json) => PlaceData(
     id: (json['id'] ?? '') as String,
     resourceName: json['name'] as String?,
@@ -1223,78 +2065,141 @@ class PlaceData {
         : LocalizedText.fromJson(json['displayName']),
     formattedAddress: json['formattedAddress'] as String?,
     shortFormattedAddress: json['shortFormattedAddress'] as String?,
+    adrFormatAddress: json['adrFormatAddress'] as String?,
     postalAddress: (json['postalAddress'] as Map<Object?, Object?>?) == null
         ? null
         : PlacePostalAddress.fromJson(
             (json['postalAddress'] as Map<Object?, Object?>)
                 .cast<String, Object?>(),
           ),
-    addressComponents: ((json['addressComponents'] as List?) ?? <Object?>[])
-        .whereType<Map<Object?, Object?>>()
-        .map(
-          (component) =>
-              PlaceAddressComponent.fromJson(component.cast<String, Object?>()),
-        )
-        .toList(growable: false),
+    addressComponents: List<PlaceAddressComponent>.unmodifiable(
+      ((json['addressComponents'] as List?) ?? <Object?>[])
+          .whereType<Map<Object?, Object?>>()
+          .map(
+            (component) => PlaceAddressComponent.fromJson(
+              component.cast<String, Object?>(),
+            ),
+          ),
+    ),
+    plusCode: json['plusCode'] == null
+        ? null
+        : PlacePlusCode.fromJson(json['plusCode']),
     location: _parseCoordinates(json['location']),
     viewport: _parseViewport(json['viewport']),
-    types: ((json['types'] as List?) ?? <Object?>[]).whereType<String>().toList(
-      growable: false,
+    types: List<String>.unmodifiable(
+      ((json['types'] as List?) ?? <Object?>[]).whereType<String>(),
     ),
     primaryType: json['primaryType'] as String?,
     primaryTypeDisplayName: json['primaryTypeDisplayName'] == null
         ? null
         : LocalizedText.fromJson(json['primaryTypeDisplayName']),
+    googleMapsTypeLabel: json['googleMapsTypeLabel'] == null
+        ? null
+        : LocalizedText.fromJson(json['googleMapsTypeLabel']),
     googleMapsUri: json['googleMapsUri'] as String?,
+    googleMapsLinks: json['googleMapsLinks'] == null
+        ? null
+        : PlaceGoogleMapsLinks.fromJson(json['googleMapsLinks']),
     websiteUri: json['websiteUri'] as String?,
     nationalPhoneNumber: json['nationalPhoneNumber'] as String?,
     internationalPhoneNumber: json['internationalPhoneNumber'] as String?,
     rating: _toDouble(json['rating']),
     userRatingCount: (json['userRatingCount'] as num?)?.toInt(),
     priceLevel: json['priceLevel'] as String?,
+    priceRange: json['priceRange'] == null
+        ? null
+        : PlacePriceRange.fromJson(json['priceRange']),
     businessStatus: json['businessStatus'] as String?,
+    openingDate: json['openingDate'] == null
+        ? null
+        : PlaceDate.fromJson(json['openingDate']),
+    attributions: List<PlaceAttribution>.unmodifiable(
+      _jsonList(json['attributions']).map(PlaceAttribution.fromJson),
+    ),
     iconMaskBaseUri: json['iconMaskBaseUri'] as String?,
     iconBackgroundColor: json['iconBackgroundColor'] as String?,
     utcOffsetMinutes: (json['utcOffsetMinutes'] as num?)?.toInt(),
     delivery: json['delivery'] as bool?,
     dineIn: json['dineIn'] as bool?,
     takeout: json['takeout'] as bool?,
+    curbsidePickup: json['curbsidePickup'] as bool?,
     reservable: json['reservable'] as bool?,
     servesBreakfast: json['servesBreakfast'] as bool?,
     servesLunch: json['servesLunch'] as bool?,
     servesDinner: json['servesDinner'] as bool?,
     servesBeer: json['servesBeer'] as bool?,
     servesWine: json['servesWine'] as bool?,
+    servesBrunch: json['servesBrunch'] as bool?,
+    servesVegetarianFood: json['servesVegetarianFood'] as bool?,
+    servesCocktails: json['servesCocktails'] as bool?,
     servesDessert: json['servesDessert'] as bool?,
     servesCoffee: json['servesCoffee'] as bool?,
     outdoorSeating: json['outdoorSeating'] as bool?,
+    liveMusic: json['liveMusic'] as bool?,
+    menuForChildren: json['menuForChildren'] as bool?,
+    allowsDogs: json['allowsDogs'] as bool?,
     restroom: json['restroom'] as bool?,
     goodForChildren: json['goodForChildren'] as bool?,
     goodForGroups: json['goodForGroups'] as bool?,
-    currentOpeningHours: (json['currentOpeningHours'] as Map<Object?, Object?>?)
-        ?.cast<String, Object?>(),
-    regularOpeningHours: (json['regularOpeningHours'] as Map<Object?, Object?>?)
-        ?.cast<String, Object?>(),
-    addressDescriptor: (json['addressDescriptor'] as Map<Object?, Object?>?)
-        ?.cast<String, Object?>(),
-    evChargeOptions: (json['evChargeOptions'] as Map<Object?, Object?>?)
-        ?.cast<String, Object?>(),
-    fuelOptions: (json['fuelOptions'] as Map<Object?, Object?>?)
-        ?.cast<String, Object?>(),
-    generativeSummary: (json['generativeSummary'] as Map<Object?, Object?>?)
-        ?.cast<String, Object?>(),
+    goodForWatchingSports: json['goodForWatchingSports'] as bool?,
+    currentOpeningHours: _deepImmutableJsonMap(json['currentOpeningHours']),
+    regularOpeningHours: _deepImmutableJsonMap(json['regularOpeningHours']),
+    currentSecondaryOpeningHours: _deepImmutableJsonMapList(
+      json['currentSecondaryOpeningHours'],
+    ),
+    regularSecondaryOpeningHours: _deepImmutableJsonMapList(
+      json['regularSecondaryOpeningHours'],
+    ),
+    timeZone: json['timeZone'] == null
+        ? null
+        : PlaceTimeZone.fromJson(json['timeZone']),
+    editorialSummary: json['editorialSummary'] == null
+        ? null
+        : LocalizedText.fromJson(json['editorialSummary']),
+    paymentOptions: json['paymentOptions'] == null
+        ? null
+        : PlacePaymentOptions.fromJson(json['paymentOptions']),
+    parkingOptions: json['parkingOptions'] == null
+        ? null
+        : PlaceParkingOptions.fromJson(json['parkingOptions']),
+    accessibilityOptions: json['accessibilityOptions'] == null
+        ? null
+        : PlaceAccessibilityOptions.fromJson(json['accessibilityOptions']),
+    subDestinations: List<PlaceResourceReference>.unmodifiable(
+      _jsonList(json['subDestinations']).map(PlaceResourceReference.fromJson),
+    ),
+    containingPlaces: List<PlaceResourceReference>.unmodifiable(
+      _jsonList(json['containingPlaces']).map(PlaceResourceReference.fromJson),
+    ),
+    addressDescriptor: _deepImmutableJsonMap(json['addressDescriptor']),
+    evChargeOptions: _deepImmutableJsonMap(json['evChargeOptions']),
+    fuelOptions: _deepImmutableJsonMap(json['fuelOptions']),
+    generativeSummary: _deepImmutableJsonMap(json['generativeSummary']),
+    reviewSummary: _deepImmutableJsonMap(json['reviewSummary']),
+    evChargeAmenitySummary: _deepImmutableJsonMap(
+      json['evChargeAmenitySummary'],
+    ),
+    neighborhoodSummary: _deepImmutableJsonMap(json['neighborhoodSummary']),
+    consumerAlert: _deepImmutableJsonMap(json['consumerAlert']),
+    transitStation: json['transitStation'] == null
+        ? null
+        : PlaceTransitStation.fromJson(json['transitStation']),
     pureServiceAreaBusiness: json['pureServiceAreaBusiness'] as bool?,
     movedPlace: json['movedPlace'] as String?,
     movedPlaceId: json['movedPlaceId'] as String?,
-    reviews: ((json['reviews'] as List?) ?? <Object?>[])
-        .whereType<Map<Object?, Object?>>()
-        .map((review) => PlaceReview.fromJson(review.cast<String, Object?>()))
-        .toList(growable: false),
-    photos: ((json['photos'] as List?) ?? <Object?>[])
-        .whereType<Map<Object?, Object?>>()
-        .map((photo) => PlacePhoto.fromJson(photo.cast<String, Object?>()))
-        .toList(growable: false),
-    rawData: Map<String, Object?>.unmodifiable(json),
+    reviews: List<PlaceReview>.unmodifiable(
+      ((json['reviews'] as List?) ?? <Object?>[])
+          .whereType<Map<Object?, Object?>>()
+          .map(
+            (review) => PlaceReview.fromJson(review.cast<String, Object?>()),
+          ),
+    ),
+    photos: List<PlacePhoto>.unmodifiable(
+      ((json['photos'] as List?) ?? <Object?>[])
+          .whereType<Map<Object?, Object?>>()
+          .map((photo) => PlacePhoto.fromJson(photo.cast<String, Object?>())),
+    ),
+    rawData: _deepImmutableJsonMap(json)!,
   );
 
   PlaceAddressComponent? _addressComponent(String type) {
@@ -1340,6 +2245,7 @@ class AutocompleteRequest {
     this.includedPrimaryTypes = const <String>[],
     this.includedRegionCodes = const <String>[],
     this.includePureServiceAreaBusinesses = false,
+    this.includeFutureOpeningBusinesses = false,
     this.includeQueryPredictions = false,
   });
 
@@ -1399,6 +2305,9 @@ class AutocompleteRequest {
   /// Whether pure service-area businesses should be included in results.
   final bool includePureServiceAreaBusinesses;
 
+  /// Whether businesses expected to open in the future should be included.
+  final bool includeFutureOpeningBusinesses;
+
   /// Whether query predictions should be included alongside place predictions.
   ///
   /// [PlacesClient.autocomplete] keeps returning only [PlaceSuggestion] values.
@@ -1409,13 +2318,66 @@ class AutocompleteRequest {
   /// Validates request invariants before serialization.
   void validate() {
     if (input.trim().isEmpty) {
-      throw const PlacesException('Autocomplete input cannot be empty.');
-    }
-    if (locationBias != null && locationRestriction != null) {
-      throw const PlacesException(
-        'locationBias and locationRestriction cannot be set together.',
+      throw const PlacesException.validation(
+        'Autocomplete input cannot be empty.',
+        operation: PlacesOperation.autocomplete,
+        code: 'empty_autocomplete_input',
       );
     }
+    if (locationBias != null && locationRestriction != null) {
+      throw const PlacesException.validation(
+        'locationBias and locationRestriction cannot be set together.',
+        operation: PlacesOperation.autocomplete,
+        code: 'conflicting_location_filters',
+      );
+    }
+    if (inputOffset != null &&
+        (inputOffset! < 0 || inputOffset! > input.runes.length)) {
+      throw const PlacesException.validation(
+        'inputOffset must be a Unicode character offset inside input.',
+        operation: PlacesOperation.autocomplete,
+        code: 'invalid_input_offset',
+      );
+    }
+    if (includedPrimaryTypes.length > 5) {
+      throw const PlacesException.validation(
+        'includedPrimaryTypes supports at most five values.',
+        operation: PlacesOperation.autocomplete,
+        code: 'too_many_primary_types',
+      );
+    }
+    _validateNonEmptyValues(
+      includedPrimaryTypes,
+      name: 'includedPrimaryTypes',
+      operation: PlacesOperation.autocomplete,
+    );
+    final collections = includedPrimaryTypes
+        .where((type) => type == '(cities)' || type == '(regions)')
+        .toList(growable: false);
+    if (collections.isNotEmpty && includedPrimaryTypes.length != 1) {
+      throw const PlacesException.validation(
+        '(cities) and (regions) cannot be combined with other primary types.',
+        operation: PlacesOperation.autocomplete,
+        code: 'conflicting_primary_types',
+      );
+    }
+    if (includedRegionCodes.length > 15 ||
+        includedRegionCodes.any(
+          (code) => !RegExp(r'^[A-Za-z]{2}$').hasMatch(code),
+        )) {
+      throw const PlacesException.validation(
+        'includedRegionCodes supports up to 15 two-letter region codes.',
+        operation: PlacesOperation.autocomplete,
+        code: 'invalid_region_codes',
+      );
+    }
+    origin?.validate(operation: PlacesOperation.autocomplete);
+    _validateArea(locationBias?.area, operation: PlacesOperation.autocomplete);
+    _validateArea(
+      locationRestriction?.area,
+      operation: PlacesOperation.autocomplete,
+    );
+    sessionToken?.validate(operation: PlacesOperation.autocomplete);
   }
 
   /// Serializes the request for the Places HTTP autocomplete endpoint.
@@ -1436,6 +2398,8 @@ class AutocompleteRequest {
       if (includedRegionCodes.isNotEmpty)
         'includedRegionCodes': includedRegionCodes,
       'includePureServiceAreaBusinesses': includePureServiceAreaBusinesses,
+      if (includeFutureOpeningBusinesses)
+        'includeFutureOpeningBusinesses': true,
       if (includeQueryPredictions) 'includeQueryPredictions': true,
     };
   }
@@ -1468,8 +2432,24 @@ class PlaceDetailsRequest {
   /// Optional autocomplete session token associated with this place lookup.
   final AutocompleteSessionToken? sessionToken;
 
+  /// Validates the place identifier, field mask, and optional session token.
+  void validate() {
+    if (placeId.trim().isEmpty) {
+      throw const PlacesException.validation(
+        'Place Details requires a non-empty placeId.',
+        operation: PlacesOperation.placeDetails,
+        code: 'empty_place_id',
+      );
+    }
+    _validateFields(fields, operation: PlacesOperation.placeDetails);
+    sessionToken?.validate(operation: PlacesOperation.placeDetails);
+  }
+
   /// Comma-separated field mask for Google Place Details requests.
-  String get detailsFieldMask => fields.map((field) => field.apiName).join(',');
+  String get detailsFieldMask {
+    validate();
+    return fields.map((field) => field.apiName).join(',');
+  }
 }
 
 @immutable
@@ -1498,6 +2478,9 @@ class TimeZoneRequest {
   /// Optional BCP-47 language code for localized time-zone names.
   final String? languageCode;
 
+  /// Validates coordinates before a Time Zone request is sent.
+  void validate() => location.validate(operation: PlacesOperation.timeZone);
+
   /// Creates a time-zone request from resolved place details.
   ///
   /// Throws [PlacesException] if [place] does not include [PlaceData.location].
@@ -1508,8 +2491,10 @@ class TimeZoneRequest {
   }) {
     final location = place.location;
     if (location == null) {
-      throw const PlacesException(
+      throw const PlacesException.validation(
         'Time zone lookup requires place details with location coordinates.',
+        operation: PlacesOperation.timeZone,
+        code: 'missing_place_location',
       );
     }
     return TimeZoneRequest(
@@ -1533,6 +2518,15 @@ class TextSearchRequest {
     this.strictTypeFiltering = false,
     this.locationBias,
     this.locationRestriction,
+    this.pageSize,
+    this.pageToken,
+    this.priceLevels = const <PlacePriceLevel>[],
+    this.includePureServiceAreaBusinesses = false,
+    this.includeFutureOpeningBusinesses = false,
+    @Deprecated(
+      'Use pageSize instead. maxResultCount is deprecated in 0.6.0 and will '
+      'be removed in 1.0.0.',
+    )
     this.maxResultCount,
     this.minRating,
     this.openNow,
@@ -1563,7 +2557,32 @@ class TextSearchRequest {
   /// Hard geographic restriction applied to the search.
   final LocationRestriction? locationRestriction;
 
+  /// Maximum number of results requested per page.
+  final int? pageSize;
+
+  /// Token returned by a previous [TextSearchPage] for the next page.
+  final String? pageToken;
+
+  /// Price levels to include in the results.
+  ///
+  /// [PlacePriceLevel.free] and [PlacePriceLevel.unspecified] cannot be used as
+  /// request filters.
+  final List<PlacePriceLevel> priceLevels;
+
+  /// Whether pure service-area businesses should be included in results.
+  final bool includePureServiceAreaBusinesses;
+
+  /// Whether businesses expected to open in the future should be included.
+  final bool includeFutureOpeningBusinesses;
+
   /// Maximum number of results requested from Google.
+  ///
+  /// Deprecated in 0.6.0. Use [pageSize] instead. When both are supplied,
+  /// Google ignores this value and uses [pageSize].
+  @Deprecated(
+    'Use pageSize instead. maxResultCount is deprecated in 0.6.0 and will '
+    'be removed in 1.0.0.',
+  )
   final int? maxResultCount;
 
   /// Minimum acceptable average rating.
@@ -1581,12 +2600,77 @@ class TextSearchRequest {
   /// [locationBias] and [locationRestriction] are set.
   void validate() {
     if (textQuery.trim().isEmpty) {
-      throw const PlacesException('Text search query cannot be empty.');
+      throw const PlacesException.validation(
+        'Text search query cannot be empty.',
+        operation: PlacesOperation.textSearch,
+        code: 'empty_text_query',
+      );
     }
     if (locationBias != null && locationRestriction != null) {
-      throw const PlacesException(
+      throw const PlacesException.validation(
         'locationBias and locationRestriction cannot be set together.',
+        operation: PlacesOperation.textSearch,
+        code: 'conflicting_location_filters',
       );
+    }
+    if (priceLevels.contains(PlacePriceLevel.unspecified) ||
+        priceLevels.contains(PlacePriceLevel.free)) {
+      throw const PlacesException.validation(
+        'Text search priceLevels cannot contain unspecified or free.',
+        operation: PlacesOperation.textSearch,
+        code: 'invalid_price_level',
+      );
+    }
+    _validateFields(fields, operation: PlacesOperation.textSearch);
+    if (includedType != null && includedType!.trim().isEmpty) {
+      throw const PlacesException.validation(
+        'includedType cannot be empty when supplied.',
+        operation: PlacesOperation.textSearch,
+        code: 'empty_included_type',
+      );
+    }
+    if (pageSize != null && (pageSize! < 1 || pageSize! > 20)) {
+      throw const PlacesException.validation(
+        'pageSize must be between 1 and 20.',
+        operation: PlacesOperation.textSearch,
+        code: 'invalid_page_size',
+      );
+    }
+    // ignore: deprecated_member_use_from_same_package
+    if (maxResultCount != null &&
+        // ignore: deprecated_member_use_from_same_package
+        (maxResultCount! < 1 || maxResultCount! > 20)) {
+      throw const PlacesException.validation(
+        'maxResultCount must be between 1 and 20.',
+        operation: PlacesOperation.textSearch,
+        code: 'invalid_max_result_count',
+      );
+    }
+    if (pageToken != null && pageToken!.trim().isEmpty) {
+      throw const PlacesException.validation(
+        'pageToken cannot be empty when supplied.',
+        operation: PlacesOperation.textSearch,
+        code: 'empty_page_token',
+      );
+    }
+    if (minRating != null &&
+        (!minRating!.isFinite || minRating! < 0 || minRating! > 5)) {
+      throw const PlacesException.validation(
+        'minRating must be finite and between 0 and 5.',
+        operation: PlacesOperation.textSearch,
+        code: 'invalid_min_rating',
+      );
+    }
+    _validateArea(locationBias?.area, operation: PlacesOperation.textSearch);
+    if (locationRestriction?.area case final area?) {
+      if (area is! RectangleArea) {
+        throw const PlacesException.validation(
+          'Text Search locationRestriction must be a rectangle.',
+          operation: PlacesOperation.textSearch,
+          code: 'invalid_location_restriction_shape',
+        );
+      }
+      _validateArea(area, operation: PlacesOperation.textSearch);
     }
   }
 
@@ -1605,11 +2689,56 @@ class TextSearchRequest {
       if (locationBias != null) 'locationBias': locationBias!.area.toRestJson(),
       if (locationRestriction != null)
         'locationRestriction': locationRestriction!.area.toRestJson(),
+      if (pageSize != null) 'pageSize': pageSize,
+      if (pageToken != null) 'pageToken': pageToken,
+      if (priceLevels.isNotEmpty)
+        'priceLevels': priceLevels.map((level) => level.restName).toList(),
+      if (includePureServiceAreaBusinesses)
+        'includePureServiceAreaBusinesses': true,
+      if (includeFutureOpeningBusinesses)
+        'includeFutureOpeningBusinesses': true,
+      // ignore: deprecated_member_use_from_same_package
       if (maxResultCount != null) 'maxResultCount': maxResultCount,
       if (minRating != null) 'minRating': minRating,
       if (openNow != null) 'openNow': openNow,
       'rankPreference': rankPreference.restName,
     };
+  }
+}
+
+@immutable
+/// One page returned by Places Text Search (New).
+class TextSearchPage {
+  /// Creates an immutable text-search page.
+  TextSearchPage({
+    required List<PlaceData> results,
+    this.nextPageToken,
+    this.searchUri,
+  }) : results = List<PlaceData>.unmodifiable(results);
+
+  /// Places returned for this page.
+  final List<PlaceData> results;
+
+  /// Token to pass to [TextSearchRequest.pageToken] for the next page.
+  final String? nextPageToken;
+
+  /// Google Maps URI representing the same text search, when returned.
+  final String? searchUri;
+
+  /// Whether Google reported another page of results.
+  bool get hasNextPage => nextPageToken?.isNotEmpty ?? false;
+
+  /// Parses a Text Search response payload.
+  factory TextSearchPage.fromJson(Map<String, Object?> json) {
+    final results = ((json['places'] as List?) ?? <Object?>[])
+        .whereType<Map<Object?, Object?>>()
+        .map((item) => PlaceData.fromJson(item.cast<String, Object?>()))
+        .toList(growable: false);
+    return TextSearchPage(
+      results: results,
+      nextPageToken: json['nextPageToken'] as String?,
+      searchUri: json['searchUri'] as String?,
+    );
   }
 }
 
@@ -1627,6 +2756,7 @@ class NearbySearchRequest {
     this.includedPrimaryTypes = const <String>[],
     this.excludedPrimaryTypes = const <String>[],
     this.maxResultCount,
+    this.includeFutureOpeningBusinesses = false,
     this.rankPreference = SearchNearbyRankPreference.popularity,
   });
 
@@ -1657,27 +2787,206 @@ class NearbySearchRequest {
   /// Maximum result count, when supported by Google.
   final int? maxResultCount;
 
+  /// Whether businesses expected to open in the future should be included.
+  final bool includeFutureOpeningBusinesses;
+
   /// Ranking behavior for nearby results.
   final SearchNearbyRankPreference rankPreference;
+
+  /// Validates documented Nearby Search limits and filter conflicts.
+  void validate() {
+    _validateFields(fields, operation: PlacesOperation.nearbySearch);
+    final area = locationRestriction.area;
+    if (area is! CircleArea) {
+      throw const PlacesException.validation(
+        'Nearby Search locationRestriction must be a circle.',
+        operation: PlacesOperation.nearbySearch,
+        code: 'invalid_location_restriction_shape',
+      );
+    }
+    _validateArea(
+      area,
+      operation: PlacesOperation.nearbySearch,
+      requirePositiveRadius: true,
+    );
+    for (final entry in <(String, List<String>)>[
+      ('includedTypes', includedTypes),
+      ('excludedTypes', excludedTypes),
+      ('includedPrimaryTypes', includedPrimaryTypes),
+      ('excludedPrimaryTypes', excludedPrimaryTypes),
+    ]) {
+      if (entry.$2.length > 50) {
+        throw PlacesException.validation(
+          '${entry.$1} supports at most 50 values.',
+          operation: PlacesOperation.nearbySearch,
+          code: 'too_many_types',
+        );
+      }
+      _validateNonEmptyValues(
+        entry.$2,
+        name: entry.$1,
+        operation: PlacesOperation.nearbySearch,
+      );
+    }
+    if (includedTypes.toSet().intersection(excludedTypes.toSet()).isNotEmpty ||
+        includedPrimaryTypes
+            .toSet()
+            .intersection(excludedPrimaryTypes.toSet())
+            .isNotEmpty) {
+      throw const PlacesException.validation(
+        'Nearby Search include and exclude filters cannot conflict.',
+        operation: PlacesOperation.nearbySearch,
+        code: 'conflicting_type_filters',
+      );
+    }
+    if (maxResultCount != null &&
+        (maxResultCount! < 1 || maxResultCount! > 20)) {
+      throw const PlacesException.validation(
+        'Nearby Search maxResultCount must be between 1 and 20.',
+        operation: PlacesOperation.nearbySearch,
+        code: 'invalid_max_result_count',
+      );
+    }
+  }
 
   /// Field mask used for nearby search requests.
   String get searchFieldMask =>
       fields.map((field) => field.searchMaskPath).join(',');
 
   /// Serializes the request for the Places nearby-search endpoint.
-  Map<String, Object?> toRestJson() => <String, Object?>{
-    'locationRestriction': locationRestriction.area.toRestJson(),
-    if (languageCode != null) 'languageCode': languageCode,
-    if (regionCode != null) 'regionCode': regionCode,
-    if (includedTypes.isNotEmpty) 'includedTypes': includedTypes,
-    if (excludedTypes.isNotEmpty) 'excludedTypes': excludedTypes,
-    if (includedPrimaryTypes.isNotEmpty)
-      'includedPrimaryTypes': includedPrimaryTypes,
-    if (excludedPrimaryTypes.isNotEmpty)
-      'excludedPrimaryTypes': excludedPrimaryTypes,
-    if (maxResultCount != null) 'maxResultCount': maxResultCount,
-    'rankPreference': rankPreference.restName,
-  };
+  Map<String, Object?> toRestJson() {
+    validate();
+    return <String, Object?>{
+      'locationRestriction': locationRestriction.area.toRestJson(),
+      if (languageCode != null) 'languageCode': languageCode,
+      if (regionCode != null) 'regionCode': regionCode,
+      if (includedTypes.isNotEmpty) 'includedTypes': includedTypes,
+      if (excludedTypes.isNotEmpty) 'excludedTypes': excludedTypes,
+      if (includedPrimaryTypes.isNotEmpty)
+        'includedPrimaryTypes': includedPrimaryTypes,
+      if (excludedPrimaryTypes.isNotEmpty)
+        'excludedPrimaryTypes': excludedPrimaryTypes,
+      if (maxResultCount != null) 'maxResultCount': maxResultCount,
+      if (includeFutureOpeningBusinesses)
+        'includeFutureOpeningBusinesses': true,
+      'rankPreference': rankPreference.restName,
+    };
+  }
+}
+
+bool _validPhotoDimension(int? value) =>
+    value == null || (value >= 1 && value <= 4800);
+
+void _validateFields(
+  Set<PlaceField> fields, {
+  required PlacesOperation operation,
+}) {
+  if (fields.isEmpty) {
+    throw PlacesException.validation(
+      'At least one Place field must be requested.',
+      operation: operation,
+      code: 'empty_field_mask',
+    );
+  }
+}
+
+void _validateNonEmptyValues(
+  Iterable<String> values, {
+  required String name,
+  required PlacesOperation operation,
+}) {
+  if (values.any((value) => value.trim().isEmpty)) {
+    throw PlacesException.validation(
+      '$name cannot contain empty values.',
+      operation: operation,
+      code: 'empty_filter_value',
+    );
+  }
+}
+
+void _validateArea(
+  PlacesArea? area, {
+  required PlacesOperation operation,
+  bool requirePositiveRadius = false,
+}) {
+  switch (area) {
+    case null:
+      return;
+    case CircleArea():
+      area.center.validate(operation: operation);
+      if (!area.radiusMeters.isFinite ||
+          (requirePositiveRadius
+              ? area.radiusMeters <= 0
+              : area.radiusMeters < 0) ||
+          area.radiusMeters > 50000) {
+        throw PlacesException.validation(
+          requirePositiveRadius
+              ? 'Circle radius must be greater than 0 and at most 50000 meters.'
+              : 'Circle radius must be between 0 and 50000 meters.',
+          operation: operation,
+          code: 'invalid_circle_radius',
+        );
+      }
+      return;
+    case RectangleArea():
+      area.low.validate(operation: operation);
+      area.high.validate(operation: operation);
+      final fullLongitude =
+          area.low.longitude == -180 && area.high.longitude == 180;
+      final longitudeSpan = area.low.longitude <= area.high.longitude
+          ? area.high.longitude - area.low.longitude
+          : 360 - (area.low.longitude - area.high.longitude);
+      if (area.low.latitude >= area.high.latitude ||
+          area.low.longitude == area.high.longitude ||
+          (area.low.longitude == 180 && area.high.longitude == -180) ||
+          (!fullLongitude && longitudeSpan > 180)) {
+        throw PlacesException.validation(
+          'Rectangle bounds must describe a non-empty viewport.',
+          operation: operation,
+          code: 'invalid_rectangle',
+        );
+      }
+      return;
+  }
+}
+
+Map<String, Object?>? _jsonMap(Object? source) {
+  if (source is! Map<Object?, Object?>) {
+    return null;
+  }
+  return source.cast<String, Object?>();
+}
+
+List<Object?> _jsonList(Object? source) {
+  if (source is! List<Object?>) {
+    return const <Object?>[];
+  }
+  return source;
+}
+
+Object? _deepImmutableJson(Object? source) {
+  if (source is Map<Object?, Object?>) {
+    return Map<String, Object?>.unmodifiable(
+      source.map(
+        (key, value) => MapEntry(key.toString(), _deepImmutableJson(value)),
+      ),
+    );
+  }
+  if (source is List<Object?>) {
+    return List<Object?>.unmodifiable(source.map(_deepImmutableJson));
+  }
+  return source;
+}
+
+Map<String, Object?>? _deepImmutableJsonMap(Object? source) {
+  final value = _deepImmutableJson(source);
+  return value is Map<String, Object?> ? value : null;
+}
+
+List<Map<String, Object?>> _deepImmutableJsonMapList(Object? source) {
+  return List<Map<String, Object?>>.unmodifiable(
+    _jsonList(source).map(_deepImmutableJsonMap).whereType(),
+  );
 }
 
 double? _toDouble(Object? value) {

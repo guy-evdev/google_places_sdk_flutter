@@ -263,7 +263,15 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
 
     if (mode == PlacesAutocompleteOverlayMode.fullscreen) {
       return Scaffold(
-        appBar: AppBar(title: Text(title ?? strings.overlayTitle)),
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          leading: IconButton(
+            tooltip: strings.closeLabel,
+            onPressed: () => Navigator.of(context).maybePop(),
+            icon: const Icon(Icons.close),
+          ),
+          title: Text(title ?? strings.overlayTitle),
+        ),
         body: Padding(padding: const EdgeInsets.all(16), child: field),
       );
     }
@@ -272,9 +280,20 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        Text(
-          title ?? strings.overlayTitle,
-          style: Theme.of(context).textTheme.titleLarge,
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                title ?? strings.overlayTitle,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            IconButton(
+              tooltip: strings.closeLabel,
+              onPressed: () => Navigator.of(context).maybePop(),
+              icon: const Icon(Icons.close),
+            ),
+          ],
         ),
         const SizedBox(height: 16),
         field,

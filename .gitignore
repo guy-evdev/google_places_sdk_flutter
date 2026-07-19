@@ -6,6 +6,7 @@
 .pub/
 pubspec.lock
 build/
+coverage/
 
 # IDE
 .idea/
@@ -22,3 +23,8 @@ example/.idea/
 example/**/*.iml
 example/**/.DS_Store
 example/ios/Flutter/ephemeral/
+
+# Local maintainer files
+/roadmap.md
+/doc/documentation_style.md
+/AGENTS.md

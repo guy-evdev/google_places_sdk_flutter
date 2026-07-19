@@ -1,3 +1,18 @@
+## 0.6.0 - 2026-07-20
+
+- **Deprecated:** Text Search `maxResultCount` (use `pageSize`), string
+  `proxyBaseUrl` (use typed proxy configuration), and direct browser REST
+  fallback. Planned removal or default change: `1.0.0`.
+- **New:** Text Search pagination, cancellation, richer Place data, photo
+  attribution, typed errors, validation, and secure transport options.
+- **Fixed:** autocomplete billing sessions, stale async work, Form behavior,
+  response handling, and diagnostic redaction.
+- **Compatibility:** proxy requests no longer receive Google keys; injected
+  HTTP clients remain caller-owned unless ownership is transferred.
+
+See [What's new in 0.6.0](doc/whats_new_0_6_0.md) for examples, behavior notes,
+and complete details.
+
 ## 0.5.0 - 2026-06-03
 
 - Added mixed autocomplete suggestions with opt-in query prediction support.
