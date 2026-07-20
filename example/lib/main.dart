@@ -878,17 +878,38 @@ class _ConfigurationSummary extends StatelessWidget {
               spacing: 8,
               runSpacing: 2,
               children: <Widget>[
-                Chip(label: Text(configuration.locale.label), visualDensity: VisualDensity.compact),
-                Chip(label: Text(configuration.widgetType.label), visualDensity: VisualDensity.compact),
-                Chip(label: Text(configuration.textSearchMode.label), visualDensity: VisualDensity.compact),
+                Chip(
+                  label: Text(configuration.locale.label),
+                  visualDensity: VisualDensity.compact,
+                ),
+                Chip(
+                  label: Text(configuration.widgetType.label),
+                  visualDensity: VisualDensity.compact,
+                ),
+                Chip(
+                  label: Text(configuration.textSearchMode.label),
+                  visualDensity: VisualDensity.compact,
+                ),
                 if (configuration.textSearchMode == TextSearchMode.paged)
-                  Chip(label: Text('${configuration.pageSize} per page'), visualDensity: VisualDensity.compact),
+                  Chip(
+                    label: Text('${configuration.pageSize} per page'),
+                    visualDensity: VisualDensity.compact,
+                  ),
                 if (configuration.fetchPlaceDetails)
-                  const Chip(label: Text('Place details'), visualDensity: VisualDensity.compact),
+                  const Chip(
+                    label: Text('Place details'),
+                    visualDensity: VisualDensity.compact,
+                  ),
                 if (configuration.fetchTimeZone)
-                  const Chip(label: Text('Time zone'), visualDensity: VisualDensity.compact),
+                  const Chip(
+                    label: Text('Time zone'),
+                    visualDensity: VisualDensity.compact,
+                  ),
                 if (configuration.includeQueryPredictions)
-                  const Chip(label: Text('Query predictions'), visualDensity: VisualDensity.compact),
+                  const Chip(
+                    label: Text('Query predictions'),
+                    visualDensity: VisualDensity.compact,
+                  ),
               ],
             ),
           ],
