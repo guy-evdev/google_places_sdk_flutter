@@ -9,6 +9,7 @@ coverage/
 doc/api/
 doc/documentation_style.md
 roadmap.md
+roadmap_history.md
 pubspec.lock
 example/.dart_tool/
 example/build/

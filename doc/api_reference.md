@@ -28,6 +28,7 @@ callbacks and validation options.
 | `strings` | `PlacesStrings` | `const PlacesStrings()` | Localized widget labels and messages. |
 | `languageCode` | `String?` | `null` | Preferred BCP-47 language code for autocomplete. |
 | `regionCode` | `String?` | `null` | Preferred CLDR region code for autocomplete. |
+| `origin` | `PlaceCoordinates?` | `null` | Makes Google return a straight-line distance for each suggestion, which the widget then renders. Does not bias or restrict results. For device location, see the [README recipe](../README.md#using-the-devices-location-as-the-origin) — the package never requests location permission. |
 | `locationBias` | `LocationBias?` | `null` | Soft geographic preference. Cannot be combined with `locationRestriction`. |
 | `locationRestriction` | `LocationRestriction?` | `null` | Hard geographic restriction. Cannot be combined with `locationBias`. |
 | `includedPrimaryTypes` | `List<String>` | `const <String>[]` | Google primary type filters, such as `restaurant`, `cafe`, or `(cities)`. |
@@ -65,8 +66,10 @@ Additional `PlacesAutocompleteFormField` defaults:
 | `initialValue` | `PlaceSelection?` | `null` | Initial form value. |
 | `autovalidateMode` | `AutovalidateMode` | `AutovalidateMode.disabled` | Standard form autovalidation mode. |
 
-`PlacesAutocompleteOverlay.show()` uses the same autocomplete defaults, with
-these overlay-specific fields:
+`PlacesAutocompleteOverlay.show()` accepts the same autocomplete options as the
+field widgets, including `decoration`, `origin`, `enabled`,
+`showPoweredByGoogle`, `suggestionBuilder`, and `onClearField`, plus these
+overlay-specific fields:
 
 | Field | Type | Default | Notes |
 | --- | --- | --- | --- |
@@ -77,6 +80,11 @@ these overlay-specific fields:
 | `mode` | `PlacesAutocompleteOverlayMode` | `PlacesAutocompleteOverlayMode.dialog` | `dialog` or `fullscreen`. |
 | `useRootNavigator` | `bool` | `true` | Presents and dismisses with the root navigator. |
 | `title` | `String?` | `null` | Falls back to `strings.overlayTitle`. |
+
+When a `PlacesAutocompleteField` in `dialog` or `fullscreen` mode opens an
+overlay, it forwards all of these automatically. Before `0.6.1` it dropped
+`decoration`, `suggestionBuilder`, `showPoweredByGoogle`, `onClearField`, and
+`enabled`.
 
 ## Client and Request Defaults
 
@@ -254,7 +262,12 @@ when Google introduces a value the installed package does not yet know.
 
 For the `0.5.x` to `0.6.0` Text Search deprecation and replacement examples,
 see [What's new in 0.6.0](whats_new_0_6_0.md). `maxResultCount` remains a
-compatibility API until its planned removal in `1.0.0`.
+compatibility API until its planned removal in `1.0.0`. As of `0.6.1` it is
+omitted from the request whenever `pageSize` is set, matching what Google does
+and what the Maps JavaScript path already did.
+
+For the `0.6.1` security fix, the launcher-mode customization fixes, and
+`origin`, see [What's new in 0.6.1](whats_new_0_6_1.md).
 
 ## Place Field Presets
 

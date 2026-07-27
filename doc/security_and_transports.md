@@ -44,6 +44,21 @@ The package never adds `key` or `X-Goog-Api-Key` to a proxy request. Endpoints
 must use HTTPS, except for loopback development, and cannot contain credentials,
 query parameters, or fragments.
 
+### Credentials are never placed in a URL
+
+Every Places operation authenticates with the `X-Goog-Api-Key` header. No API
+key is ever added to a request path or query string, and a regression test
+asserts this across every operation.
+
+The single exception is the Google Time Zone API, which offers no header
+authentication and requires `key` as a query parameter. Applications that treat
+URLs as sensitive should route Time Zone through a proxy `timeZoneEndpoint`,
+which removes the key from the client entirely.
+
+> **Fixed in 0.6.1.** Versions `0.5.0`–`0.6.0` also appended `key` to the photo
+> media URL, where proxy logs, CDN logs, and browser history could record it. If
+> an application called `fetchPhotoMedia` on those versions, rotate that API key.
+
 ### Proxy responsibilities
 
 The proxy should:
@@ -211,6 +226,8 @@ const options = PlacesClientOptions(
 
 ## Version 0.6 compatibility notices
 
+- **0.6.1:** photo media no longer sends the API key as a URL query parameter.
+  Rotate any key used with `fetchPhotoMedia` on `0.5.0`–`0.6.0`.
 - String `PlacesClient.proxyBaseUrl` is deprecated. Use
   `PlacesProxyConfiguration` or `PlacesClient.proxy()`.
 - Proxy requests no longer receive a Google API key from the application. An
@@ -219,4 +236,5 @@ const options = PlacesClientOptions(
 - Direct browser REST fallback is deprecated but remains the `0.6.x` default.
 
 See [What's new in 0.6.0](whats_new_0_6_0.md) for replacement examples and the
-complete release summary.
+complete release summary, and [What's new in 0.6.1](whats_new_0_6_1.md) for the
+photo media credential fix.

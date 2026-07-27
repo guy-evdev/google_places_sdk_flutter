@@ -405,7 +405,11 @@ void main() {
     expect(requestUri.path, '/v1/places/place-1/photos/photo-1/media');
     expect(requestUri.queryParameters['maxWidthPx'], '600');
     expect(requestUri.queryParameters['skipHttpRedirect'], 'true');
-    expect(requestUri.queryParameters['key'], 'api-key');
+    expect(
+      requestUri.queryParameters.containsKey('key'),
+      isFalse,
+      reason: 'the API key authenticates via X-Goog-Api-Key, not the URL',
+    );
     expect(result.photoUri, 'https://example.com/photo.jpg');
   });
 
@@ -730,5 +734,155 @@ void main() {
     );
 
     expect(results.single.id, 'place-1');
+  });
+
+  test('no credential appears in any request URI, for any operation', () async {
+    const apiKey = 'super-secret-api-key';
+    final sentUris = <Uri>[];
+    final backend = PlacesHttpBackend(
+      apiKey: apiKey,
+      timeZoneBaseUrl: 'https://timezone.example.test/tz',
+      httpClient: MockClient((request) async {
+        sentUris.add(request.url);
+        return http.Response(
+          jsonEncode(<String, Object?>{
+            'status': 'OK',
+            'name': 'places/place-1/photos/photo-1/media',
+            'photoUri': 'https://example.com/photo.jpg',
+            'dstOffset': 0,
+            'rawOffset': 0,
+            'timeZoneId': 'UTC',
+            'timeZoneName': 'Coordinated Universal Time',
+            'id': 'place-1',
+            'places': <Object?>[],
+            'suggestions': <Object?>[],
+          }),
+          200,
+        );
+      }),
+    );
+
+    await backend.autocomplete(const AutocompleteRequest(input: 'coffee'));
+    await backend.fetchPlace(const PlaceDetailsRequest(placeId: 'place-1'));
+    await backend.fetchPhotoMedia(
+      const PhotoMediaRequest(
+        name: 'places/place-1/photos/photo-1',
+        maxWidthPx: 400,
+      ),
+    );
+    await backend.searchText(const TextSearchRequest(textQuery: 'coffee'));
+    await backend.searchTextPage(const TextSearchRequest(textQuery: 'coffee'));
+    await backend.searchNearby(
+      NearbySearchRequest(
+        locationRestriction: LocationRestriction.circle(
+          center: const PlaceCoordinates(latitude: 1, longitude: 2),
+          radiusMeters: 500,
+        ),
+      ),
+    );
+
+    expect(sentUris, hasLength(6));
+    for (final uri in sentUris) {
+      expect(
+        uri.toString(),
+        isNot(contains(apiKey)),
+        reason:
+            'Places operations authenticate with the X-Goog-Api-Key header. A '
+            'key in the URI is recorded by proxy logs, CDN logs, and browser '
+            'history. Offending request: $uri',
+      );
+    }
+  });
+
+  test('the Time Zone API is the only operation that keys the URI', () async {
+    // Google's Time Zone API has no header authentication, so this one is
+    // unavoidable. It is asserted explicitly so the exception stays visible.
+    late Uri sentUri;
+    final backend = PlacesHttpBackend(
+      apiKey: 'api-key',
+      httpClient: MockClient((request) async {
+        sentUri = request.url;
+        return http.Response(
+          jsonEncode(<String, Object?>{
+            'status': 'OK',
+            'dstOffset': 0,
+            'rawOffset': 0,
+            'timeZoneId': 'UTC',
+            'timeZoneName': 'Coordinated Universal Time',
+          }),
+          200,
+        );
+      }),
+    );
+
+    await backend.fetchTimeZone(
+      const TimeZoneRequest(
+        location: PlaceCoordinates(latitude: 1, longitude: 2),
+      ),
+    );
+
+    expect(sentUri.queryParameters['key'], 'api-key');
+  });
+
+  test('a custom timeZoneBaseUrl keeps its own query parameters', () async {
+    late Uri sentUri;
+    final backend = PlacesHttpBackend(
+      apiKey: 'api-key',
+      timeZoneBaseUrl: 'https://gateway.example.test/tz?route=timezone',
+      httpClient: MockClient((request) async {
+        sentUri = request.url;
+        return http.Response(
+          jsonEncode(<String, Object?>{
+            'status': 'OK',
+            'dstOffset': 0,
+            'rawOffset': 0,
+            'timeZoneId': 'UTC',
+            'timeZoneName': 'Coordinated Universal Time',
+          }),
+          200,
+        );
+      }),
+    );
+
+    await backend.fetchTimeZone(
+      const TimeZoneRequest(
+        location: PlaceCoordinates(latitude: 1, longitude: 2),
+      ),
+    );
+
+    expect(sentUri.path, '/tz/json');
+    expect(sentUri.queryParameters['route'], 'timezone');
+    // Number formatting differs between the VM and dart2js, so assert the
+    // parameter survived rather than its exact rendering.
+    expect(sentUri.queryParameters, contains('location'));
+    expect(sentUri.queryParameters, contains('timestamp'));
+  });
+
+  test('a reused cancellation token does not accumulate listeners', () async {
+    final backend = PlacesHttpBackend(
+      apiKey: 'api-key',
+      httpClient: MockClient((request) async {
+        return http.Response(
+          jsonEncode(<String, Object?>{'suggestions': <Object?>[]}),
+          200,
+        );
+      }),
+    );
+    final cancellationToken = PlacesCancellationToken();
+
+    for (var i = 0; i < 25; i++) {
+      await backend.autocomplete(
+        const AutocompleteRequest(input: 'coffee'),
+        cancellationToken: cancellationToken,
+      );
+    }
+
+    expect(
+      cancellationToken.debugListenerCount,
+      0,
+      reason:
+          'each request must detach its cancellation listener, or a long-lived '
+          'token retains one closure per request issued',
+    );
   });
 }

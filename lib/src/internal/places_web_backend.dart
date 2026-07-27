@@ -3,6 +3,7 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/browser_client.dart';
 import 'package:http/http.dart' as http;
 import 'package:web/web.dart' as web;
@@ -275,13 +276,13 @@ class PlacesWebBackend implements PlacesBackend {
     PhotoMediaRequest request, {
     PlacesCancellationToken? cancellationToken,
   }) async {
+    // Authentication travels in the X-Goog-Api-Key header, like every other
+    // operation. A key in the query string would be recorded by proxy logs,
+    // CDN logs, and browser history.
     final response = await _get(
       path: request.mediaPath,
       operation: PlacesOperation.photoMedia,
-      queryParameters: <String, String>{
-        ...request.toQueryParameters(),
-        if (!_usesProxy) 'key': apiKey,
-      },
+      queryParameters: request.toQueryParameters(),
       cancellationToken: cancellationToken,
     );
     return PlacePhotoMedia.fromJson(response);
@@ -958,11 +959,7 @@ class PlacesWebBackend implements PlacesBackend {
 
   bool _hasMethod(JSObject value, String property) => value.has(property);
 
-  bool _shouldFallbackToHttp(Object error) {
-    final message = error.toString();
-    return message.contains('Unknown fields requested') ||
-        message.contains('InvalidValueError: in property fields');
-  }
+  bool _shouldFallbackToHttp(Object error) => shouldFallbackToHttp(error);
 
   Future<PlaceData> _fetchPlaceOverHttp(
     PlaceDetailsRequest request, {
@@ -1103,14 +1100,21 @@ class PlacesWebBackend implements PlacesBackend {
         ? ''
         : (path.startsWith('/') ? path.substring(1) : path);
     try {
-      final uri =
-          Uri.parse(
-            treatPathAsAbsolute
-                ? normalizedBase
-                : '$normalizedBase/$normalizedPath',
-          ).replace(
-            queryParameters: queryParameters.isEmpty ? null : queryParameters,
-          );
+      final parsed = Uri.parse(
+        treatPathAsAbsolute
+            ? normalizedBase
+            : '$normalizedBase/$normalizedPath',
+      );
+      // Preserve any query already present on a caller-configured endpoint,
+      // such as a routing token on a custom timeZoneBaseUrl. Our own
+      // parameters win on conflict.
+      final mergedQuery = <String, String>{
+        ...parsed.queryParameters,
+        ...queryParameters,
+      };
+      final uri = parsed.replace(
+        queryParameters: mergedQuery.isEmpty ? null : mergedQuery,
+      );
       if (!uri.isAbsolute ||
           uri.host.isEmpty ||
           (uri.scheme != 'https' && uri.scheme != 'http')) {
@@ -1313,9 +1317,43 @@ class PlacesWebBackend implements PlacesBackend {
   }
 }
 
+/// Whether a Maps JavaScript failure means "this field set is unsupported",
+/// which is the only case the HTTP fallback is meant to cover.
+///
+/// Google ships Maps JavaScript on a weekly channel and can reword these
+/// messages at any time. When that happens web users silently lose the
+/// fallback and get an opaque `javascript_failure` instead, so the match is
+/// deliberately broad and is pinned by a regression test against the wording
+/// Google uses today. If that test starts failing because Google reworded a
+/// message, widen this — never narrow it.
+@visibleForTesting
+bool shouldFallbackToHttp(Object error) {
+  final message = error.toString().toLowerCase();
+  if (message.contains('unknown field')) {
+    return true;
+  }
+  if (!message.contains('field')) {
+    return false;
+  }
+  return message.contains('invalidvalueerror') ||
+      message.contains('not a valid') ||
+      message.contains('unsupported') ||
+      message.contains('unexpected property');
+}
+
+/// Ensures a Time Zone base URL ends in `/json`, without disturbing any query
+/// string the caller configured on it.
 String _normalizeTimeZoneUrl(String value) {
-  final normalized = value.endsWith('/')
-      ? value.substring(0, value.length - 1)
-      : value;
-  return normalized.endsWith('/json') ? normalized : '$normalized/json';
+  final parsed = Uri.tryParse(value);
+  if (parsed == null) {
+    return value;
+  }
+  var path = parsed.path;
+  if (path.endsWith('/')) {
+    path = path.substring(0, path.length - 1);
+  }
+  if (path.endsWith('/json')) {
+    return value;
+  }
+  return parsed.replace(path: '$path/json').toString();
 }

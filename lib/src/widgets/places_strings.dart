@@ -27,6 +27,7 @@ class PlacesStrings {
     this.clearLabel = 'Clear search',
     this.placeSuggestionLabel = 'Place suggestion',
     this.querySuggestionLabel = 'Query suggestion',
+    this.distanceUnitMeters = 'm',
   });
 
   /// Placeholder text shown in the search field.
@@ -61,4 +62,12 @@ class PlacesStrings {
 
   /// Semantic label prefix for query suggestions.
   final String querySuggestionLabel;
+
+  /// Unit suffix appended to the suggestion distance, such as `'m'`.
+  ///
+  /// Suggestions only carry a distance when
+  /// [PlacesAutocompleteField.origin] is set. The value is rendered in meters
+  /// exactly as Google returns it; conversion to kilometers or miles and
+  /// locale-aware number formatting are planned for `0.8.0`.
+  final String distanceUnitMeters;
 }

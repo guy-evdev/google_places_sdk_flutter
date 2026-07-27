@@ -1,20 +1,56 @@
-## 0.6.0 - 2026-07-20
+## 0.6.1
 
-- **Deprecated:** Text Search `maxResultCount` (use `pageSize`), string
+### July 27, 2026
+
+**Security:**
+  * Photo media no longer sends the API key as a URL query
+    parameter. It authenticates with the `X-Goog-Api-Key` header like every other
+    operation. Rotate any key used with `fetchPhotoMedia` on `0.5.0`–`0.6.0`.
+
+**New:** 
+
+* `origin` on the autocomplete widgets, which enables the per-suggestion
+  distance display, plus `PlacesStrings.distanceUnitMeters`. Includes a
+  device-location recipe covering the Android and iOS setup. The package itself
+  never requests location permission.
+
+**Fixed:**
+* Dialog and fullscreen modes now honor `decoration`,
+  `suggestionBuilder`, `showPoweredByGoogle`, `onClearField`, and `enabled`.
+* The fullscreen overlay scrolls. 
+* Retry works on web. 
+* Text Search no longer sends `pageSize` and `maxResultCount` together.
+* Reused cancellation tokens no longer accumulate listeners.
+
+See [What's new in 0.6.1](doc/whats_new_0_6_1.md) for details and examples.
+
+## 0.6.0
+
+### July 20, 2026
+
+**Deprecated:** 
+* Text Search `maxResultCount` (use `pageSize`), string
   `proxyBaseUrl` (use typed proxy configuration), and direct browser REST
   fallback. Planned removal or default change: `1.0.0`.
-- **New:** Text Search pagination, cancellation, richer Place data, photo
+
+**New:** 
+* Text Search pagination, cancellation, richer Place data, photo
   attribution, typed errors, validation, and secure transport options.
-- **Fixed:** autocomplete billing sessions, stale async work, Form behavior,
+
+**Fixed:** 
+* Autocomplete billing sessions, stale async work, Form behavior,
   response handling, and diagnostic redaction.
-- **Compatibility:** proxy requests no longer receive Google keys; injected
-  HTTP clients remain caller-owned unless ownership is transferred.
+
+**Compatibility:** 
+* Proxy requests no longer receive Google keys. 
+* Injected HTTP clients remain caller-owned unless ownership is transferred.
 
 See [What's new in 0.6.0](doc/whats_new_0_6_0.md) for examples, behavior notes,
 and complete details.
 
-## 0.5.0 - 2026-06-03
+## 0.5.0
 
+### June 3, 2026
 - Added mixed autocomplete suggestions with opt-in query prediction support.
 - Added Place Photos (New) media lookup through `fetchPhotoMedia`.
 - Added newer Places API field masks for address descriptors, EV charging,
@@ -24,18 +60,20 @@ and complete details.
 - Enabled stricter analyzer settings and expanded Flutter 3.44 CI coverage.
 - Compacted the README and added a dedicated API reference document.
 
-## 0.4.2 - 2026-04-17
+## 0.4.2
 
+### April 17, 2026
 - Updated Dart docs, README media, and package screenshots.
 
-## 0.4.1 - 2026-04-16
+## 0.4.1
 
+### April 16, 2026
 - Updated README preview images.
 
-## 0.4.0 - 2026-04-16
+## 0.4.0
 
-Initial public release on pub.dev.
-
+### April 16, 2026
+  Initial public release on pub.dev.
 - Added a cross-platform Google Places API (New) client for Flutter.
 - Added inline, dialog, and fullscreen autocomplete widgets.
 - Added optional place-details and time-zone fetching on selection.

@@ -74,6 +74,16 @@ class PlacesClient {
        );
 
   /// Creates a client wired to a custom backend for tests.
+  ///
+  /// **Not usable from outside this package today.** It requires a
+  /// `PlacesBackend`, which is an internal type that the package barrel does
+  /// not export, so consumers cannot name it without importing a `src/` path
+  /// and tripping the `implementation_imports` lint.
+  ///
+  /// A supported extension point — a public `PlacesTransport` with
+  /// `PlacesClient.custom(transport:)` — is planned for `0.9.0`. Until then,
+  /// fake at the `http.Client` level by passing a `MockClient` to the default
+  /// [PlacesClient] constructor, which works on every platform except web.
   PlacesClient.testing({
     required this.apiKey,
     required PlacesBackend backend,
@@ -207,6 +217,11 @@ class PlacesClient {
   /// [TextSearchRequest.pageToken] while keeping the original request filters
   /// unchanged. On web, this operation uses the configured HTTP/proxy path
   /// because Maps JavaScript does not expose REST pagination metadata.
+  ///
+  /// Because of that, on web this method throws under
+  /// [PlacesWebFallbackPolicy.disabled] even though [searchText] succeeds:
+  /// there is no JavaScript route to fall back to. Configure a proxy, or use
+  /// [searchText] when pagination metadata is not needed.
   Future<TextSearchPage> searchTextPage(
     TextSearchRequest request, {
     PlacesCancellationToken? cancellationToken,

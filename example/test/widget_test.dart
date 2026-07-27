@@ -278,17 +278,53 @@ void main() {
     await _toggleConfigurationSwitch(tester, 'Fetch Place Details');
     await _toggleConfigurationSwitch(tester, 'Fetch Time Zone');
     await _toggleConfigurationSwitch(tester, 'Include query predictions');
+    await _toggleConfigurationSwitch(tester, 'Show distance from an origin');
     await _applyConfiguration(tester);
 
     expect(find.text('Place details'), findsNothing);
     expect(find.text('Time zone'), findsOneWidget);
     expect(find.text('Query predictions'), findsOneWidget);
+    expect(find.text('Distance from origin'), findsOneWidget);
     final field = tester.widget<PlacesAutocompleteField>(
       find.byType(PlacesAutocompleteField),
     );
     expect(field.fetchPlaceDetailsOnSelection, isFalse);
     expect(field.fetchTimeZoneOnSelection, isTrue);
     expect(field.includeQueryPredictions, isTrue);
+    expect(field.origin, DemoConfiguration.demoOrigin);
+    await client.close();
+  });
+
+  testWidgets('the field decoration survives every launcher mode', (
+    tester,
+  ) async {
+    // Dialog and fullscreen launchers used to drop the field's decoration
+    // entirely, because the overlay never received it.
+    final client = _clientFor(_RecordingBackend());
+    await tester.pumpWidget(ExampleApp(client: client));
+
+    expect(find.text('Address'), findsOneWidget);
+
+    for (final mode in <String>['Dialog', 'Fullscreen']) {
+      await _openConfiguration(tester);
+      await _selectDropdown(tester, 'configuration-widget-type', mode);
+      await _applyConfiguration(tester);
+
+      await tester.tap(find.text('Click to Search'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byType(PlacesAutocompleteOverlay),
+          matching: find.text('Address'),
+        ),
+        findsOneWidget,
+        reason: '$mode mode must honour the field decoration',
+      );
+
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+    }
     await client.close();
   });
 

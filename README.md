@@ -12,7 +12,7 @@ client APIs when the application needs more control.
 - [Preview](#preview)
 - [Quick start](#quick-start)
 - [Common usage](#common-usage)
-- [What's new in 0.6.0](#whats-new-in-060)
+- [What's new](#whats-new)
 - [Advanced usage](#advanced-usage)
 - [Example app](#example-app)
 - [More documentation](#more-documentation)
@@ -164,6 +164,106 @@ if (page.nextPageToken case final token?) {
 }
 ```
 
+### Show the distance to each suggestion
+
+Set `origin` and Google returns a distance for every suggestion, which the field
+renders beside it:
+
+```dart
+PlacesAutocompleteField(
+  client: client,
+  origin: const PlaceCoordinates(latitude: 40.7580, longitude: -73.9855),
+)
+```
+
+Two things to know before you use it:
+
+- Distances are **straight-line**, not driving or walking distance. They will
+  not match what a maps app shows for the same pair.
+- `origin` only computes the number. It does not change which places are
+  returned — use `locationBias` or `locationRestriction` for that.
+
+Without `origin`, no distance is requested and none is rendered. That is the
+default.
+
+#### Using the device's location as the origin
+
+**This package never requests location permission, and does not depend on any
+location library.** Your app fetches the coordinates and passes them in. Any
+package works; the example below uses
+[`geolocator`](https://pub.dev/packages/geolocator).
+
+Add the platform configuration first, or the request fails at runtime:
+
+`android/app/src/main/AndroidManifest.xml`, inside `<manifest>`:
+
+```xml
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+```
+
+`ios/Runner/Info.plist`, inside the top-level `<dict>`:
+
+```xml
+<key>NSLocationWhenInUseUsageDescription</key>
+<string>Used to show how far each place is from you.</string>
+```
+
+On web the browser prompts on its own, but the page must be served over HTTPS
+(or `localhost`). macOS needs a location entitlement in both
+`macos/Runner/DebugProfile.entitlements` and `Release.entitlements`. Desktop
+support otherwise depends on the location package you choose, not on this one.
+
+Then resolve the coordinates and hand them to the field:
+
+```dart
+class _SearchPageState extends State<SearchPage> {
+  PlaceCoordinates? _origin;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOrigin();
+  }
+
+  Future<void> _loadOrigin() async {
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      return;
+    }
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      return;
+    }
+    final position = await Geolocator.getCurrentPosition();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _origin = PlaceCoordinates(
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PlacesAutocompleteField(client: widget.client, origin: _origin);
+  }
+}
+```
+
+Every early return leaves `_origin` as `null`, so search keeps working and
+simply shows no distances. Denying permission degrades the feature rather than
+breaking the field.
+
+A first GPS fix can take several seconds. Resolving it in `initState` as above
+means the field is usable immediately and distances appear once the fix lands —
+do not block the search on it.
+
 ### Display photo attribution
 
 When a returned photo includes authors, display Google's supplied attribution
@@ -175,18 +275,27 @@ PlacesPhotoAttribution(photo: photo)
 
 `PlacePhoto.authors` is available when a custom attribution layout is needed.
 
-## What's new in 0.6.0
+## What's new
 
-Version `0.6.0` adds Text Search pagination, cancellation, typed errors, richer
+Version `0.6.1` is a bug-fix release. Dialog and fullscreen modes now honor the
+field's `decoration`, `suggestionBuilder`, `showPoweredByGoogle`, `onClearField`,
+and `enabled`; Retry works on web; and the new `origin` option makes Google
+return a distance for each suggestion, which the widget renders.
+
+It also contains a security fix: photo media no longer sends the API key as a
+URL query parameter. **Rotate any key used with `fetchPhotoMedia` on
+`0.5.0`–`0.6.0`.**
+
+Version `0.6.0` added Text Search pagination, cancellation, typed errors, richer
 Place data, complete Form reset behavior, photo attribution helpers, and safer
-proxy and web options.
+proxy and web options. There are no public API removals or required source
+migrations in either release. Text Search `maxResultCount`, string
+`proxyBaseUrl`, and direct browser REST fallback are deprecated, with
+replacements available now.
 
-There are no public API removals or required source migrations. Text Search
-`maxResultCount`, string `proxyBaseUrl`, and direct browser REST fallback are
-deprecated, with replacements available now.
-
-See [What's new in 0.6.0](doc/whats_new_0_6_0.md) for deprecation examples,
-compatibility notices, and the extended feature summary.
+See [What's new in 0.6.1](doc/whats_new_0_6_1.md) and
+[What's new in 0.6.0](doc/whats_new_0_6_0.md) for examples, compatibility
+notices, and the extended feature summaries.
 
 ## Advanced usage
 
@@ -336,6 +445,7 @@ flutter run --dart-define=GOOGLE_MAPS_API_KEY=your_key_here
 
 ## More documentation
 
+- [What's new in 0.6.1](doc/whats_new_0_6_1.md)
 - [What's new in 0.6.0](doc/whats_new_0_6_0.md)
 - [API reference and defaults](doc/api_reference.md)
 - [Security and transport configuration](doc/security_and_transports.md)

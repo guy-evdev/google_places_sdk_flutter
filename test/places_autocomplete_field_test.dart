@@ -185,6 +185,27 @@ class _SlowAutocompleteBackend extends _FakeBackend {
   }
 }
 
+class _DistanceBackend extends _FakeBackend {
+  @override
+  Future<List<PlaceSuggestion>> autocomplete(
+    AutocompleteRequest request, {
+    PlacesCancellationToken? cancellationToken,
+  }) async {
+    lastAutocompleteRequest = request;
+    return <PlaceSuggestion>[
+      PlaceSuggestion(
+        placeId: 'place-1',
+        placeResourceName: 'places/place-1',
+        fullText: const StructuredText(text: 'Coffee Lab, Main Street'),
+        primaryText: const StructuredText(text: 'Coffee Lab'),
+        secondaryText: const StructuredText(text: 'Main Street'),
+        // Google only populates this when the request carries an origin.
+        distanceMeters: request.origin == null ? null : 1234,
+      ),
+    ];
+  }
+}
+
 class _RetryBackend extends _FakeBackend {
   int attempts = 0;
   final Completer<List<PlaceSuggestion>> firstAttempt =
@@ -1178,5 +1199,318 @@ void main() {
       find.bySemanticsLabel('Google attribution localized'),
       findsOneWidget,
     );
+  });
+
+  group('field options reach every field mode', () {
+    // Standing rule from the 0.6.1 audit: dialog and fullscreen used to
+    // silently drop decoration, suggestionBuilder, showPoweredByGoogle,
+    // onClearField, and enabled, because _openOverlay never forwarded them and
+    // PlacesAutocompleteOverlay never declared them. Every option added to
+    // PlacesAutocompleteField must be proven to reach all three modes.
+    // In launcher modes the read-only launcher field stays mounted behind the
+    // overlay, so assertions must be scoped to the overlay itself. Otherwise a
+    // test would pass on the launcher's copy of the option and prove nothing.
+    Finder scopeFor(PlacesAutocompleteFieldMode fieldMode) =>
+        fieldMode == PlacesAutocompleteFieldMode.inline
+        ? find.byType(PlacesAutocompleteField)
+        : find.byType(PlacesAutocompleteOverlay);
+
+    Finder within(PlacesAutocompleteFieldMode fieldMode, Finder matching) =>
+        find.descendant(of: scopeFor(fieldMode), matching: matching);
+
+    Future<void> openMode(
+      WidgetTester tester,
+      PlacesAutocompleteFieldMode fieldMode,
+      Widget field,
+    ) async {
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: field)));
+      if (fieldMode != PlacesAutocompleteFieldMode.inline) {
+        await tester.tap(find.byType(TextField));
+        await tester.pumpAndSettle();
+      }
+    }
+
+    Future<void> search(
+      WidgetTester tester,
+      PlacesAutocompleteFieldMode fieldMode,
+    ) async {
+      await tester.enterText(within(fieldMode, find.byType(TextField)), 'cof');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+    }
+
+    for (final fieldMode in PlacesAutocompleteFieldMode.values) {
+      testWidgets('${fieldMode.name} honours decoration', (tester) async {
+        final client = PlacesClient.testing(
+          apiKey: 'test',
+          backend: _FakeBackend(),
+        );
+
+        await openMode(
+          tester,
+          fieldMode,
+          PlacesAutocompleteField(
+            client: client,
+            fieldMode: fieldMode,
+            decoration: const InputDecoration(labelText: 'Delivery address'),
+          ),
+        );
+
+        expect(
+          within(fieldMode, find.text('Delivery address')),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('${fieldMode.name} honours showPoweredByGoogle: false', (
+        tester,
+      ) async {
+        final client = PlacesClient.testing(
+          apiKey: 'test',
+          backend: _FakeBackend(),
+        );
+
+        await openMode(
+          tester,
+          fieldMode,
+          PlacesAutocompleteField(
+            client: client,
+            fieldMode: fieldMode,
+            showPoweredByGoogle: false,
+          ),
+        );
+        await search(tester, fieldMode);
+
+        expect(within(fieldMode, find.text('Coffee Lab')), findsWidgets);
+        expect(find.bySemanticsLabel('Powered by Google'), findsNothing);
+      });
+
+      testWidgets('${fieldMode.name} honours suggestionBuilder', (
+        tester,
+      ) async {
+        final client = PlacesClient.testing(
+          apiKey: 'test',
+          backend: _FakeBackend(),
+        );
+
+        await openMode(
+          tester,
+          fieldMode,
+          PlacesAutocompleteField(
+            client: client,
+            fieldMode: fieldMode,
+            suggestionBuilder: (context, suggestion) =>
+                Text('custom ${suggestion.placeId}'),
+          ),
+        );
+        await search(tester, fieldMode);
+
+        expect(within(fieldMode, find.text('custom place-1')), findsOneWidget);
+      });
+
+      testWidgets('${fieldMode.name} honours origin', (tester) async {
+        final backend = _DistanceBackend();
+        final client = PlacesClient.testing(apiKey: 'test', backend: backend);
+
+        await openMode(
+          tester,
+          fieldMode,
+          PlacesAutocompleteField(
+            client: client,
+            fieldMode: fieldMode,
+            origin: const PlaceCoordinates(latitude: 40.7, longitude: -74.0),
+            strings: const PlacesStrings(distanceUnitMeters: 'meters'),
+          ),
+        );
+        await search(tester, fieldMode);
+
+        expect(backend.lastAutocompleteRequest?.origin?.latitude, 40.7);
+        expect(within(fieldMode, find.text('1234 meters')), findsOneWidget);
+      });
+    }
+  });
+
+  testWidgets('no origin means no distance is requested or rendered', (
+    tester,
+  ) async {
+    final backend = _DistanceBackend();
+    final client = PlacesClient.testing(apiKey: 'test', backend: backend);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: PlacesAutocompleteField(client: client)),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), 'cof');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    expect(backend.lastAutocompleteRequest?.origin, isNull);
+    expect(find.textContaining('1234'), findsNothing);
+  });
+
+  testWidgets('fullscreen overlay scrolls instead of overflowing', (
+    tester,
+  ) async {
+    // A short viewport with the keyboard up, five suggestions, and the
+    // attribution row used to overflow: fullscreen mode had no scroll view
+    // while dialog mode did.
+    tester.view.physicalSize = const Size(400, 500);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final client = PlacesClient.testing(
+      apiKey: 'test',
+      backend: _FakeBackend(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlacesAutocompleteField(
+            client: client,
+            fieldMode: PlacesAutocompleteFieldMode.fullscreen,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'cof');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      find.descendant(
+        of: find.byType(Scaffold),
+        matching: find.byType(SingleChildScrollView),
+      ),
+      findsWidgets,
+    );
+  });
+
+  testWidgets('Escape closes the suggestion list', (tester) async {
+    final client = PlacesClient.testing(
+      apiKey: 'test',
+      backend: _FakeBackend(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: PlacesAutocompleteField(client: client)),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), 'cof');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    expect(find.text('Coffee Lab'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Coffee Lab'), findsNothing);
+  });
+
+  testWidgets('retry actually retries, including when it takes focus', (
+    tester,
+  ) async {
+    // On web the retry TextButton takes focus from the field. That used to
+    // trip the focus listener into treating the tap as session abandonment:
+    // the search UI closed and no second request was ever issued, so Retry
+    // silently did nothing in a browser. This test fails on the Chrome lane
+    // without the pointer guard around the whole search surface.
+    final backend = _RetryBackend();
+    final client = PlacesClient.testing(apiKey: 'test', backend: backend);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: PlacesAutocompleteField(client: client)),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), 'cof');
+    await tester.pump(const Duration(milliseconds: 350));
+    backend.failFirstAttempt();
+    await tester.pumpAndSettle();
+    expect(find.text('Retry'), findsOneWidget);
+    expect(backend.attempts, 1);
+
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+
+    expect(backend.attempts, 2);
+    expect(find.text('Coffee Lab'), findsOneWidget);
+  });
+
+  testWidgets('retry issues exactly one more request', (tester) async {
+    // _retrySearch now cancels any pending debounce before searching. Typing
+    // clears the error and hides the Retry button, so that guard is defensive
+    // rather than a user-reachable double-billing path; what is reachable, and
+    // what this pins, is that a retry never bills more than one extra call.
+    final backend = _RetryBackend();
+    final client = PlacesClient.testing(apiKey: 'test', backend: backend);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: PlacesAutocompleteField(client: client)),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), 'cof');
+    await tester.pump(const Duration(milliseconds: 350));
+    backend.failFirstAttempt();
+    await tester.pumpAndSettle();
+    expect(find.text('Retry'), findsOneWidget);
+    expect(backend.attempts, 1);
+
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(backend.attempts, 2);
+
+    // Nothing left pending may fire a third, billed request.
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+    expect(backend.attempts, 2);
+    expect(find.text('Coffee Lab'), findsOneWidget);
+  });
+
+  testWidgets('the field keeps focus and decoration while a selection loads', (
+    tester,
+  ) async {
+    final backend = _SlowDetailsBackend();
+    final client = PlacesClient.testing(apiKey: 'test', backend: backend);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlacesAutocompleteField(
+            client: client,
+            fetchPlaceDetailsOnSelection: true,
+            decoration: const InputDecoration(labelText: 'Pickup address'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), 'cof');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Coffee Lab'));
+    await tester.pump();
+
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    // Previously enabled: false here, which dropped focus and flickered the
+    // decoration into its disabled colours mid-selection.
+    expect(tester.widget<TextField>(find.byType(TextField)).enabled, isTrue);
+    expect(find.text('Pickup address'), findsOneWidget);
+
+    backend.completer.complete(const PlaceData(id: 'place-1'));
+    await tester.pumpAndSettle();
   });
 }

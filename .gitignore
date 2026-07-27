@@ -26,5 +26,9 @@ example/ios/Flutter/ephemeral/
 
 # Local maintainer files
 /roadmap.md
+/roadmap_history.md
 /doc/documentation_style.md
 /AGENTS.md
+
+# FVM Version Cache
+.fvm/

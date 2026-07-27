@@ -7,21 +7,14 @@ const _proxyPlacesUrl = String.fromEnvironment('PLACES_PROXY_URL');
 const _proxyTimeZoneUrl = String.fromEnvironment('PLACES_PROXY_TIME_ZONE_URL');
 const _proxyAccessToken = String.fromEnvironment('PLACES_PROXY_ACCESS_TOKEN');
 
-bool get _hasClientConfiguration =>
-    _apiKey.isNotEmpty || _proxyPlacesUrl.isNotEmpty;
+bool get _hasClientConfiguration => _apiKey.isNotEmpty || _proxyPlacesUrl.isNotEmpty;
 
 PlacesClient _createPlacesClient() {
   if (_proxyPlacesUrl.isNotEmpty) {
     return PlacesClient.proxy(
       placesEndpoint: Uri.parse(_proxyPlacesUrl),
-      timeZoneEndpoint: _proxyTimeZoneUrl.isEmpty
-          ? null
-          : Uri.parse(_proxyTimeZoneUrl),
-      authentication: _proxyAccessToken.isEmpty
-          ? null
-          : (_) => <String, String>{
-              'Authorization': 'Bearer $_proxyAccessToken',
-            },
+      timeZoneEndpoint: _proxyTimeZoneUrl.isEmpty ? null : Uri.parse(_proxyTimeZoneUrl),
+      authentication: _proxyAccessToken.isEmpty ? null : (_) => <String, String>{'Authorization': 'Bearer $_proxyAccessToken'},
     );
   }
   return PlacesClient(
@@ -91,8 +84,13 @@ class DemoConfiguration {
     this.fetchPlaceDetails = true,
     this.fetchTimeZone = false,
     this.includeQueryPredictions = false,
+    this.showDistanceFromOrigin = false,
     this.pageSize = 5,
   });
+
+  /// Fixed origin used by the distance demo, so the sample needs no location
+  /// permission. Real apps would pass the device's current coordinates.
+  static const demoOrigin = PlaceCoordinates(latitude: 40.7580, longitude: -73.9855);
 
   final DemoLocale locale;
   final WidgetType widgetType;
@@ -100,7 +98,12 @@ class DemoConfiguration {
   final bool fetchPlaceDetails;
   final bool fetchTimeZone;
   final bool includeQueryPredictions;
+  final bool showDistanceFromOrigin;
   final int pageSize;
+
+  /// Origin handed to the autocomplete widgets, or `null` when the demo is
+  /// not asking Google for distances.
+  PlaceCoordinates? get origin => showDistanceFromOrigin ? demoOrigin : null;
 
   DemoConfiguration copyWith({
     DemoLocale? locale,
@@ -109,6 +112,7 @@ class DemoConfiguration {
     bool? fetchPlaceDetails,
     bool? fetchTimeZone,
     bool? includeQueryPredictions,
+    bool? showDistanceFromOrigin,
     int? pageSize,
   }) {
     return DemoConfiguration(
@@ -117,8 +121,8 @@ class DemoConfiguration {
       textSearchMode: textSearchMode ?? this.textSearchMode,
       fetchPlaceDetails: fetchPlaceDetails ?? this.fetchPlaceDetails,
       fetchTimeZone: fetchTimeZone ?? this.fetchTimeZone,
-      includeQueryPredictions:
-          includeQueryPredictions ?? this.includeQueryPredictions,
+      includeQueryPredictions: includeQueryPredictions ?? this.includeQueryPredictions,
+      showDistanceFromOrigin: showDistanceFromOrigin ?? this.showDistanceFromOrigin,
       pageSize: pageSize ?? this.pageSize,
     );
   }
@@ -137,8 +141,7 @@ class ExampleApp extends StatefulWidget {
 class _ExampleAppState extends State<ExampleApp> {
   late final PlacesClient _client;
   late final bool _ownsClient;
-  final PlacesAutocompleteController _controller =
-      PlacesAutocompleteController();
+  final PlacesAutocompleteController _controller = PlacesAutocompleteController();
   final TextEditingController _textSearchController = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
@@ -166,6 +169,12 @@ class _ExampleAppState extends State<ExampleApp> {
 
   bool get _includeQueryPredictions => _configuration.includeQueryPredictions;
 
+  PlaceCoordinates? get _origin => _configuration.origin;
+
+  /// Decoration shared by every widget mode, so the demo shows that dialog and
+  /// fullscreen launchers honour field customization too.
+  InputDecoration get _fieldDecoration => const InputDecoration(labelText: 'Address', prefixIcon: Icon(Icons.place_outlined), border: OutlineInputBorder());
+
   @override
   void initState() {
     super.initState();
@@ -190,33 +199,14 @@ class _ExampleAppState extends State<ExampleApp> {
       title: 'google_places_sdk_flutter example',
       debugShowCheckedModeBanner: false,
       locale: _demoLocale.locale,
-      supportedLocales: DemoLocale.values
-          .map((locale) => locale.locale)
-          .toList(),
-      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      builder: (context, child) => Directionality(
-        textDirection: _demoLocale.isRtl
-            ? TextDirection.rtl
-            : TextDirection.ltr,
-        child: child!,
-      ),
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0B5D3B)),
-        useMaterial3: true,
-      ),
+      supportedLocales: DemoLocale.values.map((locale) => locale.locale).toList(),
+      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[GlobalMaterialLocalizations.delegate, GlobalWidgetsLocalizations.delegate, GlobalCupertinoLocalizations.delegate],
+      builder: (context, child) => Directionality(textDirection: _demoLocale.isRtl ? TextDirection.rtl : TextDirection.ltr, child: child!),
+      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0B5D3B)), useMaterial3: true),
       home: Builder(
         builder: (appContext) => Scaffold(
           appBar: AppBar(title: const Text('google_places_sdk_flutter')),
-          body: Padding(
-            padding: const EdgeInsets.all(16),
-            child: widget.client == null && !_hasClientConfiguration
-                ? const _MissingConfigurationNotice()
-                : _buildContent(appContext),
-          ),
+          body: Padding(padding: const EdgeInsets.all(16), child: widget.client == null && !_hasClientConfiguration ? const _MissingConfigurationNotice() : _buildContent(appContext)),
         ),
       ),
     );
@@ -227,15 +217,9 @@ class _ExampleAppState extends State<ExampleApp> {
 
     return ListView(
       children: <Widget>[
-        _ConfigurationSummary(
-          configuration: _configuration,
-          onOpen: () => _openConfiguration(context),
-        ),
+        _ConfigurationSummary(configuration: _configuration, onOpen: () => _openConfiguration(context)),
         const SizedBox(height: 24),
-        Text(
-          'Autocomplete widget',
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
+        Text('Autocomplete widget', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
         if (_widgetType == WidgetType.textField) ...[
           const Text('Text Field Type', textAlign: TextAlign.center),
@@ -247,18 +231,9 @@ class _ExampleAppState extends State<ExampleApp> {
             children: <Widget>[
               SegmentedButton<PlacesAutocompleteFieldMode>(
                 segments: const <ButtonSegment<PlacesAutocompleteFieldMode>>[
-                  ButtonSegment<PlacesAutocompleteFieldMode>(
-                    value: PlacesAutocompleteFieldMode.inline,
-                    label: Text('Inline'),
-                  ),
-                  ButtonSegment<PlacesAutocompleteFieldMode>(
-                    value: PlacesAutocompleteFieldMode.dialog,
-                    label: Text('Dialog'),
-                  ),
-                  ButtonSegment<PlacesAutocompleteFieldMode>(
-                    value: PlacesAutocompleteFieldMode.fullscreen,
-                    label: Text('Fullscreen'),
-                  ),
+                  ButtonSegment<PlacesAutocompleteFieldMode>(value: PlacesAutocompleteFieldMode.inline, label: Text('Inline')),
+                  ButtonSegment<PlacesAutocompleteFieldMode>(value: PlacesAutocompleteFieldMode.dialog, label: Text('Dialog')),
+                  ButtonSegment<PlacesAutocompleteFieldMode>(value: PlacesAutocompleteFieldMode.fullscreen, label: Text('Fullscreen')),
                 ],
                 selected: <PlacesAutocompleteFieldMode>{_fieldMode},
                 onSelectionChanged: (selection) {
@@ -273,9 +248,11 @@ class _ExampleAppState extends State<ExampleApp> {
           PlacesAutocompleteField(
             client: _client,
             controller: _controller,
+            decoration: _fieldDecoration,
             strings: strings,
             languageCode: _demoLocale.locale.languageCode,
             regionCode: _demoLocale.locale.countryCode?.toLowerCase(),
+            origin: _origin,
             fetchPlaceDetailsOnSelection: _fetchPlaceDetails,
             fetchTimeZoneOnSelection: _fetchTimeZoneOnSelection,
             selectionFields: _exampleDetailsFields,
@@ -317,16 +294,16 @@ class _ExampleAppState extends State<ExampleApp> {
             child: PlacesAutocompleteFormField(
               client: _client,
               controller: _controller,
+              decoration: _fieldDecoration,
               strings: strings,
               languageCode: _demoLocale.locale.languageCode,
               regionCode: _demoLocale.locale.countryCode?.toLowerCase(),
+              origin: _origin,
               fetchPlaceDetailsOnSelection: _fetchPlaceDetails,
               fetchTimeZoneOnSelection: _fetchTimeZoneOnSelection,
               selectionFields: _exampleDetailsFields,
               includeQueryPredictions: _includeQueryPredictions,
-              validator: (selection) => selection == null
-                  ? 'Choose a place before submitting.'
-                  : null,
+              validator: (selection) => selection == null ? 'Choose a place before submitting.' : null,
               onSelection: (selection) {
                 setState(() {
                   _selection = selection;
@@ -357,33 +334,20 @@ class _ExampleAppState extends State<ExampleApp> {
             spacing: 12,
             alignment: WrapAlignment.center,
             children: <Widget>[
-              FilledButton(
-                onPressed: () => _formKey.currentState?.validate(),
-                child: const Text('Validate form'),
-              ),
-              OutlinedButton(
-                onPressed: () => _formKey.currentState?.reset(),
-                child: const Text('Reset form'),
-              ),
+              FilledButton(onPressed: () => _formKey.currentState?.validate(), child: const Text('Validate form')),
+              OutlinedButton(onPressed: () => _formKey.currentState?.reset(), child: const Text('Reset form')),
             ],
           ),
           const SizedBox(height: 24),
         ],
-        if (_widgetType == WidgetType.dialog ||
-            _widgetType == WidgetType.fullscreen) ...[
+        if (_widgetType == WidgetType.dialog || _widgetType == WidgetType.fullscreen) ...[
           Wrap(
             spacing: 12,
             runSpacing: 12,
             alignment: WrapAlignment.center,
             children: <Widget>[
               FilledButton.tonal(
-                onPressed: () => _openOverlay(
-                  context,
-                  strings,
-                  mode: _widgetType == WidgetType.fullscreen
-                      ? PlacesAutocompleteOverlayMode.fullscreen
-                      : PlacesAutocompleteOverlayMode.dialog,
-                ),
+                onPressed: () => _openOverlay(context, strings, mode: _widgetType == WidgetType.fullscreen ? PlacesAutocompleteOverlayMode.fullscreen : PlacesAutocompleteOverlayMode.dialog),
                 child: const Text('Click to Search'),
               ),
             ],
@@ -415,27 +379,15 @@ class _ExampleAppState extends State<ExampleApp> {
                       _selection!.place!.administrativeArea != null ||
                       _selection!.place!.postalCode != null ||
                       _selection!.place!.country != null) ...<Widget>[
-                    Text(
-                      'Typed address fields',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
+                    Text('Typed address fields', style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 8),
-                    if (_selection!.place!.route != null)
-                      Text('route: ${_selection!.place!.route}'),
-                    if (_selection!.place!.streetNumber != null)
-                      Text('streetNumber: ${_selection!.place!.streetNumber}'),
-                    if (_selection!.place!.locality != null)
-                      Text('locality: ${_selection!.place!.locality}'),
-                    if (_selection!.place!.administrativeArea != null)
-                      Text(
-                        'administrativeArea: ${_selection!.place!.administrativeArea}',
-                      ),
-                    if (_selection!.place!.postalCode != null)
-                      Text('postalCode: ${_selection!.place!.postalCode}'),
-                    if (_selection!.place!.country != null)
-                      Text('country: ${_selection!.place!.country}'),
-                    if (_selection!.place!.countryCode != null)
-                      Text('countryCode: ${_selection!.place!.countryCode}'),
+                    if (_selection!.place!.route != null) Text('route: ${_selection!.place!.route}'),
+                    if (_selection!.place!.streetNumber != null) Text('streetNumber: ${_selection!.place!.streetNumber}'),
+                    if (_selection!.place!.locality != null) Text('locality: ${_selection!.place!.locality}'),
+                    if (_selection!.place!.administrativeArea != null) Text('administrativeArea: ${_selection!.place!.administrativeArea}'),
+                    if (_selection!.place!.postalCode != null) Text('postalCode: ${_selection!.place!.postalCode}'),
+                    if (_selection!.place!.country != null) Text('country: ${_selection!.place!.country}'),
+                    if (_selection!.place!.countryCode != null) Text('countryCode: ${_selection!.place!.countryCode}'),
                     const SizedBox(height: 16),
                   ],
                   if (_selection!.place!.googleMapsTypeLabel != null ||
@@ -443,10 +395,7 @@ class _ExampleAppState extends State<ExampleApp> {
                       _selection!.place!.priceRange != null ||
                       _selection!.place!.timeZone != null ||
                       _selection!.place!.transitStation != null) ...<Widget>[
-                    Text(
-                      'Current Place resource fields',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
+                    Text('Current Place resource fields', style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 8),
                     if (_selection!.place!.googleMapsTypeLabel != null)
                       Text(
@@ -466,8 +415,7 @@ class _ExampleAppState extends State<ExampleApp> {
                         '${_selection!.place!.priceRange!.startPrice!.currencyCode} '
                         '${_selection!.place!.priceRange!.startPrice!.units}',
                       ),
-                    if (_selection!.place!.timeZone != null)
-                      Text('placeTimeZone: ${_selection!.place!.timeZone!.id}'),
+                    if (_selection!.place!.timeZone != null) Text('placeTimeZone: ${_selection!.place!.timeZone!.id}'),
                     if (_selection!.place!.transitStation != null)
                       Text(
                         'transitStation: '
@@ -492,18 +440,12 @@ class _ExampleAppState extends State<ExampleApp> {
           ),
         if (_selection?.timeZone != null)
           Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: SelectableText(prettyJson(_selection!.timeZone!.rawData)),
-            ),
+            child: Padding(padding: const EdgeInsets.all(16), child: SelectableText(prettyJson(_selection!.timeZone!.rawData))),
           ),
         if (_autocompleteError != null)
           Card(
             color: Theme.of(context).colorScheme.errorContainer,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(_safeErrorText(_autocompleteError!)),
-            ),
+            child: Padding(padding: const EdgeInsets.all(16), child: Text(_safeErrorText(_autocompleteError!))),
           ),
         const Divider(height: 40),
         _buildTextSearchSection(context),
@@ -522,23 +464,19 @@ class _ExampleAppState extends State<ExampleApp> {
     return 'Unexpected error. See the debug console for development details.';
   }
 
-  Future<void> _openOverlay(
-    BuildContext context,
-    PlacesStrings strings, {
-    PlacesAutocompleteOverlayMode mode = PlacesAutocompleteOverlayMode.dialog,
-  }) async {
+  Future<void> _openOverlay(BuildContext context, PlacesStrings strings, {PlacesAutocompleteOverlayMode mode = PlacesAutocompleteOverlayMode.dialog}) async {
     final selection = await PlacesAutocompleteOverlay.show(
       context,
       client: _client,
       mode: mode,
+      decoration: _fieldDecoration,
       strings: strings,
       languageCode: _demoLocale.locale.languageCode,
       regionCode: _demoLocale.locale.countryCode?.toLowerCase(),
+      origin: _origin,
       fetchPlaceDetailsOnSelection: _fetchPlaceDetails,
       fetchTimeZoneOnSelection: _fetchTimeZoneOnSelection,
-      selectionFields: mode == PlacesAutocompleteOverlayMode.dialog
-          ? PlaceFieldPresets.recommended
-          : PlaceFieldPresets.minimal,
+      selectionFields: mode == PlacesAutocompleteOverlayMode.dialog ? PlaceFieldPresets.recommended : PlaceFieldPresets.minimal,
       includeQueryPredictions: _includeQueryPredictions,
       onQuerySelection: (selection) {
         setState(() {
@@ -572,11 +510,7 @@ class _ExampleAppState extends State<ExampleApp> {
       children: <Widget>[
         Text('Text Search', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
-        Text(
-          isPaged
-              ? 'Search with pagination metadata and load additional pages.'
-              : 'Search once and receive a simple list of places.',
-        ),
+        Text(isPaged ? 'Search with pagination metadata and load additional pages.' : 'Search once and receive a simple list of places.'),
         const SizedBox(height: 12),
         TextField(
           key: const ValueKey<String>('text-search-input'),
@@ -584,17 +518,12 @@ class _ExampleAppState extends State<ExampleApp> {
           textInputAction: TextInputAction.search,
           decoration: InputDecoration(
             labelText: 'Text Search query',
-            hintText: 'For example: coffee near Tel Aviv',
+            hintText: 'For example: Coffee near Times Square',
             border: const OutlineInputBorder(),
             errorText: _textSearchValidationError,
             suffixIcon: _textSearchController.text.isEmpty
                 ? null
-                : IconButton(
-                    key: const ValueKey<String>('text-search-clear'),
-                    tooltip: 'Clear Text Search',
-                    onPressed: _clearTextSearch,
-                    icon: const Icon(Icons.clear),
-                  ),
+                : IconButton(key: const ValueKey<String>('text-search-clear'), tooltip: 'Clear Text Search', onPressed: _clearTextSearch, icon: const Icon(Icons.clear)),
           ),
           onChanged: (_) {
             setState(() {
@@ -608,18 +537,11 @@ class _ExampleAppState extends State<ExampleApp> {
           spacing: 12,
           runSpacing: 12,
           children: <Widget>[
-            FilledButton.icon(
-              key: const ValueKey<String>('text-search-submit'),
-              onPressed: _isLoadingTextSearch ? null : _runTextSearch,
-              icon: const Icon(Icons.search),
-              label: const Text('Search'),
-            ),
+            FilledButton.icon(key: const ValueKey<String>('text-search-submit'), onPressed: _isLoadingTextSearch ? null : _runTextSearch, icon: const Icon(Icons.search), label: const Text('Search')),
             if (isPaged && _nextPageToken != null)
               OutlinedButton.icon(
                 key: const ValueKey<String>('text-search-load-more'),
-                onPressed: _isLoadingTextSearch
-                    ? null
-                    : () => _runTextSearch(loadMore: true),
+                onPressed: _isLoadingTextSearch ? null : () => _runTextSearch(loadMore: true),
                 icon: const Icon(Icons.expand_more),
                 label: const Text('Load more'),
               ),
@@ -641,22 +563,13 @@ class _ExampleAppState extends State<ExampleApp> {
           const SizedBox(height: 8),
           for (final place in _textSearchResults)
             Card(
-              child: ListTile(
-                dense: true,
-                title: Text(place.displayName?.text ?? place.id),
-                subtitle: place.formattedAddress == null
-                    ? null
-                    : Text(place.formattedAddress!),
-              ),
+              child: ListTile(dense: true, title: Text(place.displayName?.text ?? place.id), subtitle: place.formattedAddress == null ? null : Text(place.formattedAddress!)),
             ),
         ],
         if (_textSearchError != null)
           Card(
             color: Theme.of(context).colorScheme.errorContainer,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(_safeErrorText(_textSearchError!)),
-            ),
+            child: Padding(padding: const EdgeInsets.all(16), child: Text(_safeErrorText(_textSearchError!))),
           ),
         const SizedBox(height: 24),
       ],
@@ -715,32 +628,19 @@ class _ExampleAppState extends State<ExampleApp> {
 
     final request = TextSearchRequest(
       textQuery: query,
-      fields: const <PlaceField>{
-        ...PlaceFieldPresets.minimal,
-        PlaceField.businessStatus,
-        PlaceField.priceLevel,
-        PlaceField.priceRange,
-        PlaceField.openingDate,
-        PlaceField.googleMapsTypeLabel,
-      },
+      fields: const <PlaceField>{...PlaceFieldPresets.minimal, PlaceField.businessStatus, PlaceField.priceLevel, PlaceField.priceRange, PlaceField.openingDate, PlaceField.googleMapsTypeLabel},
       languageCode: _demoLocale.locale.languageCode,
       regionCode: _demoLocale.locale.countryCode?.toLowerCase(),
       pageSize: _configuration.pageSize,
       pageToken: pageToken,
-      priceLevels: const <PlacePriceLevel>[
-        PlacePriceLevel.inexpensive,
-        PlacePriceLevel.moderate,
-      ],
+      priceLevels: const <PlacePriceLevel>[PlacePriceLevel.inexpensive, PlacePriceLevel.moderate],
       includePureServiceAreaBusinesses: true,
       includeFutureOpeningBusinesses: true,
     );
 
     try {
       if (_configuration.textSearchMode == TextSearchMode.paged) {
-        final page = await _client.searchTextPage(
-          request,
-          cancellationToken: cancellationToken,
-        );
+        final page = await _client.searchTextPage(request, cancellationToken: cancellationToken);
         if (!_canApplyTextSearch(generation)) {
           return;
         }
@@ -751,10 +651,7 @@ class _ExampleAppState extends State<ExampleApp> {
           _loadedTextSearchPages++;
         });
       } else {
-        final results = await _client.searchText(
-          request,
-          cancellationToken: cancellationToken,
-        );
+        final results = await _client.searchText(request, cancellationToken: cancellationToken);
         if (!_canApplyTextSearch(generation)) {
           return;
         }
@@ -783,8 +680,7 @@ class _ExampleAppState extends State<ExampleApp> {
     }
   }
 
-  bool _canApplyTextSearch(int generation) =>
-      mounted && generation == _textSearchGeneration;
+  bool _canApplyTextSearch(int generation) => mounted && generation == _textSearchGeneration;
 
   void _cancelTextSearch() {
     _textSearchGeneration++;
@@ -810,10 +706,7 @@ class _ExampleAppState extends State<ExampleApp> {
 
   PlacesStrings _stringsFor(DemoLocale locale) {
     return switch (locale) {
-      DemoLocale.english => const PlacesStrings(
-        searchHint: 'Search for a place',
-        overlayTitle: 'Search places',
-      ),
+      DemoLocale.english => const PlacesStrings(searchHint: 'Search for a place', overlayTitle: 'Search places', distanceUnitMeters: 'm'),
       DemoLocale.hebrew => const PlacesStrings(
         searchHint: 'חיפוש מקום',
         loadingText: 'טוען תוצאות…',
@@ -824,6 +717,7 @@ class _ExampleAppState extends State<ExampleApp> {
         overlayTitle: 'חיפוש מקומות',
         closeLabel: 'סגור',
         clearLabel: 'נקה חיפוש',
+        distanceUnitMeters: 'מ׳',
       ),
       DemoLocale.arabic => const PlacesStrings(
         searchHint: 'ابحث عن مكان',
@@ -835,16 +729,14 @@ class _ExampleAppState extends State<ExampleApp> {
         overlayTitle: 'البحث عن الأماكن',
         closeLabel: 'إغلاق',
         clearLabel: 'مسح البحث',
+        distanceUnitMeters: 'م',
       ),
     };
   }
 }
 
 class _ConfigurationSummary extends StatelessWidget {
-  const _ConfigurationSummary({
-    required this.configuration,
-    required this.onOpen,
-  });
+  const _ConfigurationSummary({required this.configuration, required this.onOpen});
 
   final DemoConfiguration configuration;
   final VoidCallback onOpen;
@@ -859,18 +751,8 @@ class _ConfigurationSummary extends StatelessWidget {
           children: <Widget>[
             Row(
               children: <Widget>[
-                Expanded(
-                  child: Text(
-                    'Current configuration',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                FilledButton.tonalIcon(
-                  key: const ValueKey<String>('open-configuration'),
-                  onPressed: onOpen,
-                  icon: const Icon(Icons.tune),
-                  label: const Text('Configuration'),
-                ),
+                Expanded(child: Text('Current configuration', style: Theme.of(context).textTheme.titleMedium)),
+                FilledButton.tonalIcon(key: const ValueKey<String>('open-configuration'), onPressed: onOpen, icon: const Icon(Icons.tune), label: const Text('Configuration')),
               ],
             ),
             const SizedBox(height: 12),
@@ -878,38 +760,14 @@ class _ConfigurationSummary extends StatelessWidget {
               spacing: 8,
               runSpacing: 2,
               children: <Widget>[
-                Chip(
-                  label: Text(configuration.locale.label),
-                  visualDensity: VisualDensity.compact,
-                ),
-                Chip(
-                  label: Text(configuration.widgetType.label),
-                  visualDensity: VisualDensity.compact,
-                ),
-                Chip(
-                  label: Text(configuration.textSearchMode.label),
-                  visualDensity: VisualDensity.compact,
-                ),
-                if (configuration.textSearchMode == TextSearchMode.paged)
-                  Chip(
-                    label: Text('${configuration.pageSize} per page'),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                if (configuration.fetchPlaceDetails)
-                  const Chip(
-                    label: Text('Place details'),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                if (configuration.fetchTimeZone)
-                  const Chip(
-                    label: Text('Time zone'),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                if (configuration.includeQueryPredictions)
-                  const Chip(
-                    label: Text('Query predictions'),
-                    visualDensity: VisualDensity.compact,
-                  ),
+                Chip(label: Text(configuration.locale.label), visualDensity: VisualDensity.compact),
+                Chip(label: Text(configuration.widgetType.label), visualDensity: VisualDensity.compact),
+                Chip(label: Text(configuration.textSearchMode.label), visualDensity: VisualDensity.compact),
+                if (configuration.textSearchMode == TextSearchMode.paged) Chip(label: Text('${configuration.pageSize} per page'), visualDensity: VisualDensity.compact),
+                if (configuration.fetchPlaceDetails) const Chip(label: Text('Place details'), visualDensity: VisualDensity.compact),
+                if (configuration.fetchTimeZone) const Chip(label: Text('Time zone'), visualDensity: VisualDensity.compact),
+                if (configuration.includeQueryPredictions) const Chip(label: Text('Query predictions'), visualDensity: VisualDensity.compact),
+                if (configuration.showDistanceFromOrigin) const Chip(label: Text('Distance from origin'), visualDensity: VisualDensity.compact),
               ],
             ),
           ],
@@ -947,17 +805,8 @@ class _ConfigurationSheetState extends State<_ConfigurationSheet> {
             padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
             child: Row(
               children: <Widget>[
-                Expanded(
-                  child: Text(
-                    'Configuration',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Close configuration',
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                ),
+                Expanded(child: Text('Configuration', style: Theme.of(context).textTheme.headlineSmall)),
+                IconButton(tooltip: 'Close configuration', onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
               ],
             ),
           ),
@@ -971,18 +820,8 @@ class _ConfigurationSheetState extends State<_ConfigurationSheet> {
                 DropdownButtonFormField<DemoLocale>(
                   key: const ValueKey<String>('configuration-language'),
                   initialValue: _draft.locale,
-                  decoration: const InputDecoration(
-                    labelText: 'Language',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: DemoLocale.values
-                      .map(
-                        (locale) => DropdownMenuItem<DemoLocale>(
-                          value: locale,
-                          child: Text(locale.label),
-                        ),
-                      )
-                      .toList(growable: false),
+                  decoration: const InputDecoration(labelText: 'Language', border: OutlineInputBorder()),
+                  items: DemoLocale.values.map((locale) => DropdownMenuItem<DemoLocale>(value: locale, child: Text(locale.label))).toList(growable: false),
                   onChanged: (value) {
                     if (value != null) {
                       setState(() => _draft = _draft.copyWith(locale: value));
@@ -993,23 +832,11 @@ class _ConfigurationSheetState extends State<_ConfigurationSheet> {
                 DropdownButtonFormField<WidgetType>(
                   key: const ValueKey<String>('configuration-widget-type'),
                   initialValue: _draft.widgetType,
-                  decoration: const InputDecoration(
-                    labelText: 'Widget type',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: WidgetType.values
-                      .map(
-                        (type) => DropdownMenuItem<WidgetType>(
-                          value: type,
-                          child: Text(type.label),
-                        ),
-                      )
-                      .toList(growable: false),
+                  decoration: const InputDecoration(labelText: 'Widget type', border: OutlineInputBorder()),
+                  items: WidgetType.values.map((type) => DropdownMenuItem<WidgetType>(value: type, child: Text(type.label))).toList(growable: false),
                   onChanged: (value) {
                     if (value != null) {
-                      setState(
-                        () => _draft = _draft.copyWith(widgetType: value),
-                      );
+                      setState(() => _draft = _draft.copyWith(widgetType: value));
                     }
                   },
                 ),
@@ -1018,21 +845,10 @@ class _ConfigurationSheetState extends State<_ConfigurationSheet> {
                 const SizedBox(height: 8),
                 SegmentedButton<TextSearchMode>(
                   key: const ValueKey<String>('configuration-search-mode'),
-                  segments: TextSearchMode.values
-                      .map(
-                        (mode) => ButtonSegment<TextSearchMode>(
-                          value: mode,
-                          label: Text(mode.label),
-                        ),
-                      )
-                      .toList(growable: false),
+                  segments: TextSearchMode.values.map((mode) => ButtonSegment<TextSearchMode>(value: mode, label: Text(mode.label))).toList(growable: false),
                   selected: <TextSearchMode>{_draft.textSearchMode},
                   onSelectionChanged: (selection) {
-                    setState(
-                      () => _draft = _draft.copyWith(
-                        textSearchMode: selection.first,
-                      ),
-                    );
+                    setState(() => _draft = _draft.copyWith(textSearchMode: selection.first));
                   },
                 ),
                 const SizedBox(height: 20),
@@ -1046,59 +862,43 @@ class _ConfigurationSheetState extends State<_ConfigurationSheet> {
                       contentPadding: EdgeInsets.zero,
                       value: _draft.fetchPlaceDetails,
                       title: const Text('Fetch Place Details'),
-                      subtitle: const Text(
-                        'Resolve the selected suggestion into Place data.',
-                      ),
-                      onChanged: (value) => setState(
-                        () =>
-                            _draft = _draft.copyWith(fetchPlaceDetails: value),
-                      ),
+                      subtitle: const Text('Resolve the selected suggestion into Place data.'),
+                      onChanged: (value) => setState(() => _draft = _draft.copyWith(fetchPlaceDetails: value)),
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       value: _draft.fetchTimeZone,
                       title: const Text('Fetch Time Zone'),
-                      subtitle: const Text(
-                        'Look up time-zone data after a place is selected.',
-                      ),
-                      onChanged: (value) => setState(
-                        () => _draft = _draft.copyWith(fetchTimeZone: value),
-                      ),
+                      subtitle: const Text('Look up time-zone data after a place is selected.'),
+                      onChanged: (value) => setState(() => _draft = _draft.copyWith(fetchTimeZone: value)),
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       value: _draft.includeQueryPredictions,
                       title: const Text('Include query predictions'),
+                      subtitle: const Text('Mix suggested searches with place predictions.'),
+                      onChanged: (value) => setState(() => _draft = _draft.copyWith(includeQueryPredictions: value)),
+                    ),
+                    SwitchListTile(
+                      key: const ValueKey<String>('configuration-origin'),
+                      contentPadding: EdgeInsets.zero,
+                      value: _draft.showDistanceFromOrigin,
+                      title: const Text('Show distance from an origin'),
                       subtitle: const Text(
-                        'Mix suggested searches with place predictions.',
+                        'Sends origin so Google returns a distance for each '
+                        'suggestion. Uses a fixed demo coordinate.',
                       ),
-                      onChanged: (value) => setState(
-                        () => _draft = _draft.copyWith(
-                          includeQueryPredictions: value,
-                        ),
-                      ),
+                      onChanged: (value) => setState(() => _draft = _draft.copyWith(showDistanceFromOrigin: value)),
                     ),
                     if (_draft.textSearchMode == TextSearchMode.paged)
                       DropdownButtonFormField<int>(
                         key: const ValueKey<String>('configuration-page-size'),
                         initialValue: _draft.pageSize,
-                        decoration: const InputDecoration(
-                          labelText: 'Results per page',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: const <int>[5, 10, 20]
-                            .map(
-                              (size) => DropdownMenuItem<int>(
-                                value: size,
-                                child: Text('$size'),
-                              ),
-                            )
-                            .toList(growable: false),
+                        decoration: const InputDecoration(labelText: 'Results per page', border: OutlineInputBorder()),
+                        items: const <int>[5, 10, 20].map((size) => DropdownMenuItem<int>(value: size, child: Text('$size'))).toList(growable: false),
                         onChanged: (value) {
                           if (value != null) {
-                            setState(
-                              () => _draft = _draft.copyWith(pageSize: value),
-                            );
+                            setState(() => _draft = _draft.copyWith(pageSize: value));
                           }
                         },
                       ),
@@ -1113,17 +913,9 @@ class _ConfigurationSheetState extends State<_ConfigurationSheet> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: <Widget>[
-                TextButton(
-                  key: const ValueKey<String>('configuration-cancel'),
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
+                TextButton(key: const ValueKey<String>('configuration-cancel'), onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
                 const SizedBox(width: 12),
-                FilledButton(
-                  key: const ValueKey<String>('configuration-apply'),
-                  onPressed: () => Navigator.pop(context, _draft),
-                  child: const Text('Apply'),
-                ),
+                FilledButton(key: const ValueKey<String>('configuration-apply'), onPressed: () => Navigator.pop(context, _draft), child: const Text('Apply')),
               ],
             ),
           ),

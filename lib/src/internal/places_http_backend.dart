@@ -134,13 +134,13 @@ class PlacesHttpBackend implements PlacesBackend {
     PhotoMediaRequest request, {
     PlacesCancellationToken? cancellationToken,
   }) async {
+    // Authentication travels in the X-Goog-Api-Key header, like every other
+    // operation. A key in the query string would be recorded by proxy logs,
+    // CDN logs, and browser history.
     final response = await _get(
       path: request.mediaPath,
       operation: PlacesOperation.photoMedia,
-      queryParameters: <String, String>{
-        ...request.toQueryParameters(),
-        if (!_usesProxy) 'key': apiKey,
-      },
+      queryParameters: request.toQueryParameters(),
       cancellationToken: cancellationToken,
     );
     return PlacePhotoMedia.fromJson(response);
@@ -356,14 +356,21 @@ class PlacesHttpBackend implements PlacesBackend {
         ? ''
         : (path.startsWith('/') ? path.substring(1) : path);
     try {
-      final uri =
-          Uri.parse(
-            treatPathAsAbsolute
-                ? normalizedBase
-                : '$normalizedBase/$normalizedPath',
-          ).replace(
-            queryParameters: queryParameters.isEmpty ? null : queryParameters,
-          );
+      final parsed = Uri.parse(
+        treatPathAsAbsolute
+            ? normalizedBase
+            : '$normalizedBase/$normalizedPath',
+      );
+      // Preserve any query already present on a caller-configured endpoint,
+      // such as a routing token on a custom timeZoneBaseUrl. Our own
+      // parameters win on conflict.
+      final mergedQuery = <String, String>{
+        ...parsed.queryParameters,
+        ...queryParameters,
+      };
+      final uri = parsed.replace(
+        queryParameters: mergedQuery.isEmpty ? null : mergedQuery,
+      );
       if (!uri.isAbsolute ||
           uri.host.isEmpty ||
           (uri.scheme != 'https' && uri.scheme != 'http')) {
@@ -500,9 +507,19 @@ class PlacesHttpBackend implements PlacesBackend {
   }
 }
 
+/// Ensures a Time Zone base URL ends in `/json`, without disturbing any query
+/// string the caller configured on it.
 String _normalizeTimeZoneUrl(String value) {
-  final normalized = value.endsWith('/')
-      ? value.substring(0, value.length - 1)
-      : value;
-  return normalized.endsWith('/json') ? normalized : '$normalized/json';
+  final parsed = Uri.tryParse(value);
+  if (parsed == null) {
+    return value;
+  }
+  var path = parsed.path;
+  if (path.endsWith('/')) {
+    path = path.substring(0, path.length - 1);
+  }
+  if (path.endsWith('/json')) {
+    return value;
+  }
+  return parsed.replace(path: '$path/json').toString();
 }

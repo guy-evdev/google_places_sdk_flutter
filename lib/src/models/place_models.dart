@@ -214,6 +214,19 @@ class PlaceCoordinates {
       longitude: _toDouble(json['longitude'] ?? json['lng']) ?? 0,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PlaceCoordinates &&
+          other.latitude == latitude &&
+          other.longitude == longitude;
+
+  @override
+  int get hashCode => Object.hash(latitude, longitude);
+
+  @override
+  String toString() => 'PlaceCoordinates($latitude, $longitude)';
 }
 
 @immutable
@@ -1014,7 +1027,10 @@ class PlacePhoto {
     this.heightPx,
     this.googleMapsUri,
     this.authorAttributions = const <Map<String, Object?>>[],
-  });
+    List<PlacePhotoAuthorAttribution>? authors,
+  }) : _authors = authors;
+
+  final List<PlacePhotoAuthorAttribution>? _authors;
 
   /// Stable Google photo resource name.
   final String name;
@@ -1035,20 +1051,34 @@ class PlacePhoto {
   ///
   /// Google requires every non-empty attribution returned with a photo to be
   /// shown wherever that photo is displayed.
-  List<PlacePhotoAuthorAttribution> get authors => List.unmodifiable(
-    authorAttributions.map(PlacePhotoAuthorAttribution.fromJson),
-  );
+  ///
+  /// [PlacePhoto.fromJson] parses these once, so reading this is a plain field
+  /// access — widgets such as `PlacesPhotoAttribution` read it inside `build`.
+  /// A directly constructed photo that supplies only [authorAttributions]
+  /// still derives them, so attribution is never silently dropped.
+  List<PlacePhotoAuthorAttribution> get authors =>
+      _authors ??
+      List<PlacePhotoAuthorAttribution>.unmodifiable(
+        authorAttributions.map(PlacePhotoAuthorAttribution.fromJson),
+      );
 
-  factory PlacePhoto.fromJson(Map<String, Object?> json) => PlacePhoto(
-    name: (json['name'] ?? '') as String,
-    widthPx: (json['widthPx'] as num?)?.toInt(),
-    heightPx: (json['heightPx'] as num?)?.toInt(),
-    googleMapsUri: (json['googleMapsUri'] ?? json['googleMapsURI']) as String?,
-    authorAttributions: ((json['authorAttributions'] as List?) ?? <Object?>[])
+  factory PlacePhoto.fromJson(Map<String, Object?> json) {
+    final attributions = ((json['authorAttributions'] as List?) ?? <Object?>[])
         .whereType<Map<Object?, Object?>>()
         .map((item) => item.cast<String, Object?>())
-        .toList(growable: false),
-  );
+        .toList(growable: false);
+    return PlacePhoto(
+      name: (json['name'] ?? '') as String,
+      widthPx: (json['widthPx'] as num?)?.toInt(),
+      heightPx: (json['heightPx'] as num?)?.toInt(),
+      googleMapsUri:
+          (json['googleMapsUri'] ?? json['googleMapsURI']) as String?,
+      authorAttributions: attributions,
+      authors: List<PlacePhotoAuthorAttribution>.unmodifiable(
+        attributions.map(PlacePhotoAuthorAttribution.fromJson),
+      ),
+    );
+  }
 }
 
 @immutable
@@ -2697,8 +2727,13 @@ class TextSearchRequest {
         'includePureServiceAreaBusinesses': true,
       if (includeFutureOpeningBusinesses)
         'includeFutureOpeningBusinesses': true,
+      // Google ignores maxResultCount when pageSize is present, and the Maps
+      // JavaScript path already drops it. Omit it so both transports send the
+      // same request.
       // ignore: deprecated_member_use_from_same_package
-      if (maxResultCount != null) 'maxResultCount': maxResultCount,
+      if (pageSize == null && maxResultCount != null)
+        // ignore: deprecated_member_use_from_same_package
+        'maxResultCount': maxResultCount,
       if (minRating != null) 'minRating': minRating,
       if (openNow != null) 'openNow': openNow,
       'rankPreference': rankPreference.restName,

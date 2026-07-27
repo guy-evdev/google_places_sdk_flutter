@@ -27,9 +27,11 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     required this.controller,
     required this.mode,
     this.title,
+    this.decoration,
     this.strings = const PlacesStrings(),
     this.languageCode,
     this.regionCode,
+    this.origin,
     this.locationBias,
     this.locationRestriction,
     this.includedPrimaryTypes = const <String>[],
@@ -43,9 +45,13 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     this.selectionTimeZoneAt,
     this.selectionTimeZoneLanguageCode,
     this.maxSuggestions = 5,
+    this.enabled = true,
+    this.showPoweredByGoogle = true,
     this.includeQueryPredictions = false,
+    this.suggestionBuilder,
     this.onSelection,
     this.onQuerySelection,
+    this.onClearField,
     this.onError,
   });
 
@@ -61,6 +67,9 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   /// Optional title shown above the overlay field.
   final String? title;
 
+  /// Optional base decoration for the overlay's text field.
+  final InputDecoration? decoration;
+
   /// Localized strings used by the overlay UI.
   final PlacesStrings strings;
 
@@ -69,6 +78,11 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
 
   /// Preferred CLDR region code for autocomplete results.
   final String? regionCode;
+
+  /// Origin used by Google to compute the distance to each suggestion.
+  ///
+  /// See [PlacesAutocompleteField.origin].
+  final PlaceCoordinates? origin;
 
   /// Soft geographic preference applied to autocomplete results.
   final LocationBias? locationBias;
@@ -114,8 +128,18 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   /// above `5` are clamped to the upstream response limit.
   final int maxSuggestions;
 
+  /// Whether the overlay's field can be interacted with.
+  final bool enabled;
+
+  /// Whether the Powered by Google attribution should be shown.
+  final bool showPoweredByGoogle;
+
   /// Whether autocomplete should include query suggestions as well as places.
   final bool includeQueryPredictions;
+
+  /// Optional builder for rendering custom suggestion tiles.
+  final Widget Function(BuildContext context, PlaceSuggestion suggestion)?
+  suggestionBuilder;
 
   /// Called when the user selects a suggestion, optionally with resolved place
   /// details.
@@ -123,6 +147,9 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
 
   /// Called when the user selects a query suggestion.
   final ValueChanged<QuerySuggestion>? onQuerySelection;
+
+  /// Called after the overlay field's clear action is pressed.
+  final VoidCallback? onClearField;
 
   /// Called when autocomplete, place-details, or time-zone loading fails.
   final ValueChanged<Object>? onError;
@@ -142,10 +169,12 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     String initialText = '',
     PlacesAutocompleteOverlayMode mode = PlacesAutocompleteOverlayMode.dialog,
     bool useRootNavigator = true,
+    InputDecoration? decoration,
     PlacesStrings strings = const PlacesStrings(),
     String? title,
     String? languageCode,
     String? regionCode,
+    PlaceCoordinates? origin,
     LocationBias? locationBias,
     LocationRestriction? locationRestriction,
     List<String> includedPrimaryTypes = const <String>[],
@@ -159,9 +188,14 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     DateTime? selectionTimeZoneAt,
     String? selectionTimeZoneLanguageCode,
     int maxSuggestions = 5,
+    bool enabled = true,
+    bool showPoweredByGoogle = true,
     bool includeQueryPredictions = false,
+    Widget Function(BuildContext context, PlaceSuggestion suggestion)?
+    suggestionBuilder,
     ValueChanged<PlaceSelection>? onSelection,
     ValueChanged<QuerySuggestion>? onQuerySelection,
+    VoidCallback? onClearField,
     ValueChanged<Object>? onError,
   }) async {
     final ownedController = controller == null
@@ -174,9 +208,11 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       controller: effectiveController,
       mode: mode,
       title: title,
+      decoration: decoration,
       strings: strings,
       languageCode: languageCode,
       regionCode: regionCode,
+      origin: origin,
       locationBias: locationBias,
       locationRestriction: locationRestriction,
       includedPrimaryTypes: includedPrimaryTypes,
@@ -190,12 +226,16 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       selectionTimeZoneAt: selectionTimeZoneAt,
       selectionTimeZoneLanguageCode: selectionTimeZoneLanguageCode,
       maxSuggestions: maxSuggestions,
+      enabled: enabled,
+      showPoweredByGoogle: showPoweredByGoogle,
       includeQueryPredictions: includeQueryPredictions,
+      suggestionBuilder: suggestionBuilder,
       onSelection: (selection) {
         navigator.pop(selection);
         onSelection?.call(selection);
       },
       onQuerySelection: onQuerySelection,
+      onClearField: onClearField,
       onError: onError,
     );
 
@@ -238,9 +278,11 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     final field = PlacesAutocompleteField(
       client: client,
       controller: controller,
+      decoration: decoration,
       strings: strings,
       languageCode: languageCode,
       regionCode: regionCode,
+      origin: origin,
       locationBias: locationBias,
       locationRestriction: locationRestriction,
       includedPrimaryTypes: includedPrimaryTypes,
@@ -254,9 +296,13 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       selectionTimeZoneAt: selectionTimeZoneAt,
       selectionTimeZoneLanguageCode: selectionTimeZoneLanguageCode,
       maxSuggestions: maxSuggestions,
+      enabled: enabled,
+      showPoweredByGoogle: showPoweredByGoogle,
       includeQueryPredictions: includeQueryPredictions,
+      suggestionBuilder: suggestionBuilder,
       onSelection: onSelection,
       onQuerySelection: onQuerySelection,
+      onClearField: onClearField,
       onError: onError,
       autofocus: true,
     );
@@ -272,7 +318,11 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
           ),
           title: Text(title ?? strings.overlayTitle),
         ),
-        body: Padding(padding: const EdgeInsets.all(16), child: field),
+        // Scrolls for the same reason dialog mode does: the keyboard, five
+        // suggestions, and the attribution row overflow short viewports.
+        body: SingleChildScrollView(
+          child: Padding(padding: const EdgeInsets.all(16), child: field),
+        ),
       );
     }
 

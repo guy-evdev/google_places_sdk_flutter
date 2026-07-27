@@ -19,21 +19,32 @@ Future<T> runPlacesOperation<T>({
     );
   }
   cancellationToken?.throwIfCancelled(operation);
+  void Function()? detachCancellation;
   try {
     final operationFuture = action();
     if (cancellationToken == null) {
       return await operationFuture.timeout(timeout);
     }
-    return await Future.any<T>(<Future<T>>[
-      operationFuture,
-      cancellationToken.whenCancelled.then<T>((_) {
-        throw PlacesException(
+    // A reused token must not accumulate one retained closure per operation,
+    // so the listener is detached in the finally below.
+    final cancelled = Completer<T>();
+    detachCancellation = cancellationToken.addCancellationListener(() {
+      if (cancelled.isCompleted) {
+        return;
+      }
+      cancelled.completeError(
+        PlacesException(
           'The Places operation was cancelled.',
           kind: PlacesErrorKind.cancellation,
           code: 'request_cancelled',
           operation: operation,
-        );
-      }),
+        ),
+        StackTrace.current,
+      );
+    });
+    return await Future.any<T>(<Future<T>>[
+      operationFuture,
+      cancelled.future,
     ]).timeout(timeout);
   } on PlacesException {
     rethrow;
@@ -64,6 +75,8 @@ Future<T> runPlacesOperation<T>({
       operation: operation,
       metadata: <String, Object?>{'errorType': error.runtimeType.toString()},
     );
+  } finally {
+    detachCancellation?.call();
   }
 }
 
@@ -92,7 +105,9 @@ Future<http.Response> sendPlacesHttpRequest({
       abort.complete();
     }
   });
-  cancellationToken?.whenCancelled.then((_) {
+  // A reused token must not accumulate one retained closure per request, so
+  // the listener is detached in the finally below.
+  final detachCancellation = cancellationToken?.addCancellationListener(() {
     if (!abort.isCompleted) {
       abort.complete();
     }
@@ -155,6 +170,7 @@ Future<http.Response> sendPlacesHttpRequest({
     );
   } finally {
     timer.cancel();
+    detachCancellation?.call();
   }
 }
 

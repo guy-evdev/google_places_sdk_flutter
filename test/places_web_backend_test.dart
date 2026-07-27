@@ -29,7 +29,12 @@ void main() {
     );
 
     expect(sentRequest.url.host, 'places.googleapis.com');
-    expect(sentRequest.url.queryParameters['key'], 'browser-key');
+    expect(
+      sentRequest.url.queryParameters.containsKey('key'),
+      isFalse,
+      reason: 'the API key authenticates via X-Goog-Api-Key, not the URL',
+    );
+    expect(sentRequest.headers['X-Goog-Api-Key'], 'browser-key');
     await backend.close();
   });
 
@@ -150,5 +155,59 @@ void main() {
         ),
       ),
     );
+  });
+
+  group('REST fallback trigger', () {
+    // These are the exact messages Google's Maps JavaScript Places library
+    // emits today for an unsupported field set. They are pinned deliberately:
+    // Google ships on a weekly channel, and a reword used to silently disable
+    // the HTTP fallback for every web user. If one of these fails, Google
+    // changed its wording — widen shouldFallbackToHttp, do not delete the case.
+    const pinnedGoogleMessages = <String>[
+      'Error: Unknown fields requested: foo',
+      'InvalidValueError: in property fields: unknown field',
+    ];
+
+    for (final message in pinnedGoogleMessages) {
+      test('falls back for the current Google wording: $message', () {
+        expect(shouldFallbackToHttp(Exception(message)), isTrue);
+      });
+    }
+
+    test('falls back for plausible rewordings of the same failure', () {
+      const rewordings = <String>[
+        'InvalidValueError: unknown field "reviews" in property fields',
+        'UNKNOWN FIELDS REQUESTED: bar',
+        'InvalidValueError: in property fields: not a valid value',
+        'Error: unsupported field in fields list',
+        'InvalidValueError: unexpected property in fields',
+      ];
+
+      for (final message in rewordings) {
+        expect(
+          shouldFallbackToHttp(Exception(message)),
+          isTrue,
+          reason: message,
+        );
+      }
+    });
+
+    test('does not fall back for unrelated JavaScript failures', () {
+      const unrelated = <String>[
+        'ApiTargetBlockedMapError',
+        'RefererNotAllowedMapError',
+        'Error: network request failed',
+        'InvalidValueError: in property locationBias: not a valid value',
+        'OVER_QUERY_LIMIT',
+      ];
+
+      for (final message in unrelated) {
+        expect(
+          shouldFallbackToHttp(Exception(message)),
+          isFalse,
+          reason: message,
+        );
+      }
+    });
   });
 }

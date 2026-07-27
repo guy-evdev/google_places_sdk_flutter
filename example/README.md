@@ -2,8 +2,9 @@
 
 This app demonstrates inline, Form/reset, dialog, and fullscreen autocomplete;
 place and query suggestions; details and time-zone enrichment; localized RTL
-UI; and the paged Text Search and current stable Place resource fields added in
-package version `0.6.0`.
+UI; paged Text Search and the current stable Place resource fields; and the
+suggestion distances and launcher-mode customization added in package version
+`0.6.1`.
 
 Run it with a Google Maps Platform key:
 
@@ -38,10 +39,21 @@ shows response metadata, and adds **Load more** while Google returns a
 `nextPageToken`. The configured page size is preserved for every page. Use the
 clear action inside the query field to remove both the query and its results.
 
+Every widget mode uses the same `decoration`, so switching between Text Field,
+Dialog, and Fullscreen shows the label and prefix icon in all three. Before
+`0.6.1` the dialog and fullscreen launchers silently dropped it.
+
 The advanced configuration section contains optional Place Details, Time Zone,
-query-prediction, and page-size controls. These are kept out of the main flow so
-the simplest widget and Text Search examples remain easy to follow. Paged Text
-Search uses the package's HTTP/proxy route on web; see the package
+query-prediction, distance, and page-size controls. These are kept out of the
+main flow so the simplest widget and Text Search examples remain easy to follow.
+
+**Show distance from an origin** sends `origin` with each autocomplete request,
+so Google returns a distance for every suggestion and the widget renders it. The
+demo uses a fixed coordinate to avoid a location permission; a real app would
+pass the device's current position. The unit comes from
+`PlacesStrings.distanceUnitMeters` and is localized per demo language.
+
+Paged Text Search uses the package's HTTP/proxy route on web; see the package
 [0.6.0 extended release notes](../doc/whats_new_0_6_0.md) for the transport
 note.
 

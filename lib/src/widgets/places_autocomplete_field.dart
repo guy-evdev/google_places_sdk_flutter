@@ -55,6 +55,7 @@ class PlacesAutocompleteField extends StatefulWidget {
     this.strings = const PlacesStrings(),
     this.languageCode,
     this.regionCode,
+    this.origin,
     this.locationBias,
     this.locationRestriction,
     this.includedPrimaryTypes = const <String>[],
@@ -97,6 +98,17 @@ class PlacesAutocompleteField extends StatefulWidget {
 
   /// Preferred CLDR region code for results, such as `'us'` or `'il'`.
   final String? regionCode;
+
+  /// Origin used by Google to compute the distance to each suggestion.
+  ///
+  /// Suggestions only carry [PlaceSuggestion.distanceMeters] when this is set,
+  /// so the field renders a distance next to each place suggestion only while
+  /// an origin is supplied. The distance unit comes from
+  /// [PlacesStrings.distanceUnitMeters].
+  ///
+  /// This does not bias or restrict which places are returned. Use
+  /// [locationBias] or [locationRestriction] for that.
+  final PlaceCoordinates? origin;
 
   /// Soft geographic preference applied to autocomplete results.
   final LocationBias? locationBias;
@@ -270,6 +282,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   bool _requestConfigurationChanged(PlacesAutocompleteField oldWidget) {
     return oldWidget.languageCode != widget.languageCode ||
         oldWidget.regionCode != widget.regionCode ||
+        oldWidget.origin != widget.origin ||
         oldWidget.locationBias != widget.locationBias ||
         oldWidget.locationRestriction != widget.locationRestriction ||
         !listEquals(
@@ -482,6 +495,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
         sessionToken: _controller.sessionToken,
         languageCode: widget.languageCode,
         regionCode: widget.regionCode,
+        origin: widget.origin,
         locationBias: widget.locationBias,
         locationRestriction: widget.locationRestriction,
         includedPrimaryTypes: widget.includedPrimaryTypes,
@@ -530,11 +544,29 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
 
   void _retrySearch() {
     final input = _controller.textController.text.trim();
-    if (input.isEmpty || !_controller.focusNode.hasFocus) {
+    if (input.isEmpty || !mounted) {
       return;
     }
+    _debounce?.cancel();
+    setState(() {
+      _searchUiVisible = true;
+      _error = null;
+      _highlightedSuggestionIndex = -1;
+    });
     final generation = ++_searchGeneration;
-    unawaited(_search(input, generation));
+    if (_controller.focusNode.hasFocus) {
+      unawaited(_search(input, generation));
+      return;
+    }
+    // The retry control itself takes focus on some platforms, notably web.
+    // _isActiveSearch requires the field to be focused — that check is what
+    // rejects stale results — so restore focus and search once it settles.
+    // Reusing _debounce keeps this cancellable by disposal and by every other
+    // path that invalidates pending work.
+    _controller.focusNode.requestFocus();
+    _debounce = Timer(Duration.zero, () {
+      unawaited(_search(input, generation));
+    });
   }
 
   int? _unicodeInputOffset(String input) {
@@ -673,7 +705,15 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   }
 
   KeyEventResult _handleSuggestionKeyEvent(FocusNode node, KeyEvent event) {
-    if (!_searchUiVisible || _suggestions.isEmpty || event is! KeyDownEvent) {
+    if (!_searchUiVisible || event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      _closeSearchUi();
+      _controller.resetSession();
+      return KeyEventResult.handled;
+    }
+    if (_suggestions.isEmpty) {
       return KeyEventResult.ignored;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
@@ -701,9 +741,6 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     setState(() {
       _highlightedSuggestionIndex =
           (_highlightedSuggestionIndex + delta) % _suggestions.length;
-      if (_highlightedSuggestionIndex < 0) {
-        _highlightedSuggestionIndex += _suggestions.length;
-      }
     });
   }
 
@@ -724,9 +761,11 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       client: widget.client,
       initialText: _controller.textController.text,
       mode: mode,
+      decoration: widget.decoration,
       strings: widget.strings,
       languageCode: widget.languageCode,
       regionCode: widget.regionCode,
+      origin: widget.origin,
       locationBias: widget.locationBias,
       locationRestriction: widget.locationRestriction,
       includedPrimaryTypes: widget.includedPrimaryTypes,
@@ -740,8 +779,12 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       selectionTimeZoneAt: widget.selectionTimeZoneAt,
       selectionTimeZoneLanguageCode: widget.selectionTimeZoneLanguageCode,
       maxSuggestions: widget.maxSuggestions,
+      enabled: widget.enabled,
+      showPoweredByGoogle: widget.showPoweredByGoogle,
       includeQueryPredictions: widget.includeQueryPredictions,
+      suggestionBuilder: widget.suggestionBuilder,
       onQuerySelection: widget.onQuerySelection,
+      onClearField: widget.onClearField,
       onError: widget.onError,
     );
 
@@ -768,80 +811,97 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
             controller: _controller.textController,
             focusNode: _controller.focusNode,
             canRequestFocus: !_isLauncherMode,
-            enabled: widget.enabled && !_selectionLoading,
-            readOnly: _isLauncherMode,
+            enabled: widget.enabled,
+            // Selection loading keeps the field enabled so focus and the
+            // decoration survive. The progress indicator below and the
+            // disabled clear button carry the loading affordance instead.
+            readOnly: _isLauncherMode || _selectionLoading,
             autofocus: widget.autofocus,
             onChanged: _onUserInputChanged,
-            onTap: _isLauncherMode && widget.enabled ? _openOverlay : null,
+            onTap: _isLauncherMode && widget.enabled && !_selectionLoading
+                ? _openOverlay
+                : null,
             decoration: decoration,
           ),
           if (_selectionLoading) const LinearProgressIndicator(),
           if (_searchUiVisible) ...<Widget>[
             const SizedBox(height: 8),
-            if (_loading)
-              _InfoTile(
-                child: Row(
-                  children: <Widget>[
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(child: Text(widget.strings.loadingText)),
-                  ],
-                ),
-              )
-            else if (_error != null)
-              _InfoTile(
-                child: Row(
-                  children: <Widget>[
-                    Expanded(child: Text(widget.strings.errorText)),
-                    TextButton(
-                      onPressed: _retrySearch,
-                      child: Text(widget.strings.retryText),
-                    ),
-                  ],
-                ),
-              )
-            else if (_suggestions.isEmpty &&
-                _controller.textController.text.trim().isNotEmpty)
-              _InfoTile(child: Text(widget.strings.noResultsText))
-            else if (_suggestions.isNotEmpty)
-              Material(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
-                child: Listener(
-                  onPointerDown: (_) {
-                    _suggestionPointerDown = true;
-                  },
-                  onPointerUp: (_) {
-                    _suggestionPointerDown = false;
-                  },
-                  onPointerCancel: (_) {
-                    _suggestionPointerDown = false;
-                  },
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      for (final indexed in _suggestions.indexed)
-                        _buildSuggestionTile(context, indexed.$2, indexed.$1),
-                      if (widget.showPoweredByGoogle)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                          child: Align(
-                            alignment: AlignmentDirectional.centerEnd,
-                            child: _PoweredByGoogleAttribution(
-                              semanticLabel:
-                                  widget.strings.poweredByGoogleLabel,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+            // The pointer guard covers the whole search surface, not just the
+            // suggestion list. Tapping Retry moves focus to that button on
+            // some platforms — notably web — and without this guard the focus
+            // listener treats it as abandonment and closes the search UI
+            // before the retry can run.
+            Listener(
+              onPointerDown: (_) {
+                _suggestionPointerDown = true;
+              },
+              onPointerUp: (_) {
+                _suggestionPointerDown = false;
+              },
+              onPointerCancel: (_) {
+                _suggestionPointerDown = false;
+              },
+              child: _buildSearchSurface(theme),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchSurface(ThemeData theme) {
+    if (_loading) {
+      return _InfoTile(
+        child: Row(
+          children: <Widget>[
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(widget.strings.loadingText)),
+          ],
+        ),
+      );
+    }
+    if (_error != null) {
+      return _InfoTile(
+        child: Row(
+          children: <Widget>[
+            Expanded(child: Text(widget.strings.errorText)),
+            TextButton(
+              onPressed: _retrySearch,
+              child: Text(widget.strings.retryText),
+            ),
+          ],
+        ),
+      );
+    }
+    if (_suggestions.isEmpty) {
+      if (_controller.textController.text.trim().isEmpty) {
+        return const SizedBox.shrink();
+      }
+      return _InfoTile(child: Text(widget.strings.noResultsText));
+    }
+    return Material(
+      color: theme.colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          for (final indexed in _suggestions.indexed)
+            _buildSuggestionTile(context, indexed.$2, indexed.$1),
+          if (widget.showPoweredByGoogle)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: _PoweredByGoogleAttribution(
+                  semanticLabel: widget.strings.poweredByGoogleLabel,
                 ),
               ),
-          ],
+            ),
         ],
       ),
     );
@@ -890,7 +950,9 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
             : _structuredText(place.secondaryText!, theme),
         trailing: place.distanceMeters == null
             ? null
-            : Text('${place.distanceMeters} m'),
+            : Text(
+                '${place.distanceMeters} ${widget.strings.distanceUnitMeters}',
+              ),
       ),
     );
   }

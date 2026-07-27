@@ -171,7 +171,7 @@ void main() {
       expect(request.validate, throwsA(isA<PlacesException>()));
     });
 
-    test('preserves deprecated maxResultCount without changing it', () {
+    test('drops deprecated maxResultCount when pageSize is set', () {
       const request = TextSearchRequest(
         textQuery: 'coffee',
         pageSize: 10,
@@ -179,8 +179,30 @@ void main() {
         maxResultCount: 5,
       );
 
-      expect(request.toRestJson()['pageSize'], 10);
-      expect(request.toRestJson()['maxResultCount'], 5);
+      final json = request.toRestJson();
+
+      expect(json['pageSize'], 10);
+      expect(
+        json.containsKey('maxResultCount'),
+        isFalse,
+        reason:
+            'Google ignores maxResultCount when pageSize is present, and the '
+            'Maps JavaScript path already drops it. Sending both made REST '
+            'and web disagree for the same request.',
+      );
+    });
+
+    test('still sends deprecated maxResultCount when pageSize is absent', () {
+      const request = TextSearchRequest(
+        textQuery: 'coffee',
+        // ignore: deprecated_member_use_from_same_package
+        maxResultCount: 5,
+      );
+
+      final json = request.toRestJson();
+
+      expect(json.containsKey('pageSize'), isFalse);
+      expect(json['maxResultCount'], 5);
     });
 
     test('parses metadata and defensively copies Text Search results', () {
@@ -755,6 +777,49 @@ void main() {
     expect(photo.authors.single.displayName, 'Ada Lovelace');
     expect(photo.authors.single.uri, contains('/contrib/ada'));
     expect(photo.authors.single.photoUri, endsWith('/ada.jpg'));
+  });
+
+  test('parsed photo authors are stored, not rebuilt on every read', () {
+    // PlacesPhotoAttribution reads authors inside build, so re-parsing and
+    // re-allocating per access meant re-allocating per frame.
+    final photo = PlacePhoto.fromJson(<String, Object?>{
+      'name': 'places/place-1/photos/photo-1',
+      'authorAttributions': <Map<String, Object?>>[
+        <String, Object?>{'displayName': 'Ada Lovelace'},
+      ],
+    });
+
+    expect(identical(photo.authors, photo.authors), isTrue);
+    expect(
+      () => photo.authors.add(photo.authors.first),
+      throwsUnsupportedError,
+    );
+  });
+
+  test('a directly constructed photo still derives its attributions', () {
+    // Google requires every returned attribution to be shown, so a photo built
+    // from raw attributions must never silently report none.
+    const photo = PlacePhoto(
+      name: 'places/place-1/photos/photo-1',
+      authorAttributions: <Map<String, Object?>>[
+        <String, Object?>{'displayName': 'Grace Hopper'},
+      ],
+    );
+
+    expect(photo.authors.single.displayName, 'Grace Hopper');
+  });
+
+  test('coordinates compare by value so widget options stay stable', () {
+    // PlacesAutocompleteField.origin resets the billing session when it
+    // changes. Without value equality a rebuild with a fresh instance would
+    // reset the session, and the token, on every frame.
+    const a = PlaceCoordinates(latitude: 40.7, longitude: -74.0);
+    const b = PlaceCoordinates(latitude: 40.7, longitude: -74.0);
+    const c = PlaceCoordinates(latitude: 40.7, longitude: -73.0);
+
+    expect(PlaceCoordinates(latitude: a.latitude, longitude: a.longitude), b);
+    expect(a.hashCode, b.hashCode);
+    expect(a, isNot(c));
   });
 
   test('parses time-zone data', () {
