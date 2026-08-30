@@ -64,11 +64,13 @@ jobs:
       # worse than no step.
       #
       # Verified by exit code on 2026-08-30 at a steady 150/160: threshold 150 -> exit 0 (inert),
-      # 10 -> exit 0, 0 -> exit 127. 10 is set below because 10 is exactly what this package has
-      # decided it may lose — the screenshot points, when the tooling above cannot award them.
-      # Use 0 to require a perfect score; move to 0 once a run with the tooling installed confirms
-      # 160/160. Never raise the points it may lose.
+      # 10 -> exit 0, 0 -> exit 127. 10 was set initially because 10 was exactly what this package
+      # was losing — the screenshot points, when the tooling above could not award them.
+      #
+      # Tightened to 0 on 2026-08-30 after the first release-lane run with the tooling installed
+      # scored **160/160**: the screenshot points came back, so there is nothing left this package
+      # has decided it may lose. Never raise the points it may lose.
       - name: Pana
         run: |
           dart pub global activate pana
-          dart pub global run pana:pana --no-warning --exit-code-threshold 10
+          dart pub global run pana:pana --no-warning --exit-code-threshold 0

@@ -9,6 +9,19 @@
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
+# Added automatically by Flutter 3.47's project migration on `flutter pub get`.
+# Committed rather than reverted: it re-applies on every run, and an uncommitted
+# migration makes `flutter pub publish --dry-run` fail on a dirty tree.
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`
