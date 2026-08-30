@@ -6,6 +6,11 @@ UI; paged Text Search and the current stable Place resource fields; and the
 suggestion distances and launcher-mode customization added in package version
 `0.6.1`.
 
+As of package version `0.7.0` the app is built on
+[`material_ui`](https://pub.dev/packages/material_ui) rather than
+`package:flutter/material.dart`, and its localization delegates come from
+`GlobalMaterialLocalizations.delegates`. It requires Flutter `>=3.44.0` and Dart `>=3.12.0`.
+
 Run it with a Google Maps Platform key:
 
 ```shell

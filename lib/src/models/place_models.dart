@@ -1027,8 +1027,8 @@ class PlacePhoto {
     this.heightPx,
     this.googleMapsUri,
     this.authorAttributions = const <Map<String, Object?>>[],
-    List<PlacePhotoAuthorAttribution>? authors,
-  }) : _authors = authors;
+    this._authors,
+  });
 
   final List<PlacePhotoAuthorAttribution>? _authors;
 

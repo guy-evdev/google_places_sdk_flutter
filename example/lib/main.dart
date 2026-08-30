@@ -1,6 +1,5 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
+import 'package:material_ui/material_ui.dart';
 
 const _apiKey = String.fromEnvironment('GOOGLE_MAPS_API_KEY');
 const _proxyPlacesUrl = String.fromEnvironment('PLACES_PROXY_URL');
@@ -219,11 +218,7 @@ class _ExampleAppState extends State<ExampleApp> {
       supportedLocales: DemoLocale.values
           .map((locale) => locale.locale)
           .toList(),
-      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       builder: (context, child) => Directionality(
         textDirection: _demoLocale.isRtl
             ? TextDirection.rtl

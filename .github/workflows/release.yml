@@ -1,0 +1,74 @@
+# flutter-package template rev 5 — release lane.
+# Everything too slow, too expensive, or too release-specific for every push. Runs on release
+# branches, tags, and on demand.
+#
+# Every check here must be able to fail. A step whose failure is ignored is decoration, not a gate.
+
+name: Release gates
+
+on:
+  push:
+    branches: ['release/**']
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Set up latest stable Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+
+      - name: Dartdoc
+        run: dart doc --dry-run
+
+      - name: Example web build
+        working-directory: example
+        run: flutter build web --dart-define=GOOGLE_MAPS_API_KEY=ci-placeholder
+
+      # Wasm cleanliness is a stated property of this package, so it is enforced rather than
+      # remembered.
+      - name: Example Wasm build
+        working-directory: example
+        run: flutter build web --wasm --dart-define=GOOGLE_MAPS_API_KEY=ci-placeholder
+
+      # pana validates the pubspec `screenshots:` entries by shelling out to ImageMagick and the
+      # webp tools. Without them it reports "No such file or directory" for every screenshot and
+      # silently drops 10 points — which is exactly what happened on the 0.6.1 run, unnoticed,
+      # because pana had no failure threshold.
+      - name: Install pana image tooling
+        run: sudo apt-get update && sudo apt-get install -y imagemagick webp
+
+      # --exit-code-threshold is what makes this a gate — but read the flag before setting it.
+      # pana exits non-zero when (max - granted) > threshold, so the number is the MAXIMUM POINTS
+      # THE PACKAGE MAY LOSE, not the minimum score it must reach.
+      #
+      # ⚠️ Setting it to the measured score is the natural mistake and it silently disables the
+      # gate: this lane carried 150 from 2026-07-27 to 2026-08-30, which means "tolerate losing
+      # 150 of 160 points" and passes at every achievable score. A green step proving nothing is
+      # worse than no step.
+      #
+      # Verified by exit code on 2026-08-30 at a steady 150/160: threshold 150 -> exit 0 (inert),
+      # 10 -> exit 0, 0 -> exit 127. 10 is set below because 10 is exactly what this package has
+      # decided it may lose — the screenshot points, when the tooling above cannot award them.
+      # Use 0 to require a perfect score; move to 0 once a run with the tooling installed confirms
+      # 160/160. Never raise the points it may lose.
+      - name: Pana
+        run: |
+          dart pub global activate pana
+          dart pub global run pana:pana --no-warning --exit-code-threshold 10

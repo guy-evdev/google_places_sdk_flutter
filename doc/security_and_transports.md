@@ -105,7 +105,7 @@ final client = PlacesClient(
 for HTTP work. `disabled` turns off direct and proxy HTTP operations.
 
 Direct browser REST fallback is deprecated because a browser cannot keep a
-web-service key secret. It remains the `0.6.x` compatibility default and is
+web-service key secret. It remains the `0.x` compatibility default and is
 scheduled to stop being the default in `1.0.0`.
 
 ## Direct Android and iOS REST fallback
@@ -233,7 +233,7 @@ const options = PlacesClientOptions(
 - Proxy requests no longer receive a Google API key from the application. An
   existing proxy that expected `key` or `X-Goog-Api-Key` must add its own
   server-side credential.
-- Direct browser REST fallback is deprecated but remains the `0.6.x` default.
+- Direct browser REST fallback is deprecated but remains the `0.x` default.
 
 See [What's new in 0.6.0](whats_new_0_6_0.md) for replacement examples and the
 complete release summary, and [What's new in 0.6.1](whats_new_0_6_1.md) for the

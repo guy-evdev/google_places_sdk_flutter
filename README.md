@@ -34,8 +34,8 @@ flutter pub add google_places_sdk_flutter
 Create a client and pass it to `PlacesAutocompleteField`:
 
 ```dart
-import 'package:flutter/material.dart';
 import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
+import 'package:material_ui/material_ui.dart';
 
 class PlacePicker extends StatefulWidget {
   const PlacePicker({super.key});
@@ -277,6 +277,12 @@ PlacesPhotoAttribution(photo: photo)
 
 ## What's new
 
+Version `0.7.0` moves the widget layer from `package:flutter/material.dart` to the standalone
+[`material_ui`](https://pub.dev/packages/material_ui) package, following Flutter's Material and
+Cupertino decoupling. It ships nothing else. Applications must migrate their own imports in the
+same step, and the supported floor rises to Flutter `>=3.44.0` and Dart `>=3.12.0`. See
+[MIGRATION.md](MIGRATION.md#070) for the before/after.
+
 Version `0.6.1` is a bug-fix release. Dialog and fullscreen modes now honor the
 field's `decoration`, `suggestionBuilder`, `showPoweredByGoogle`, `onClearField`,
 and `enabled`; Retry works on web; and the new `origin` option makes Google
@@ -293,7 +299,8 @@ migrations in either release. Text Search `maxResultCount`, string
 `proxyBaseUrl`, and direct browser REST fallback are deprecated, with
 replacements available now.
 
-See [What's new in 0.6.1](doc/whats_new_0_6_1.md) and
+See [What's new in 0.7.0](doc/whats_new_0_7_0.md),
+[What's new in 0.6.1](doc/whats_new_0_6_1.md), and
 [What's new in 0.6.0](doc/whats_new_0_6_0.md) for examples, compatibility
 notices, and the extended feature summaries.
 
@@ -445,8 +452,10 @@ flutter run --dart-define=GOOGLE_MAPS_API_KEY=your_key_here
 
 ## More documentation
 
+- [What's new in 0.7.0](doc/whats_new_0_7_0.md)
 - [What's new in 0.6.1](doc/whats_new_0_6_1.md)
 - [What's new in 0.6.0](doc/whats_new_0_6_0.md)
+- [Migration guide](MIGRATION.md)
 - [API reference and defaults](doc/api_reference.md)
 - [Security and transport configuration](doc/security_and_transports.md)
 - [Places API (New)](https://developers.google.com/maps/documentation/places/web-service)

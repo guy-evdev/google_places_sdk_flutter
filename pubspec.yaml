@@ -1,6 +1,6 @@
 name: google_places_sdk_flutter
 description: "Cross-platform Google Places autocomplete widgets and clients built on Places API (New)."
-version: 0.6.1
+version: 0.7.0
 homepage: https://github.com/guy-evdev/google_places_sdk_flutter
 repository: https://github.com/guy-evdev/google_places_sdk_flutter
 issue_tracker: https://github.com/guy-evdev/google_places_sdk_flutter/issues
@@ -22,13 +22,14 @@ screenshots:
     path: assets/readme/rich_result.png
 
 environment:
-  sdk: ">=3.9.0 <4.0.0"
-  flutter: ">=3.35.0"
+  sdk: ">=3.12.0 <4.0.0"
+  flutter: ">=3.44.0"
 
 dependencies:
   flutter:
     sdk: flutter
   http: ^1.6.0
+  material_ui: ^1.1.0
   web: ^1.1.1
 
 dev_dependencies:

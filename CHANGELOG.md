@@ -1,3 +1,24 @@
+## 0.7.0
+
+**Breaking changes:**
+
+* The widget layer now uses [`material_ui`](https://pub.dev/packages/material_ui) instead of
+  `package:flutter/material.dart`. `InputDecoration` on `PlacesAutocompleteField`,
+  `PlacesAutocompleteOverlay`, `PlacesAutocompleteOverlay.show()`, and
+  `PlacesAutocompleteFormField` now resolves to `material_ui`'s type. Apps must migrate in the
+  same step — see [Migrating to 0.7.0](MIGRATION.md#070).
+* The supported floor is now Flutter `>=3.44.0` and Dart `>=3.12.0`, up from Flutter `>=3.35.0`
+  and Dart `>=3.9.0`. This is `material_ui`'s own minimum.
+
+**Compatibility:**
+
+* `material_ui: ^1.1.0` is a new direct dependency. `cupertino_ui` arrives transitively and needs
+  no constraint of its own.
+* No parameter was renamed or removed, no default changed, and no behaviour changed. This release
+  contains nothing but the migration.
+
+See [What's new in 0.7.0](doc/whats_new_0_7_0.md) for details and examples.
+
 ## 0.6.1
 
 ### July 27, 2026

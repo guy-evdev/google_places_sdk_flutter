@@ -1,8 +1,17 @@
+# flutter-package template rev 5 — per-push lane.
+# Kept fast enough to actually wait for. Slow, release-only checks (dartdoc, example builds, pana)
+# live in release.yml.
+#
+# Action pinning: pinned to commit SHAs deliberately (2026-07-19), with Dependabot deliberately
+# removed (2026-07-20). Nothing refreshes these on their own, so "refresh the pinned action SHAs"
+# is carried as a recurring maintenance-review item. SHA pins with no refresh mechanism and no
+# reminder is the one combination that decays silently.
+
 name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, 'release/**']
   pull_request:
 
 permissions:
@@ -13,6 +22,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Verifies the Flutter floor advertised in pubspec.yaml. Nothing else does.
+  # Pinned to the exact floor, never a newer patch: its whole job is to assert the promise in
+  # pubspec.yaml, and a lane running 3.44.8 proves nothing about 3.44.0. Raised from 3.35.7 in
+  # 0.7.0 because `material_ui` requires Dart ^3.12.0 / Flutter >=3.44.0 — a dependency requires
+  # it, not to make the build pass.
   minimum-sdk:
     runs-on: ubuntu-latest
     steps:
@@ -23,13 +37,13 @@ jobs:
       - name: Set up minimum Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
-          flutter-version: 3.35.7
+          flutter-version: 3.44.0
           cache: true
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
 
-  release-gates:
+  gates:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -42,27 +56,28 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+
       - name: Verify formatting
         run: dart format --output=none --set-exit-if-changed .
+
       - run: flutter analyze
+
       - name: VM tests with coverage
         run: flutter test --coverage
+
+      # Ratchets up, never down. Measured 89.13% at the 0.6.1 and 0.7.0 releases.
       - name: Enforce 85% line coverage
         run: |
           awk -F '[:,]' '$1 == "DA" { total++; covered += ($3 > 0) } END { if (total == 0 || covered * 100 / total < 85) exit 1; printf "Line coverage: %.2f%%\n", covered * 100 / total }' coverage/lcov.info
+
+      # Required, not optional: this package has a real web backend.
       - name: Chrome tests
         run: flutter test --platform chrome
-      - name: Dartdoc
-        run: dart doc --dry-run
+
+      # Cheap, and the only thing that catches a new top-level file leaking into the archive.
+      - name: Publish validation
+        run: flutter pub publish --dry-run
+
       - name: Example tests
         working-directory: example
         run: flutter test
-      - name: Example web build
-        working-directory: example
-        run: flutter build web --dart-define=GOOGLE_MAPS_API_KEY=ci-placeholder
-      - name: Publish validation
-        run: flutter pub publish --dry-run
-      - name: Pana
-        run: |
-          dart pub global activate pana
-          dart pub global run pana:pana --no-warning

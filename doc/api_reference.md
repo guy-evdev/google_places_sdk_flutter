@@ -20,6 +20,14 @@ Detailed defaults and field-mask preset reference for
 autocomplete options. The form field also adds the standard `FormField`
 callbacks and validation options.
 
+As of `0.7.0` the widget layer is built on
+[`material_ui`](https://pub.dev/packages/material_ui), so the `InputDecoration` below — and the one
+on `PlacesAutocompleteOverlay` and `PlacesAutocompleteOverlay.show()` — is
+`material_ui`'s type, not `package:flutter/material.dart`'s. The name and every field on it are
+unchanged; only the library it is imported from moved. See
+[MIGRATION.md](../MIGRATION.md#070). Every other type in these tables comes from
+`package:flutter/widgets.dart`, `painting`, `services`, or `foundation` and is unaffected.
+
 | Field | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `client` | `PlacesClient` | Required | Used for autocomplete, details, time-zone, search, and photo calls. |
@@ -221,7 +229,7 @@ Google's documented application-restriction headers only on direct HTTP
 traffic; they are rejected on web and omitted from proxy traffic.
 
 On web, `PlacesWebFallbackPolicy.proxyOnly` requires a proxy for HTTP work and
-`disabled` rejects HTTP work. Deprecated `direct` remains the `0.6.x`
+`disabled` rejects HTTP work. Deprecated `direct` remains the `0.x`
 compatibility default and is scheduled to stop being the default in `1.0.0`.
 See [Security and transport configuration](security_and_transports.md) for the
 deployment matrix and server responsibilities.

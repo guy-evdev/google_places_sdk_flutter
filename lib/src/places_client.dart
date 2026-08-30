@@ -86,12 +86,12 @@ class PlacesClient {
   /// [PlacesClient] constructor, which works on every platform except web.
   PlacesClient.testing({
     required this.apiKey,
-    required PlacesBackend backend,
+    required this._backend,
     this.proxyConfiguration,
     this.proxyBaseUrl,
     this.timeZoneBaseUrl,
     this.options = const PlacesClientOptions(),
-  }) : _backend = backend;
+  });
 
   /// Google Maps Platform API key used for Places and Time Zone requests.
   final String apiKey;

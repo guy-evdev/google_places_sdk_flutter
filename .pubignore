@@ -3,13 +3,13 @@
 .github/
 .idea/
 .vscode/
-AGENTS.md
 build/
 coverage/
 doc/api/
-doc/documentation_style.md
-roadmap.md
-roadmap_history.md
+CLAUDE.md
+RELEASE_WORKFLOW.md
+ROADMAP.md
+ROADMAP_HISTORY.md
 pubspec.lock
 example/.dart_tool/
 example/build/
