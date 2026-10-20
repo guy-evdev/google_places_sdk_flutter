@@ -1,12 +1,109 @@
 # What's new in 0.7.0
 
-`0.7.0` does one thing: it moves the widget layer off `package:flutter/material.dart` and onto the
-standalone [`material_ui`](https://pub.dev/packages/material_ui) package. There are no new options,
-no bug fixes, and no other changes. If you need to bisect something in this release, there is only
-one candidate.
+`0.7.0` moves the widget layer off `package:flutter/material.dart` and onto the standalone
+[`material_ui`](https://pub.dev/packages/material_ui) package — and keeps the widgets working in apps
+that have not made that move. It also makes the first five minutes shorter: the widgets take an
+`apiKey:`, and a pick now returns coordinates and a parsed address.
 
 The step-by-step upgrade is in [MIGRATION.md](../MIGRATION.md#070). This page explains what changed
 and why.
+
+- [Apps on either design library](#apps-on-either-design-library)
+- [`apiKey:` on the widgets](#apikey-on-the-widgets)
+- [Coordinates and an address by default](#coordinates-and-an-address-by-default)
+- [More address getters](#more-address-getters)
+- [Why the `material_ui` migration exists](#why-this-release-exists)
+
+## Apps on either design library
+
+Flutter `3.47`'s `flutter create` still generates apps on `package:flutter/material.dart`; the next
+template generates `material_ui` apps. Both kinds will be adding this package for months, and pub
+cannot pick a version by design library. So `0.7.0` works in both with no app code.
+
+In a `material_ui` app nothing changes. In an app that has not migrated, the widgets supply the
+`material_ui` localizations and `Material` they need themselves, using `material_ui`'s default theme
+in your app's light or dark brightness. A debug build prints a one-time note saying so. To style the
+field without migrating, wrap it in `material_ui`'s `Theme`; the widgets keep a `Theme` they find
+above them. To get your app's own theme on the field, migrate the app:
+
+```shell
+dart fix --apply --code=migrate_design_widgets
+```
+
+That covers the field, the form field, the long-press text menu, dialog and fullscreen modes,
+`PlacesAutocompleteOverlay.show()` called from an unmigrated screen, and `PlacesPhotoAttribution`.
+An app locale that `material_ui` does not translate falls back to English labels rather than
+failing. The one thing such an app must
+change is a `decoration:`, which has to be `material_ui`'s `InputDecoration` — see
+[MIGRATION.md](../MIGRATION.md#070).
+
+## `apiKey:` on the widgets
+
+```dart
+PlacesAutocompleteField(
+  apiKey: const String.fromEnvironment('GOOGLE_MAPS_API_KEY'),
+  onSelection: (selection) => debugPrint(selection.place?.formattedAddress),
+)
+```
+
+`PlacesAutocompleteField`, `PlacesAutocompleteFormField`, `PlacesAutocompleteOverlay`, and
+`PlacesAutocompleteOverlay.show()` accept `apiKey:` as an alternative to `client:`. Pass exactly
+one. Given a key, the widget creates its own `PlacesClient`, keeps it across rebuilds, replaces it
+when the key changes, and closes it when the widget is disposed — or, for `show()`, once the
+overlay has closed.
+
+Keep using `client:` to share one client across screens, for `PlacesClient.proxy()`, or for a key
+restricted to your Android or iOS app: a client made from `apiKey:` uses default options, so it
+sends no `PlacesApplicationIdentity`.
+
+## Coordinates and an address by default
+
+`fetchPlaceDetailsOnSelection` now defaults to `true`, and `selectionFields` to the new
+`PlaceFieldPresets.address`:
+
+| Field | Google billing tier |
+| --- | --- |
+| `id` | Essentials (IDs Only) |
+| `formattedAddress` | Essentials |
+| `shortFormattedAddress` | Essentials |
+| `location` | Essentials |
+| `addressComponents` | Essentials |
+
+Google bills a Place Details request at the highest tier of any field in it, so the default pick is
+billed as Place Details Essentials — the lowest tier that returns an address. The old details
+default, `PlaceFieldPresets.recommended`, includes `displayName`, `primaryType`, and `googleMapsUri`
+(Pro) and `rating` and `userRatingCount` (Enterprise), so turning it on by default would have billed
+every pick at Enterprise. Google's
+[session pricing](https://developers.google.com/maps/documentation/places/web-service/session-pricing)
+goes further: a session ended by a Pro or Enterprise details request is billed at Enterprise +
+Atmosphere, whatever fields it asked for.
+
+What this means for the bill: the details request ends the user's autocomplete session, which is how
+Google prices sessions. Before, with details off, a session was never ended, so Google billed every
+autocomplete request on its own. Now each completed pick adds one Essentials details request, and
+autocomplete requests beyond the twelfth in a session are free.
+
+The package's tests check the field mask on the actual request against those five names, so a
+future change to the preset cannot silently move picks to a pricier tier.
+
+`displayName` is not in the default. The name the user picked is still at
+`selection.suggestion.primaryText.text`.
+
+## More address getters
+
+`PlaceData` already flattened `locality`, `postalCode`, `country`, and others. `0.7.0` adds:
+
+| Getter | From |
+| --- | --- |
+| `city`, `cityShort` | `locality`, falling back to `postal_town`, `sublocality_level_1`, then `administrative_area_level_3` |
+| `streetAddress` | `street_number` and `route`, in the order `formattedAddress` uses — `151 Broadway`, `Unter den Linden 77` |
+| `county`, `countyShort` | `administrative_area_level_2` |
+| `neighborhood`, `neighborhoodShort` | `neighborhood` |
+| `unit` | `subpremise` |
+| `postalCodeSuffix` | `postal_code_suffix` |
+
+Use `city` rather than `locality` to fill a "City" field: UK addresses usually have a postal town
+and no locality.
 
 ## Why this release exists
 
@@ -75,7 +172,7 @@ is affected.
 
 ## Why the Flutter floor moved to 3.44.0
 
-`material_ui` `1.1.0` declares `sdk: ^3.12.0` and `flutter: ">=3.44.0"`, so this package cannot
+`material_ui` `1.0.0` declares `sdk: ^3.12.0` and `flutter: ">=3.44.0"`, so this package cannot
 promise less. The floor went from Flutter `3.35.0` to `3.44.0` — nine minor versions — and that is
 the real cost of this release.
 
@@ -109,7 +206,9 @@ one.
 
 ## Dependencies
 
-The direct dependency list is now `http`, `web`, and `material_ui`. `material_ui` brings
+The direct dependency list is now `http`, `web`, and `material_ui`. Each floor is the oldest version
+the full test suite passes against: `http` `^1.5.0` (request aborting, which cancellation needs,
+arrived in `1.5.0`), `web` `^1.0.0`, and `material_ui` `^1.0.0`. `material_ui` brings
 `cupertino_ui`, `intl`, `material_color_utilities`, `vector_math`, `collection`, and
 `flutter_localizations` transitively.
 

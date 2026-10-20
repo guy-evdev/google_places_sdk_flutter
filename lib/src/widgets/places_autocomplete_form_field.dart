@@ -13,9 +13,13 @@ import 'places_strings.dart';
 /// widget owns one and disposes it automatically.
 class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
   /// Creates a Places autocomplete form field.
+  ///
+  /// Exactly one of `client` and `apiKey` must be supplied; see
+  /// [PlacesAutocompleteField.client] and [PlacesAutocompleteField.apiKey].
   PlacesAutocompleteFormField({
     super.key,
-    required PlacesClient client,
+    PlacesClient? client,
+    String? apiKey,
     PlacesAutocompleteController? controller,
     InputDecoration? decoration,
     PlacesStrings strings = const PlacesStrings(),
@@ -27,9 +31,9 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
     List<String> includedPrimaryTypes = const <String>[],
     List<String> includedRegionCodes = const <String>[],
     bool includePureServiceAreaBusinesses = false,
-    bool fetchPlaceDetailsOnSelection = false,
+    bool fetchPlaceDetailsOnSelection = true,
     bool fetchTimeZoneOnSelection = false,
-    Set<PlaceField> selectionFields = PlaceFieldPresets.recommended,
+    Set<PlaceField> selectionFields = PlaceFieldPresets.address,
     String? selectionLanguageCode,
     String? selectionRegionCode,
     DateTime? selectionTimeZoneAt,
@@ -54,7 +58,11 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
     super.forceErrorText,
     super.errorBuilder,
     super.restorationId,
-  }) : super(
+  }) : assert(
+         (client == null) != (apiKey == null),
+         'Pass exactly one of client or apiKey.',
+       ),
+       super(
          builder: (FormFieldState<PlaceSelection?> field) {
            final errorText = field.errorText;
            final effectiveDecoration = (decoration ?? const InputDecoration())
@@ -69,6 +77,7 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
              value: field.value,
              builder: (effectiveController) => PlacesAutocompleteField(
                client: client,
+               apiKey: apiKey,
                controller: effectiveController,
                decoration: effectiveDecoration,
                strings: strings,

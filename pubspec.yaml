@@ -1,5 +1,5 @@
 name: google_places_sdk_flutter
-description: "Cross-platform Google Places autocomplete widgets and clients built on Places API (New)."
+description: "Address autocomplete TextField for Google Places API (New) that returns coordinates and a parsed address. Pure Dart on every Flutter platform, Wasm-ready."
 version: 0.7.0
 homepage: https://github.com/guy-evdev/google_places_sdk_flutter
 repository: https://github.com/guy-evdev/google_places_sdk_flutter
@@ -28,9 +28,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  http: ^1.6.0
-  material_ui: ^1.1.0
-  web: ^1.1.1
+  http: ^1.5.0
+  material_ui: ^1.0.0
+  web: ^1.0.0
 
 dev_dependencies:
   flutter_test:

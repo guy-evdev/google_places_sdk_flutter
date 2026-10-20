@@ -4,6 +4,7 @@ import '../models/place_models.dart';
 import '../places_client.dart';
 import 'places_autocomplete_controller.dart';
 import 'places_autocomplete_field.dart';
+import 'places_design_scope.dart';
 import 'places_strings.dart';
 
 /// Presentation mode for [PlacesAutocompleteOverlay].
@@ -21,9 +22,12 @@ enum PlacesAutocompleteOverlayMode {
 /// live in a dedicated route instead of inline.
 class PlacesAutocompleteOverlay extends StatelessWidget {
   /// Creates a standalone autocomplete overlay.
+  ///
+  /// Exactly one of [client] and [apiKey] must be supplied.
   const PlacesAutocompleteOverlay({
     super.key,
-    required this.client,
+    this.client,
+    this.apiKey,
     required this.controller,
     required this.mode,
     this.title,
@@ -37,9 +41,9 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     this.includedPrimaryTypes = const <String>[],
     this.includedRegionCodes = const <String>[],
     this.includePureServiceAreaBusinesses = false,
-    this.fetchPlaceDetailsOnSelection = false,
+    this.fetchPlaceDetailsOnSelection = true,
     this.fetchTimeZoneOnSelection = false,
-    this.selectionFields = PlaceFieldPresets.recommended,
+    this.selectionFields = PlaceFieldPresets.address,
     this.selectionLanguageCode,
     this.selectionRegionCode,
     this.selectionTimeZoneAt,
@@ -53,10 +57,20 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     this.onQuerySelection,
     this.onClearField,
     this.onError,
-  });
+  }) : assert(
+         (client == null) != (apiKey == null),
+         'Pass exactly one of client or apiKey.',
+       );
 
   /// Client used to issue autocomplete and optional place-details requests.
-  final PlacesClient client;
+  ///
+  /// See [PlacesAutocompleteField.client].
+  final PlacesClient? client;
+
+  /// API key for an overlay-managed client, closed when the overlay closes.
+  ///
+  /// See [PlacesAutocompleteField.apiKey].
+  final String? apiKey;
 
   /// Controller used by the overlay field.
   final PlacesAutocompleteController controller;
@@ -156,6 +170,16 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
 
   /// Opens a Places autocomplete overlay and returns the user’s selection.
   ///
+  /// ```dart
+  /// final selection = await PlacesAutocompleteOverlay.show(
+  ///   context,
+  ///   apiKey: 'YOUR_API_KEY',
+  /// );
+  /// ```
+  ///
+  /// Pass exactly one of [client] and [apiKey]. Given a key, the overlay
+  /// creates its own client and closes it once the overlay has closed.
+  ///
   /// If [controller] is omitted, the overlay creates and disposes an internal
   /// controller. Use [initialText] to seed the overlay input when launching
   /// from an existing field value.
@@ -164,7 +188,8 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   /// experience should happen in a dialog or fullscreen route.
   static Future<PlaceSelection?> show(
     BuildContext context, {
-    required PlacesClient client,
+    PlacesClient? client,
+    String? apiKey,
     PlacesAutocompleteController? controller,
     String initialText = '',
     PlacesAutocompleteOverlayMode mode = PlacesAutocompleteOverlayMode.dialog,
@@ -180,9 +205,9 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     List<String> includedPrimaryTypes = const <String>[],
     List<String> includedRegionCodes = const <String>[],
     bool includePureServiceAreaBusinesses = false,
-    bool fetchPlaceDetailsOnSelection = false,
+    bool fetchPlaceDetailsOnSelection = true,
     bool fetchTimeZoneOnSelection = false,
-    Set<PlaceField> selectionFields = PlaceFieldPresets.recommended,
+    Set<PlaceField> selectionFields = PlaceFieldPresets.address,
     String? selectionLanguageCode,
     String? selectionRegionCode,
     DateTime? selectionTimeZoneAt,
@@ -198,6 +223,10 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     VoidCallback? onClearField,
     ValueChanged<Object>? onError,
   }) async {
+    assert(
+      (client == null) != (apiKey == null),
+      'Pass exactly one of client or apiKey.',
+    );
     final ownedController = controller == null
         ? PlacesAutocompleteController(initialText: initialText)
         : null;
@@ -205,6 +234,7 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     final navigator = Navigator.of(context, rootNavigator: useRootNavigator);
     final child = PlacesAutocompleteOverlay(
       client: client,
+      apiKey: apiKey,
       controller: effectiveController,
       mode: mode,
       title: title,
@@ -243,23 +273,43 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       if (mode == PlacesAutocompleteOverlayMode.fullscreen) {
         return await navigator.push<PlaceSelection>(
           MaterialPageRoute<PlaceSelection>(
+            // The overlay applies PlacesDesignScope itself.
             builder: (_) => child,
             fullscreenDialog: true,
           ),
         );
       }
 
-      return await showDialog<PlaceSelection>(
-        context: context,
-        useRootNavigator: useRootNavigator,
-        builder: (dialogContext) => Dialog(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: 560,
-              maxHeight: MediaQuery.sizeOf(dialogContext).height * 0.8,
-            ),
-            child: SingleChildScrollView(
-              child: Padding(padding: const EdgeInsets.all(16), child: child),
+      // Not showDialog: it asserts material_ui MaterialLocalizations on the
+      // caller's context, which an app still on package:flutter/material.dart
+      // does not have. Pushing the route showDialog builds avoids that, and
+      // the route's content gets PlacesDesignScope like every other root.
+      return await navigator.push<PlaceSelection>(
+        DialogRoute<PlaceSelection>(
+          context: context,
+          themes: InheritedTheme.capture(from: context, to: navigator.context),
+          barrierColor: DialogTheme.of(context).barrierColor ?? Colors.black54,
+          barrierLabel:
+              Localizations.of<MaterialLocalizations>(
+                context,
+                MaterialLocalizations,
+              )?.modalBarrierDismissLabel ??
+              strings.closeLabel,
+          traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
+          builder: (dialogContext) => PlacesDesignScope(
+            child: Dialog(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: 560,
+                  maxHeight: MediaQuery.sizeOf(dialogContext).height * 0.8,
+                ),
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: child,
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -275,8 +325,17 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Public, so it can be mounted outside show(), including in an app still
+    // on package:flutter/material.dart.
+    return PlacesDesignScope(child: Builder(builder: _buildOverlay));
+  }
+
+  Widget _buildOverlay(BuildContext context) {
+    // The field owns the client made from apiKey, so it is closed only after
+    // the field has cancelled its in-flight requests.
     final field = PlacesAutocompleteField(
       client: client,
+      apiKey: apiKey,
       controller: controller,
       decoration: decoration,
       strings: strings,

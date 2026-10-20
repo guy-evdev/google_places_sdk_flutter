@@ -1,0 +1,119 @@
+# google_places_sdk_flutter
+
+> Address autocomplete for Flutter on Google Places API (New). A text field (or a dialog/fullscreen
+> search) that returns the picked place's coordinates and parsed address, plus a typed client for
+> Place Details, Text Search, Nearby Search, Place Photos, and Time Zone. Pure Dart, no plugin, all
+> six Flutter platforms including Wasm. New-API only: there is no legacy Places API support.
+
+## Install
+
+```shell
+flutter pub add google_places_sdk_flutter
+```
+
+Requires Flutter >=3.44.0, Dart >=3.12.0. Enable "Places API (New)" (and, for web, "Maps
+JavaScript API") on a Google Cloud project with billing. Do not add `material_ui` to an app just
+for this package; it is this package's own dependency. Import only:
+
+```dart
+import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
+```
+
+## Smallest working code
+
+```dart
+// A field on the page:
+PlacesAutocompleteField(
+  apiKey: const String.fromEnvironment('GOOGLE_MAPS_API_KEY'),
+  onSelection: (PlaceSelection selection) {
+    final place = selection.place; // filled in by default
+    debugPrint('${place?.location} ${place?.formattedAddress}');
+  },
+)
+
+// Or an awaitable picker:
+final PlaceSelection? selection = await PlacesAutocompleteOverlay.show(
+  context,
+  apiKey: const String.fromEnvironment('GOOGLE_MAPS_API_KEY'),
+  mode: PlacesAutocompleteOverlayMode.dialog, // or .fullscreen
+);
+```
+
+Run with `flutter run --dart-define=GOOGLE_MAPS_API_KEY=...`.
+
+## Widgets
+
+- `PlacesAutocompleteField` — inline field; `fieldMode:` `inline` (default), `dialog`, `fullscreen`.
+- `PlacesAutocompleteFormField` — the same inside a `Form`; standard `validator`, `onSaved`,
+  `initialValue`, `autovalidateMode`, `forceErrorText`, `errorBuilder`, `restorationId`.
+- `PlacesAutocompleteOverlay.show(context, ...)` → `Future<PlaceSelection?>`; `null` if dismissed.
+- `PlacesPhotoAttribution(photo: photo)` — required author attribution next to a photo.
+
+All four autocomplete surfaces (field, form field, overlay widget, `show()`) take **exactly one** of `apiKey:` (widget owns, replaces, and
+closes its client) or `client:` (caller owns a `PlacesClient`). Use `client:` to share a client,
+for `PlacesClient.proxy(...)`, or for an Android/iOS app-restricted key, which needs
+`PlacesClientOptions(applicationIdentity: PlacesApplicationIdentity.android(pkg, sha1))` or
+`.ios(bundleId)` — a client made from `apiKey:` sends no identity.
+
+Common options (same names on all surfaces): `languageCode`, `regionCode`, `origin`
+(`PlaceCoordinates`, makes Google return straight-line distances), `locationBias` /
+`locationRestriction` (mutually exclusive), `includedPrimaryTypes` (e.g. `['restaurant']`,
+`['(cities)']`), `includedRegionCodes`, `includeQueryPredictions` + `onQuerySelection`,
+`fetchPlaceDetailsOnSelection` (default `true`), `selectionFields` (default
+`PlaceFieldPresets.address`), `fetchTimeZoneOnSelection` (default `false`), `maxSuggestions`
+(max 5), `decoration` (`material_ui`'s `InputDecoration`), `strings` (`PlacesStrings`),
+`suggestionBuilder`, `onError`, `onClearField`, `enabled`, `autofocus`, `showPoweredByGoogle`,
+`controller` (`PlacesAutocompleteController`: text, focus, session, selection, `debounceDuration`
+default 300 ms).
+
+## What a selection carries
+
+`PlaceSelection`: `placeId`, `displayText`, `suggestion` (`PlaceSuggestion`: `primaryText`,
+`secondaryText`, `distanceMeters`), `place` (`PlaceData?`), `timeZone`, `sessionToken`.
+
+`PlaceData` address getters: `streetAddress`, `streetNumber`, `route`, `unit`, `neighborhood`,
+`city` (falls back `locality` → `postal_town` → `sublocality_level_1` →
+`administrative_area_level_3`), `locality`, `county`, `administrativeArea`, `postalCode`,
+`postalCodeSuffix`, `country`, `countryCode`; most have a `...Short` variant. Also `location`,
+`formattedAddress`, `shortFormattedAddress`, `addressComponents`.
+
+## Field presets and billing
+
+- `PlaceFieldPresets.address` (widget default): `id`, `formattedAddress`, `shortFormattedAddress`,
+  `location`, `addressComponents` — all Place Details **Essentials**.
+- `PlaceFieldPresets.minimal`, `.recommended`, `.rich` — include `displayName` (Pro) and, from
+  `recommended` up, `rating` (Enterprise). Google bills a request at its highest-tier field.
+- `displayName` is not in the default; the picked name is `selection.suggestion.primaryText.text`.
+- Photos are not in the default: add `PlaceField.photos` to `selectionFields`, or
+  `place.photos` is empty. Each `client.fetchPhotoMedia` call is billed separately.
+- The widgets manage autocomplete session tokens and end the session with the details request.
+
+## Client
+
+```dart
+final client = PlacesClient(apiKey: key); // close() when done
+final suggestions = await client.autocomplete(AutocompleteRequest(input: 'cof', sessionToken: token));
+final place = await client.fetchPlace(PlaceDetailsRequest(placeId: id, fields: PlaceFieldPresets.address, sessionToken: token));
+final results = await client.searchText(const TextSearchRequest(textQuery: 'coffee', pageSize: 10));
+final page = await client.searchTextPage(...); // nextPageToken
+final nearby = await client.searchNearby(NearbySearchRequest(...));
+final media = await client.fetchPhotoMedia(PhotoMediaRequest(...));
+final zone = await client.fetchTimeZoneForPlace(place);
+```
+
+Every operation takes an optional `cancellationToken: PlacesCancellationToken()`. Failures are
+`PlacesException` with `kind` (`PlacesErrorKind`), `statusCode`, `code` (Google's status, e.g.
+`PERMISSION_DENIED`), `retryable`, `message`.
+
+## Apps not yet on material_ui
+
+Apps still on `package:flutter/material.dart` need no extra code; the widgets use `material_ui`'s
+default theme there. A `decoration:` must still be `material_ui`'s `InputDecoration`
+(`import 'package:material_ui/material_ui.dart' as mui;`).
+
+## Links
+
+- [README](https://github.com/guy-evdev/google_places_sdk_flutter/blob/main/README.md)
+- [API reference and defaults](https://github.com/guy-evdev/google_places_sdk_flutter/blob/main/doc/api_reference.md)
+- [Security and transports](https://github.com/guy-evdev/google_places_sdk_flutter/blob/main/doc/security_and_transports.md)
+- [Migration guide](https://github.com/guy-evdev/google_places_sdk_flutter/blob/main/MIGRATION.md)

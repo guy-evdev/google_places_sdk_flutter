@@ -470,6 +470,23 @@ enum PlaceField {
 
 /// Curated field-mask presets for fetching place details and search results.
 abstract final class PlaceFieldPresets {
+  /// Coordinates and a parsed address, billed as Place Details Essentials —
+  /// the lowest tier that still returns an address.
+  ///
+  /// This is the default `selectionFields` of the autocomplete widgets. It
+  /// leaves out [PlaceField.displayName], which is billed as Place Details
+  /// Pro; the suggestion the user picked already carries the place's name as
+  /// [PlaceSuggestion.primaryText]. Use [recommended] or an explicit set when
+  /// you need more, and see Google's
+  /// [field pricing tiers](https://developers.google.com/maps/documentation/places/web-service/data-fields).
+  static const Set<PlaceField> address = <PlaceField>{
+    PlaceField.id,
+    PlaceField.formattedAddress,
+    PlaceField.shortFormattedAddress,
+    PlaceField.location,
+    PlaceField.addressComponents,
+  };
+
   /// Small payload suitable for basic display and coordinates.
   static const Set<PlaceField> minimal = <PlaceField>{
     PlaceField.id,
@@ -2053,6 +2070,74 @@ class PlaceData {
 
   /// Short postal code component, when Google provides it.
   String? get postalCodeShort => _addressComponent('postal_code')?.shortText;
+
+  /// Postal code suffix component, such as the `+4` of a US ZIP+4 code.
+  String? get postalCodeSuffix =>
+      _addressComponent('postal_code_suffix')?.longText;
+
+  /// The city or town, for addresses that do not carry a `locality`.
+  ///
+  /// Many addresses have no `locality` component — UK addresses usually carry
+  /// the town as `postal_town` — so this falls back through
+  /// `locality` → `postal_town` → `sublocality_level_1` →
+  /// `administrative_area_level_3`, then — when [PlaceField.postalAddress] was
+  /// requested, which the default `PlaceFieldPresets.address` does not — the
+  /// postal address's locality.
+  /// Prefer it to [locality] for filling a "City" form field.
+  String? get city => _cityComponent?.longText ?? postalAddress?.locality;
+
+  /// Short form of [city], from the same address component.
+  String? get cityShort => _cityComponent?.shortText;
+
+  PlaceAddressComponent? get _cityComponent =>
+      _addressComponent('locality') ??
+      _addressComponent('postal_town') ??
+      _addressComponent('sublocality_level_1') ??
+      _addressComponent('administrative_area_level_3');
+
+  /// County component (`administrative_area_level_2`).
+  String? get county =>
+      _addressComponent('administrative_area_level_2')?.longText;
+
+  /// Short county component, when Google provides it.
+  String? get countyShort =>
+      _addressComponent('administrative_area_level_2')?.shortText;
+
+  /// Neighborhood component.
+  String? get neighborhood => _addressComponent('neighborhood')?.longText;
+
+  /// Short neighborhood component, when Google provides it.
+  String? get neighborhoodShort => _addressComponent('neighborhood')?.shortText;
+
+  /// Unit, apartment, or suite component (`subpremise`), such as `4B`.
+  String? get unit => _addressComponent('subpremise')?.longText;
+
+  /// The street line: [streetNumber] and [route] in the order this address
+  /// uses, such as `151 Broadway` or `Unter den Linden 77`.
+  ///
+  /// The order is taken from [formattedAddress], which Google formats for the
+  /// address's country. Returns whichever part exists when only one does, and
+  /// `null` when neither does.
+  String? get streetAddress {
+    final number = streetNumber;
+    final street = route;
+    if (number == null || street == null) {
+      return number ?? street;
+    }
+    // ponytail: order inferred by substring position in formattedAddress;
+    // a street number that also appears earlier inside the route name can
+    // misorder it, and number-first is assumed when either is not found.
+    // Upgrade path: a per-country table if real addresses show misorders.
+    final formatted = formattedAddress ?? '';
+    final numberAt = formatted.indexOf(number);
+    var streetAt = formatted.indexOf(street);
+    // formattedAddress often carries the short route form, such as `W 34th St`.
+    if (streetAt < 0 && routeShort != null) {
+      streetAt = formatted.indexOf(routeShort!);
+    }
+    final routeFirst = numberAt >= 0 && streetAt >= 0 && streetAt < numberAt;
+    return routeFirst ? '$street $number' : '$number $street';
+  }
 
   /// Country name component.
   String? get country => _addressComponent('country')?.longText;

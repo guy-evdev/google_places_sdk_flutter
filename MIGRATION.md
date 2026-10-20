@@ -7,13 +7,14 @@ changes.
 
 `0.7.0` moves the widget layer from the in-framework `package:flutter/material.dart` to the
 standalone [`material_ui`](https://pub.dev/packages/material_ui) package, following Flutter's own
-Material and Cupertino decoupling.
+Material and Cupertino decoupling. It also changes two defaults so a selection carries coordinates
+and an address.
 
-**You must migrate your own app in the same step.** The class names are unchanged, but
-`material_ui`'s `InputDecoration` is a different type from `package:flutter/material.dart`'s
-`InputDecoration`, and `MaterialUiCompatibilityBridge` cannot bridge a type mismatch in a public
-API signature. Upgrading this package without migrating your app will not compile, and migrating
-your app without upgrading this package will not compile either.
+| If your app… | Do |
+| --- | --- |
+| Uses `material_ui`, or is migrating to it | Steps 1, 2, 4, 5, and 6 if you build localization delegates |
+| Still uses `package:flutter/material.dart` | Steps 1, 4, and 5; step 3 if you pass `decoration:` |
+| Reads `PlacesAutocompleteField.client` or `PlacesAutocompleteOverlay.client` | Step 7 |
 
 ### 1. Raise your SDK floor
 
@@ -31,35 +32,18 @@ environment:
   flutter: ">=3.44.0"
 ```
 
-### 2. Add `material_ui` to your app
+### 2. In a `material_ui` app: take `InputDecoration` from `material_ui`
 
-```yaml
-# Before
-dependencies:
-  flutter:
-    sdk: flutter
-  google_places_sdk_flutter: ^0.6.1
-
-# After
-dependencies:
-  flutter:
-    sdk: flutter
-  google_places_sdk_flutter: ^0.7.0
-  material_ui: ^1.1.0
-```
-
-Do not add `cupertino_ui` unless your own code imports it. `material_ui` depends on it and brings
-it in transitively.
-
-### 3. Rewrite your imports
-
-Flutter ships an automated fix for this. Run it in your app, then review the result:
+`material_ui`'s `InputDecoration` is a different type from `package:flutter/material.dart`'s, and
+`MaterialUiCompatibilityBridge` cannot bridge a type in a public API signature. Upgrade this
+package and migrate your app in the same step. Flutter ships an automated fix — run it in your
+app, then review the result:
 
 ```shell
 dart fix --apply --code=migrate_design_widgets
 ```
 
-It rewrites imports only. It does not reason about public API, so check anything it did not touch.
+It rewrites imports only:
 
 ```dart
 // Before
@@ -69,10 +53,16 @@ import 'package:flutter/material.dart';
 import 'package:material_ui/material_ui.dart';
 ```
 
-### 4. Take `InputDecoration` from `material_ui`
+and needs `material_ui` in your app's own dependencies:
 
-Four public surfaces accept an `InputDecoration`. The parameter names and defaults are unchanged —
-only the library the type comes from has changed.
+```yaml
+dependencies:
+  google_places_sdk_flutter: ^0.7.0
+  material_ui: ^1.1.0
+```
+
+Do not add `cupertino_ui` unless your own code imports it. Four public surfaces accept an
+`InputDecoration`; the parameter names are unchanged:
 
 | Surface | Parameter |
 | --- | --- |
@@ -81,35 +71,86 @@ only the library the type comes from has changed.
 | `PlacesAutocompleteOverlay.show()` | `decoration:` |
 | `PlacesAutocompleteFormField` | `decoration:` |
 
+### 3. In an app still on `package:flutter/material.dart`: only `decoration:` changes
+
+The widgets work with no code change: they supply what `material_ui` needs themselves and use its
+default theme, following your app's brightness. Only a `decoration:` must now be `material_ui`'s
+`InputDecoration`. Add `material_ui` to your dependencies as in step 2, and import it with a prefix
+in the files that build one:
+
 ```dart
 // Before
 import 'package:flutter/material.dart';
-import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
 
 PlacesAutocompleteField(
   client: client,
-  decoration: const InputDecoration(
-    labelText: 'Choose a place',
-    border: OutlineInputBorder(),
-  ),
-  onSelection: (selection) => debugPrint(selection.displayText),
+  decoration: const InputDecoration(labelText: 'Choose a place'),
 );
 
 // After
-import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart' as mui;
 
 PlacesAutocompleteField(
   client: client,
-  decoration: const InputDecoration(
-    labelText: 'Choose a place',
-    border: OutlineInputBorder(),
-  ),
-  onSelection: (selection) => debugPrint(selection.displayText),
+  decoration: const mui.InputDecoration(labelText: 'Choose a place'),
 );
 ```
 
-### 5. If you use localization delegates
+To style the field without migrating, wrap it in `material_ui`'s `Theme`. To get your app's own
+theme on it, migrate the app (step 2).
+
+### 4. Place details now load on selection
+
+`fetchPlaceDetailsOnSelection` defaults to `true`, so `selection.place` is filled in. Each completed
+selection now makes one Place Details request, which also ends the user's autocomplete session —
+how Google prices sessions. With the default fields it is billed as Place Details Essentials.
+
+If you resolved the place yourself, or only need the place ID, opt out:
+
+```dart
+// Before — details were off by default
+PlacesAutocompleteField(
+  client: client,
+  onSelection: (selection) => lookUp(selection.placeId),
+);
+
+// After — keep them off
+PlacesAutocompleteField(
+  client: client,
+  fetchPlaceDetailsOnSelection: false,
+  onSelection: (selection) => lookUp(selection.placeId),
+);
+```
+
+### 5. The default selection fields are `PlaceFieldPresets.address`
+
+`selectionFields` defaults to `PlaceFieldPresets.address` — `id`, `formattedAddress`,
+`shortFormattedAddress`, `location`, and `addressComponents`, all Essentials. The old default,
+`PlaceFieldPresets.recommended`, also returned `displayName`, `primaryType`, `googleMapsUri`,
+`rating`, and others, which Google bills as Pro and Enterprise. If you read any of those, ask for
+them explicitly:
+
+```dart
+// Before — recommended was the default
+PlacesAutocompleteField(
+  client: client,
+  fetchPlaceDetailsOnSelection: true,
+  onSelection: (selection) => show(selection.place?.rating),
+);
+
+// After
+PlacesAutocompleteField(
+  client: client,
+  selectionFields: PlaceFieldPresets.recommended,
+  onSelection: (selection) => show(selection.place?.rating),
+);
+```
+
+The place's name is still available without `displayName`, as
+`selection.suggestion.primaryText.text`.
+
+### 6. If you use localization delegates
 
 `GlobalMaterialLocalizations` now comes from `material_ui` rather than `flutter_localizations`,
 and `GlobalMaterialLocalizations.delegates` replaces the three-delegate list.
@@ -139,7 +180,16 @@ MaterialApp(
 A direct `flutter_localizations` dependency is no longer required for this; `material_ui` depends
 on it. Remove it only if nothing else in your app imports it.
 
-### What did not change
+### 7. `client` is nullable on the field and overlay widgets
 
-No parameter was renamed, removed, or given a new default. No behaviour changed. If your app
-already compiled against `0.6.1`, the migration above is the entire change.
+The widgets now accept `apiKey:` as an alternative to `client:`, so the `client` field they expose
+is `PlacesClient?`. Constructing the widgets is unchanged. Code that reads the field needs a null
+check:
+
+```dart
+// Before
+final client = field.client;
+
+// After
+final client = field.client!; // non-null whenever the widget was given a client
+```

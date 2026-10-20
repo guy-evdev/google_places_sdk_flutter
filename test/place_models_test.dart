@@ -858,4 +858,126 @@ void main() {
       throwsA(isA<PlacesException>()),
     );
   });
+
+  group('richer address getters', () {
+    PlaceData address(
+      String formattedAddress,
+      Map<String, String> components, {
+      Map<String, String> shortText = const <String, String>{},
+    }) => PlaceData.fromJson(<String, Object?>{
+      'id': 'place-1',
+      'formattedAddress': formattedAddress,
+      'addressComponents': <Map<String, Object?>>[
+        for (final entry in components.entries)
+          <String, Object?>{
+            'longText': entry.value,
+            'shortText': shortText[entry.key] ?? entry.value,
+            'types': <String>[entry.key],
+          },
+      ],
+    });
+
+    test('a US address', () {
+      final place = address(
+        '151 Broadway Apt 4B, New York, NY 10007-1234, USA',
+        <String, String>{
+          'subpremise': '4B',
+          'street_number': '151',
+          'route': 'Broadway',
+          'neighborhood': 'Financial District',
+          'locality': 'New York',
+          'administrative_area_level_2': 'New York County',
+          'administrative_area_level_1': 'New York',
+          'postal_code': '10007',
+          'postal_code_suffix': '1234',
+        },
+        shortText: const <String, String>{
+          'locality': 'NYC',
+          'neighborhood': 'FiDi',
+          'administrative_area_level_2': 'NY County',
+        },
+      );
+
+      expect(place.streetAddress, '151 Broadway');
+      expect(place.unit, '4B');
+      expect(place.neighborhood, 'Financial District');
+      expect(place.neighborhoodShort, 'FiDi');
+      expect(place.city, 'New York');
+      expect(place.cityShort, 'NYC');
+      expect(place.county, 'New York County');
+      expect(place.countyShort, 'NY County');
+      expect(place.postalCodeSuffix, '1234');
+    });
+
+    test('a UK address with no locality takes the city from postal_town', () {
+      final place =
+          address('10 Downing St, London SW1A 2AA, UK', <String, String>{
+            'street_number': '10',
+            'route': 'Downing Street',
+            'postal_town': 'London',
+            'postal_code': 'SW1A 2AA',
+          });
+
+      expect(place.locality, isNull);
+      expect(place.city, 'London');
+      expect(place.streetAddress, '10 Downing Street');
+    });
+
+    test('the street line follows the order of formattedAddress', () {
+      final place = address(
+        'Unter den Linden 77, 10117 Berlin, Germany',
+        <String, String>{
+          'route': 'Unter den Linden',
+          'street_number': '77',
+          'locality': 'Berlin',
+        },
+      );
+
+      expect(place.streetAddress, 'Unter den Linden 77');
+    });
+
+    test('the street line also matches the short route form', () {
+      final place = address(
+        'C. de Alcalá 42, 28014 Madrid, Spain',
+        <String, String>{'route': 'Calle de Alcalá', 'street_number': '42'},
+        shortText: const <String, String>{'route': 'C. de Alcalá'},
+      );
+
+      expect(place.streetAddress, 'Calle de Alcalá 42');
+    });
+
+    test('the street line is whichever part exists', () {
+      expect(
+        address('Broadway', <String, String>{
+          'route': 'Broadway',
+        }).streetAddress,
+        'Broadway',
+      );
+      expect(address('', <String, String>{}).streetAddress, isNull);
+    });
+
+    test('city falls back through sublocality and admin area level 3', () {
+      expect(
+        address('', <String, String>{
+          'sublocality_level_1': 'Brooklyn',
+          'administrative_area_level_3': 'Kings',
+        }).city,
+        'Brooklyn',
+      );
+      expect(
+        address('', <String, String>{
+          'administrative_area_level_3': 'Kings',
+        }).city,
+        'Kings',
+      );
+      expect(address('', <String, String>{}).city, isNull);
+      expect(
+        PlaceData.fromJson(const <String, Object?>{
+          'id': 'place-1',
+          'postalAddress': <String, Object?>{'locality': 'Lyon'},
+        }).city,
+        'Lyon',
+      );
+    });
+  });
 }

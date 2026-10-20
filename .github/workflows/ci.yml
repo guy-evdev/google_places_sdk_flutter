@@ -1,4 +1,4 @@
-# flutter-package template rev 5 — per-push lane.
+# flutter-package template rev 8 — per-push lane.
 # Kept fast enough to actually wait for. Slow, release-only checks (dartdoc, example builds, pana)
 # live in release.yml.
 #
@@ -39,7 +39,11 @@ jobs:
         with:
           flutter-version: 3.44.0
           cache: true
-      - run: flutter pub get
+      # downgrade, not get: this lane asserts the oldest SDK *and* the oldest allowed version of
+      # every dependency. pana's lower-bound check only analyzes at the floor; this runs the tests
+      # there. The ceiling lane below covers the newest of both. Adopted in 0.7.0: a floor nobody
+      # runs is a floor nobody has verified.
+      - run: flutter pub downgrade
       - run: flutter analyze
       - run: flutter test
 

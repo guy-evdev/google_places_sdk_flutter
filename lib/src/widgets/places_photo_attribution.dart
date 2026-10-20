@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../models/place_models.dart';
+import 'places_design_scope.dart';
 
 /// Renders the author attribution required for a displayed [PlacePhoto].
 ///
@@ -34,9 +35,18 @@ class PlacesPhotoAttribution extends StatelessWidget {
       return const SizedBox.shrink();
     }
     final label = '$prefix ${names.join(', ')}';
-    return Semantics(
-      label: label,
-      child: Text(label, style: style ?? Theme.of(context).textTheme.bodySmall),
+    // Google requires the attribution to be legible, so in an app without
+    // material_ui the text still follows the app's brightness.
+    return PlacesDesignScope(
+      child: Builder(
+        builder: (context) => Semantics(
+          label: label,
+          child: Text(
+            label,
+            style: style ?? Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+      ),
     );
   }
 }

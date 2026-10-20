@@ -9,6 +9,7 @@ import '../places_client.dart';
 import '../places_cancellation_token.dart';
 import 'places_autocomplete_controller.dart';
 import 'places_autocomplete_overlay.dart';
+import 'places_design_scope.dart';
 import 'places_strings.dart';
 
 /// Controls how [PlacesAutocompleteField] behaves.
@@ -32,24 +33,29 @@ enum PlacesAutocompleteFieldMode {
 /// This widget supports inline search, dialog launch, and fullscreen launch
 /// modes through [fieldMode].
 ///
+/// Pass either [apiKey], and the field manages its own [PlacesClient], or a
+/// [client] you own.
+///
 /// Example:
 /// ```dart
 /// PlacesAutocompleteField(
-///   client: client,
+///   apiKey: 'YOUR_API_KEY',
 ///   languageCode: 'en',
 ///   regionCode: 'us',
 ///   includedPrimaryTypes: const <String>['restaurant'],
-///   fetchPlaceDetailsOnSelection: true,
 ///   onSelection: (selection) {
-///     debugPrint(selection.displayText);
+///     debugPrint('${selection.displayText} ${selection.place?.location}');
 ///   },
 /// )
 /// ```
 class PlacesAutocompleteField extends StatefulWidget {
   /// Creates a Places autocomplete field or launcher.
+  ///
+  /// Exactly one of [client] and [apiKey] must be supplied.
   const PlacesAutocompleteField({
     super.key,
-    required this.client,
+    this.client,
+    this.apiKey,
     this.controller,
     this.decoration,
     this.strings = const PlacesStrings(),
@@ -61,9 +67,9 @@ class PlacesAutocompleteField extends StatefulWidget {
     this.includedPrimaryTypes = const <String>[],
     this.includedRegionCodes = const <String>[],
     this.includePureServiceAreaBusinesses = false,
-    this.fetchPlaceDetailsOnSelection = false,
+    this.fetchPlaceDetailsOnSelection = true,
     this.fetchTimeZoneOnSelection = false,
-    this.selectionFields = PlaceFieldPresets.recommended,
+    this.selectionFields = PlaceFieldPresets.address,
     this.selectionLanguageCode,
     this.selectionRegionCode,
     this.selectionTimeZoneAt,
@@ -79,10 +85,33 @@ class PlacesAutocompleteField extends StatefulWidget {
     this.includeQueryPredictions = false,
     this.onQuerySelection,
     this.suggestionBuilder,
-  });
+  }) : assert(
+         (client == null) != (apiKey == null),
+         'Pass exactly one of client or apiKey.',
+       );
 
   /// Client used for autocomplete, place-details, and optional time-zone calls.
-  final PlacesClient client;
+  ///
+  /// Pass a client instead of [apiKey] to share one client across screens, or
+  /// to use a keyless proxy with [PlacesClient.proxy] so no key ships in the
+  /// app. The caller owns it: the field never closes a client it was given.
+  final PlacesClient? client;
+
+  /// Google Maps Platform API key, for when the field should manage its own
+  /// client.
+  ///
+  /// The field creates a [PlacesClient] from this key, closes it when the
+  /// field is disposed, and replaces it if the key changes. Use [client]
+  /// instead to share a client or to keep keys off the device.
+  ///
+  /// That client is `PlacesClient(apiKey: apiKey)` with default
+  /// [PlacesClientOptions]: on web it uses the Maps JavaScript backend with the
+  /// default [PlacesWebOptions]; elsewhere it calls REST and sends no
+  /// application identity. A key restricted to your Android or iOS app needs
+  /// [PlacesClientOptions.applicationIdentity]: pass a [client] built with it.
+  /// In dialog and fullscreen modes the opened overlay makes its own client
+  /// from the same key.
+  final String? apiKey;
 
   /// Optional external controller for coordinating text, focus, and selection.
   final PlacesAutocompleteController? controller;
@@ -139,6 +168,13 @@ class PlacesAutocompleteField extends StatefulWidget {
 
   /// Whether a selected suggestion should be resolved into [PlaceData] before
   /// [onSelection] is called.
+  ///
+  /// On by default, so a selection carries coordinates and a parsed address.
+  /// The details request ends the user's autocomplete session, which is how
+  /// Google prices sessions: each completed selection costs one Place Details
+  /// request at the tier of [selectionFields] — Essentials for the default
+  /// [PlaceFieldPresets.address]. Set this to `false` to receive only the
+  /// suggestion and skip that request.
   final bool fetchPlaceDetailsOnSelection;
 
   /// Whether a selected suggestion should also resolve time-zone metadata.
@@ -148,6 +184,11 @@ class PlacesAutocompleteField extends StatefulWidget {
   final bool fetchTimeZoneOnSelection;
 
   /// The fields to request when [fetchPlaceDetailsOnSelection] is enabled.
+  ///
+  /// Defaults to [PlaceFieldPresets.address]. Google bills the whole request
+  /// at the highest tier of any field in it, so adding one Pro or Enterprise
+  /// field — [PlaceFieldPresets.recommended] has several — moves every
+  /// selection to that tier.
   ///
   /// If [fetchTimeZoneOnSelection] is enabled, the widget will automatically
   /// ensure that [PlaceField.location] is included even if it is not present
@@ -217,6 +258,7 @@ class PlacesAutocompleteField extends StatefulWidget {
 
 class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   PlacesAutocompleteController? _ownedController;
+  PlacesClient? _ownedClient;
   Timer? _debounce;
   List<AutocompleteSuggestion> _suggestions = const <AutocompleteSuggestion>[];
   Object? _error;
@@ -232,6 +274,14 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   PlacesCancellationToken? _searchCancellationToken;
   PlacesCancellationToken? _selectionCancellationToken;
   AutocompleteSessionToken? _observedSessionToken;
+
+  PlacesClient get _client => widget.client ?? _ownedClient!;
+
+  void _createOwnedClient() {
+    _ownedClient = widget.client == null
+        ? PlacesClient(apiKey: widget.apiKey!)
+        : null;
+  }
 
   PlacesAutocompleteController get _controller =>
       widget.controller ??
@@ -253,6 +303,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   @override
   void initState() {
     super.initState();
+    _createOwnedClient();
     _attachController(_controller);
     _syncFocusMode();
   }
@@ -261,21 +312,30 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   void didUpdateWidget(PlacesAutocompleteField oldWidget) {
     super.didUpdateWidget(oldWidget);
     final controllerChanged = oldWidget.controller != widget.controller;
-    final clientChanged = oldWidget.client != widget.client;
+    final clientChanged =
+        oldWidget.client != widget.client || oldWidget.apiKey != widget.apiKey;
     final requestChanged = _requestConfigurationChanged(oldWidget);
+    final previousClient = oldWidget.client ?? _ownedClient!;
+    final retiredClient = clientChanged ? _ownedClient : null;
+    if (clientChanged) {
+      _createOwnedClient();
+    }
 
     if (controllerChanged) {
       final previousController = oldWidget.controller ?? _ownedController!;
-      _endObservedSession(oldWidget.client);
+      _endObservedSession(previousClient);
       _detachController(previousController);
       _invalidateAsyncWork();
       _attachController(_controller);
     } else if (clientChanged || requestChanged) {
-      _endObservedSession(clientChanged ? oldWidget.client : widget.client);
+      _endObservedSession(previousClient);
       _controller.resetSession(notify: false);
       _observedSessionToken = _controller.sessionToken;
       _invalidateAsyncWork();
     }
+    // After _invalidateAsyncWork, so in-flight work is already cancelled and
+    // its late failure is discarded as stale rather than reported.
+    unawaited(retiredClient?.close());
     _syncFocusMode();
   }
 
@@ -341,9 +401,10 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     _searchGeneration++;
     _selectionGeneration++;
     final controller = _controller;
-    _endObservedSession(widget.client);
+    _endObservedSession(_client);
     _detachController(controller);
     _ownedController?.dispose();
+    unawaited(_ownedClient?.close());
     super.dispose();
   }
 
@@ -355,7 +416,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     }
     _observedSessionToken = currentToken;
     if (previousToken != null) {
-      unawaited(widget.client.endAutocompleteSession(previousToken));
+      unawaited(_client.endAutocompleteSession(previousToken));
     }
     _invalidateAsyncWork();
   }
@@ -505,11 +566,11 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
         includeQueryPredictions: widget.includeQueryPredictions,
       );
       final suggestions = widget.includeQueryPredictions
-          ? await widget.client.autocompleteSuggestions(
+          ? await _client.autocompleteSuggestions(
               request,
               cancellationToken: cancellationToken,
             )
-          : await widget.client.autocomplete(
+          : await _client.autocomplete(
               request,
               cancellationToken: cancellationToken,
             );
@@ -607,7 +668,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     if (suggestion is! PlaceSuggestion) {
       return;
     }
-    final client = widget.client;
+    final client = _client;
     final controller = _controller;
     final sessionToken = controller.sessionToken;
     final generation = ++_selectionGeneration;
@@ -685,7 +746,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       if (controller.sessionToken.value == sessionToken.value &&
           mounted &&
           identical(controller, _controller) &&
-          identical(client, widget.client)) {
+          identical(client, _client)) {
         controller.resetSession();
       } else {
         unawaited(client.endAutocompleteSession(sessionToken));
@@ -700,7 +761,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   ) {
     return mounted &&
         generation == _selectionGeneration &&
-        identical(client, widget.client) &&
+        identical(client, _client) &&
         identical(controller, _controller);
   }
 
@@ -758,7 +819,11 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
 
     final selection = await PlacesAutocompleteOverlay.show(
       context,
+      // Given a key, the overlay owns its own client. A borrowed one would be
+      // closed under it if this field's key changed, or the field was
+      // disposed, while the overlay is open.
       client: widget.client,
+      apiKey: widget.apiKey,
       initialText: _controller.textController.text,
       mode: mode,
       decoration: widget.decoration,
@@ -798,7 +863,12 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    return PlacesDesignScope(child: Builder(builder: _buildField));
+  }
+
+  // Takes the context below PlacesDesignScope, so Theme.of and the
+  // localizations resolve inside it.
+  Widget _buildField(BuildContext context) {
     final decoration = _buildDecoration();
 
     return Focus(
@@ -822,6 +892,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
                 ? _openOverlay
                 : null,
             decoration: decoration,
+            contextMenuBuilder: PlacesDesignScope.contextMenuBuilder,
           ),
           if (_selectionLoading) const LinearProgressIndicator(),
           if (_searchUiVisible) ...<Widget>[
@@ -841,7 +912,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
               onPointerCancel: (_) {
                 _suggestionPointerDown = false;
               },
-              child: _buildSearchSurface(theme),
+              child: _buildSearchSurface(context),
             ),
           ],
         ],
@@ -849,7 +920,8 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     );
   }
 
-  Widget _buildSearchSurface(ThemeData theme) {
+  Widget _buildSearchSurface(BuildContext context) {
+    final theme = Theme.of(context);
     if (_loading) {
       return _InfoTile(
         child: Row(

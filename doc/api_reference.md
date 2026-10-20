@@ -30,7 +30,8 @@ unchanged; only the library it is imported from moved. See
 
 | Field | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `client` | `PlacesClient` | Required | Used for autocomplete, details, time-zone, search, and photo calls. |
+| `client` | `PlacesClient?` | `null` | Caller-owned client used for every request. Pass exactly one of `client` and `apiKey`. |
+| `apiKey` | `String?` | `null` | The widget creates its own client from this key, closes it on dispose, and replaces it when the key changes. Sends no application identity — use `client` for an app-restricted mobile key. |
 | `controller` | `PlacesAutocompleteController?` | `null` | When omitted, the widget owns an internal controller. |
 | `decoration` | `InputDecoration?` | `null` | Falls back to `InputDecoration()` and preserves user styling. |
 | `strings` | `PlacesStrings` | `const PlacesStrings()` | Localized widget labels and messages. |
@@ -42,9 +43,9 @@ unchanged; only the library it is imported from moved. See
 | `includedPrimaryTypes` | `List<String>` | `const <String>[]` | Google primary type filters, such as `restaurant`, `cafe`, or `(cities)`. |
 | `includedRegionCodes` | `List<String>` | `const <String>[]` | CLDR region-code filters. |
 | `includePureServiceAreaBusinesses` | `bool` | `false` | Includes pure service-area businesses in autocomplete. |
-| `fetchPlaceDetailsOnSelection` | `bool` | `false` | Resolves the selected place before `onSelection`. |
+| `fetchPlaceDetailsOnSelection` | `bool` | `true` | Resolves the selected place before `onSelection`, ending the autocomplete session with one Place Details request. `false` skips it. |
 | `fetchTimeZoneOnSelection` | `bool` | `false` | Resolves details and then Google Time Zone data. |
-| `selectionFields` | `Set<PlaceField>` | `PlaceFieldPresets.recommended` | Details fields used when selection details are fetched. |
+| `selectionFields` | `Set<PlaceField>` | `PlaceFieldPresets.address` | Details fields used when selection details are fetched. The default is all Essentials; one Pro or Enterprise field bills the request at that tier. |
 | `selectionLanguageCode` | `String?` | `null` | Overrides `languageCode` for follow-up details. |
 | `selectionRegionCode` | `String?` | `null` | Overrides `regionCode` for follow-up details. |
 | `selectionTimeZoneAt` | `DateTime?` | `null` | Time-zone timestamp; when omitted, the backend uses now. |
@@ -82,7 +83,7 @@ overlay-specific fields:
 | Field | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `context` | `BuildContext` | Required | Context used for dialog or route presentation. |
-| `client` | `PlacesClient` | Required | Same client used by field widgets. |
+| `client` / `apiKey` | `PlacesClient?` / `String?` | `null` | Exactly one. Given a key, the overlay creates a client and closes it once the overlay has closed. |
 | `controller` | `PlacesAutocompleteController?` | `null` | When omitted, the overlay creates and disposes one. |
 | `initialText` | `String` | `''` | Initial text for an internally owned controller. |
 | `mode` | `PlacesAutocompleteOverlayMode` | `PlacesAutocompleteOverlayMode.dialog` | `dialog` or `fullscreen`. |
