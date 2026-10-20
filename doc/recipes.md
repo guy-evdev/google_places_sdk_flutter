@@ -65,6 +65,10 @@ PlacesAutocompleteField(
 Every search option on the field — `decoration`, `origin`, `selectionFields`,
 and the rest — reaches the dialog and fullscreen search too.
 
+In both, the field stays in place and only the results scroll. The fullscreen
+search puts the field in the top bar with a back button, as platform search
+screens do, and opens as a regular page, so the system back gesture closes it.
+
 ## Search without a widget
 
 `PlacesClient` makes the same calls the widgets make, plus Text Search, Nearby

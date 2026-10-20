@@ -7,12 +7,14 @@
 * `fetchPlaceDetailsOnSelection` now defaults to `true`, and `selectionFields` to the new Essentials-tier `PlaceFieldPresets.address`.
 * `PlacesAutocompleteField.client` and `PlacesAutocompleteOverlay.client` are now nullable.
 * `PlacesClient` requests fewer fields by default: `PlaceFieldPresets.address` for details, `PlaceFieldPresets.minimal` for Text Search and Nearby Search.
+* Inline suggestions float over the page instead of pushing the content below the field down, opening above the field when the keyboard leaves more room there.
 
 **New:**
 
 * `apiKey:` on the autocomplete widgets and on `PlacesAutocompleteOverlay.show()`.
 * Works in apps still on `package:flutter/material.dart`, with no extra code.
 * Address getters: `city`, `streetAddress`, `county`, `neighborhood`, `unit`, `postalCodeSuffix`.
+* Dialog and fullscreen search keep the field in place and scroll only the results; fullscreen puts the field in the top bar.
 
 **Compatibility:**
 

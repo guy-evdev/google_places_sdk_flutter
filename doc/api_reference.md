@@ -34,7 +34,7 @@ unchanged; only the library it is imported from moved. See
 | `client` | `PlacesClient?` | `null` | Caller-owned client used for every request. Pass exactly one of `client` and `apiKey`. |
 | `apiKey` | `String?` | `null` | The widget creates its own client from this key, closes it on dispose, and replaces it when the key changes. Sends no application identity — use `client` for an app-restricted mobile key. |
 | `controller` | `PlacesAutocompleteController?` | `null` | When omitted, the widget owns an internal controller. |
-| `decoration` | `InputDecoration?` | `null` | Falls back to `InputDecoration()` and preserves user styling. |
+| `decoration` | `InputDecoration?` | `null` | Falls back to `InputDecoration()` and preserves user styling. In the fullscreen search, where the field sits in the top bar, it has no border unless the decoration sets one. |
 | `strings` | `PlacesStrings` | `const PlacesStrings()` | Localized widget labels and messages. |
 | `languageCode` | `String?` | `null` | Preferred BCP-47 language code for autocomplete. |
 | `regionCode` | `String?` | `null` | Preferred CLDR region code for autocomplete. |
@@ -89,7 +89,7 @@ overlay-specific fields:
 | `initialText` | `String` | `''` | Initial text for an internally owned controller. |
 | `mode` | `PlacesAutocompleteOverlayMode` | `PlacesAutocompleteOverlayMode.dialog` | `dialog` or `fullscreen`. |
 | `useRootNavigator` | `bool` | `true` | Presents and dismisses with the root navigator. |
-| `title` | `String?` | `null` | Falls back to `strings.overlayTitle`. |
+| `title` | `String?` | `null` | Falls back to `strings.overlayTitle`. Shown above the field in `dialog` mode; in `fullscreen` mode the field takes the top bar, so screen readers announce the title as the screen's name instead. |
 
 When a `PlacesAutocompleteField` in `dialog` or `fullscreen` mode opens an
 overlay, it forwards all of these automatically. Before `0.6.1` it dropped

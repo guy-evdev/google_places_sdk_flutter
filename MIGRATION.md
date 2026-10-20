@@ -16,6 +16,7 @@ and an address, and `PlacesClient` requests fewer fields when you pass none.
 | Still uses `package:flutter/material.dart` | Steps 1, 4, and 5; step 3 if you pass `decoration:` |
 | Reads `PlacesAutocompleteField.client` or `PlacesAutocompleteOverlay.client` | Step 7 |
 | Calls `PlacesClient` for details or search without passing `fields:` | Step 8 |
+| Has an inline field with a control just below it | Step 9 |
 
 ### 1. Raise your SDK floor
 
@@ -225,4 +226,33 @@ final results = await client.searchText(
     fields: PlaceFieldPresets.recommended,
   ),
 );
+```
+
+### 9. Inline suggestions float over the page
+
+An inline `PlacesAutocompleteField` used to grow while it showed suggestions, pushing the content
+below it down. The suggestions now float over that content, anchored to the field, and open above
+it when the keyboard leaves more room there. Most screens need no change. If something below the
+field must stay visible while the user types, search on a separate surface instead:
+
+```dart
+// Before — the suggestions pushed the button below the field down
+Column(
+  children: <Widget>[
+    PlacesAutocompleteField(apiKey: apiKey, onSelection: onSelection),
+    FilledButton(onPressed: submit, child: const Text('Continue')),
+  ],
+)
+
+// After — the field opens a fullscreen search, and the button never moves
+Column(
+  children: <Widget>[
+    PlacesAutocompleteField(
+      apiKey: apiKey,
+      fieldMode: PlacesAutocompleteFieldMode.fullscreen,
+      onSelection: onSelection,
+    ),
+    FilledButton(onPressed: submit, child: const Text('Continue')),
+  ],
+)
 ```

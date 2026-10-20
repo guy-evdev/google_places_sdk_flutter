@@ -13,6 +13,7 @@ and why.
 - [Coordinates and an address by default](#coordinates-and-an-address-by-default)
 - [Fewer `PlacesClient` fields by default](#fewer-placesclient-fields-by-default)
 - [More address getters](#more-address-getters)
+- [Search layouts](#search-layouts)
 - [Why the `material_ui` migration exists](#why-this-release-exists)
 
 ## Apps on either design library
@@ -129,6 +130,40 @@ field names.
 
 Use `city` rather than `locality` to fill a "City" field: UK addresses usually have a postal town
 and no locality.
+
+## Search layouts
+
+All three modes were rebuilt around one rule: the field stays where the user is typing, and only the
+results move.
+
+- **Inline.** Suggestions float over the page in a raised card anchored under the field, instead of
+  pushing the content below it down. The card fits in the space the keyboard and system bars leave,
+  and opens above the field when there is more room there — a field near the bottom of the screen
+  no longer has its suggestions hidden behind the keyboard. When five suggestions do not fit, the
+  rows scroll.
+- **Dialog.** The title, close button and field stay put while the results scroll beneath them,
+  edge to edge across the dialog. On a screen too short for that — a phone in landscape with the
+  keyboard up — the whole dialog scrolls instead.
+- **Fullscreen.** The field sits in the top bar with the platform's back button, as on platform
+  search screens, and the results run edge to edge below it. It opens as a regular page, so the
+  Android back gesture and the iOS edge swipe close it too. The field has no border there unless
+  your `decoration:` sets one, and the bar grows to fit a label or an error line. Its colours come
+  from the colour scheme, not your app bar theme, so a brand-coloured app bar cannot make the
+  search text unreadable.
+
+In every mode the "Powered by Google" attribution follows a short list and stays visible beneath a
+long one, so it is never scrolled away from the results. On iOS and macOS the loading indicator is
+the platform's activity indicator.
+
+Three things behave differently:
+
+- Inline suggestions no longer take space in your layout. A screen that relied on them pushing a
+  button down now has the suggestions covering it until a place is picked — see
+  [MIGRATION.md](../MIGRATION.md#9-inline-suggestions-float-over-the-page).
+- In fullscreen mode, `title` is no longer drawn: the field has taken its place. Screen readers
+  announce it as the screen's name.
+- If you mount `PlacesAutocompleteOverlay` yourself rather than calling `show()`, give it a bounded
+  height, as a route or a dialog does — like Flutter's own `AlertDialog`.
 
 ## Why this release exists
 

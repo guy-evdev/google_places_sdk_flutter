@@ -48,10 +48,15 @@ class PlacesStrings {
   /// Accessibility label used for the Google attribution image.
   final String poweredByGoogleLabel;
 
-  /// Title shown at the top of dialog and fullscreen overlays.
+  /// Title of the dialog and fullscreen search.
+  ///
+  /// The dialog shows it above the field. The fullscreen search puts the
+  /// field in the top bar instead, so screen readers announce this as the
+  /// screen's name.
   final String overlayTitle;
 
-  /// Accessibility label used for closing overlay routes.
+  /// Label for the control that closes the dialog or fullscreen search: the
+  /// close button in the dialog, the back button in the fullscreen top bar.
   final String closeLabel;
 
   /// Tooltip/semantic label for the field clear button.

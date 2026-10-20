@@ -274,8 +274,9 @@ The widget shows a short error message. Pass `onError: (error) => debugPrint('$e
 Version `0.7.0` moves the widget layer from `package:flutter/material.dart` to the standalone
 [`material_ui`](https://pub.dev/packages/material_ui) package, and keeps it working in apps that have
 not migrated. The widgets take an `apiKey:`, return coordinates and an address by default, and
-`PlaceData` gains `city`, `streetAddress`, and other address getters. `PlacesClient` requests
-fewer fields by default. The supported floor rises to Flutter `>=3.44.0` and Dart `>=3.12.0`. See
+`PlaceData` gains `city`, `streetAddress`, and other address getters. Inline suggestions float
+over the page instead of pushing it down, and the fullscreen search puts the field in the top bar.
+`PlacesClient` requests fewer fields by default. The supported floor rises to Flutter `>=3.44.0` and Dart `>=3.12.0`. See
 [MIGRATION.md](MIGRATION.md#070) for the defaults that changed.
 
 Version `0.6.1` is a bug-fix release. Dialog and fullscreen modes now honor the

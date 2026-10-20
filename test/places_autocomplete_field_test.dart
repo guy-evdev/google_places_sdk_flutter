@@ -1350,48 +1350,438 @@ void main() {
     expect(find.textContaining('1234'), findsNothing);
   });
 
-  testWidgets('fullscreen overlay scrolls instead of overflowing', (
-    tester,
-  ) async {
-    // A short viewport with the keyboard up, five suggestions, and the
-    // attribution row used to overflow: fullscreen mode had no scroll view
-    // while dialog mode did.
-    tester.view.physicalSize = const Size(400, 500);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  group('dialog and fullscreen layouts', () {
+    // A short phone screen with the keyboard up: the old fullscreen layout
+    // overflowed here, and both modes scrolled the field away with the list.
+    const screen = Size(400, 640);
+    const keyboard = 300.0;
 
-    final client = PlacesClient.testing(
-      apiKey: 'test',
-      backend: _FakeBackend(),
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: PlacesAutocompleteField(
-            client: client,
-            fieldMode: PlacesAutocompleteFieldMode.fullscreen,
+    Future<Finder> openAndSearch(
+      WidgetTester tester,
+      PlacesAutocompleteOverlayMode mode, {
+      String? title,
+      InputDecoration? decoration,
+      ThemeData? theme,
+      Size size = screen,
+      double keyboardHeight = keyboard,
+      ValueChanged<PlaceSelection?>? onResult,
+    }) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.viewInsets = FakeViewPadding(bottom: keyboardHeight);
+      addTearDown(tester.view.reset);
+      final client = PlacesClient.testing(
+        apiKey: 'test',
+        backend: _FakeBackend(),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: theme,
+          home: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () async {
+                final result = await PlacesAutocompleteOverlay.show(
+                  context,
+                  client: client,
+                  mode: mode,
+                  title: title,
+                  decoration: decoration,
+                );
+                onResult?.call(result);
+              },
+              child: const Text('Open'),
+            ),
           ),
         ),
-      ),
-    );
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      final field = find.descendant(
+        of: find.byType(PlacesAutocompleteOverlay),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(field, 'cof');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      return field;
+    }
 
-    await tester.tap(find.byType(TextField));
-    await tester.pumpAndSettle();
+    for (final mode in PlacesAutocompleteOverlayMode.values) {
+      testWidgets('${mode.name}: the field stays put while results scroll', (
+        tester,
+      ) async {
+        final field = await openAndSearch(tester, mode);
+        final fieldRect = tester.getRect(field);
+        final results = tester.state<ScrollableState>(
+          find.descendant(
+            of: find.byType(ListView),
+            matching: find.byType(Scrollable),
+          ),
+        );
 
-    await tester.enterText(find.byType(TextField), 'cof');
-    await tester.pump(const Duration(milliseconds: 350));
-    await tester.pumpAndSettle();
+        // Google's attribution is visible beside the results, above the
+        // keyboard, before and after scrolling — never scrolled away.
+        void expectAttributionVisible() => expect(
+          tester.getRect(find.bySemanticsLabel('Powered by Google')).bottom,
+          lessThanOrEqualTo(screen.height - keyboard),
+        );
+        expectAttributionVisible();
 
-    expect(tester.takeException(), isNull);
-    expect(
-      find.descendant(
-        of: find.byType(Scaffold),
-        matching: find.byType(SingleChildScrollView),
-      ),
-      findsWidgets,
-    );
+        await tester.drag(find.byType(ListView), const Offset(0, -200));
+        await tester.pumpAndSettle();
+
+        expect(results.position.pixels, greaterThan(0));
+        expect(tester.getRect(field), fieldRect);
+        expectAttributionVisible();
+      });
+
+      testWidgets('${mode.name}: result rows run edge to edge', (tester) async {
+        await openAndSearch(tester, mode);
+        final row = find.ancestor(
+          of: find.text('Coffee Lab'),
+          matching: find.byType(ListTile),
+        );
+        final overlay = tester.getRect(find.byType(PlacesAutocompleteOverlay));
+
+        expect(tester.getRect(row).left, overlay.left);
+        expect(tester.getRect(row).right, overlay.right);
+      });
+    }
+
+    testWidgets('fullscreen puts the field in the top bar, with one dismiss '
+        'control', (tester) async {
+      final field = await openAndSearch(
+        tester,
+        PlacesAutocompleteOverlayMode.fullscreen,
+      );
+
+      final back = tester.getRect(find.byTooltip('Close'));
+      final fieldRect = tester.getRect(field);
+      expect(fieldRect.top, lessThan(kToolbarHeight));
+      expect(back.center.dy, moreOrLessEquals(fieldRect.center.dy, epsilon: 1));
+      expect(back.right, lessThanOrEqualTo(fieldRect.left));
+      expect(
+        tester.getRect(find.text('Coffee Lab')).top,
+        greaterThan(fieldRect.bottom),
+      );
+      expect(find.byTooltip('Close'), findsOneWidget);
+      expect(find.byType(BackButtonIcon), findsOneWidget);
+      // Borderless in the bar unless the decoration sets a border.
+      expect(
+        tester.widget<TextField>(field).decoration!.border,
+        InputBorder.none,
+      );
+
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PlacesAutocompleteOverlay), findsNothing);
+    });
+
+    testWidgets('fullscreen bar ignores a coloured appBarTheme', (
+      tester,
+    ) async {
+      // The field's text is onSurface; on an app's brand-coloured bar it
+      // would be unreadable.
+      final theme = ThemeData(
+        appBarTheme: const AppBarThemeData(
+          backgroundColor: Color(0xFF3F51B5),
+          foregroundColor: Color(0xFFFFFFFF),
+        ),
+      );
+      final field = await openAndSearch(
+        tester,
+        PlacesAutocompleteOverlayMode.fullscreen,
+        theme: theme,
+      );
+
+      final bar = tester.widget<Material>(
+        find.ancestor(of: field, matching: find.byType(Material)).first,
+      );
+      expect(bar.color, theme.colorScheme.surface);
+    });
+
+    testWidgets('fullscreen bar fits a labelled field and its error line', (
+      tester,
+    ) async {
+      final field = await openAndSearch(
+        tester,
+        PlacesAutocompleteOverlayMode.fullscreen,
+        decoration: const InputDecoration(
+          labelText: 'Address',
+          errorText: 'Pick a place',
+          border: OutlineInputBorder(),
+        ),
+      );
+
+      final bar = tester.getRect(
+        find.ancestor(of: field, matching: find.byType(Material)).first,
+      );
+      for (final text in <String>['Address', 'Pick a place']) {
+        final rect = tester.getRect(find.text(text));
+        expect(rect.top, greaterThanOrEqualTo(bar.top), reason: text);
+        expect(rect.bottom, lessThanOrEqualTo(bar.bottom), reason: text);
+      }
+      expect(
+        tester.getRect(find.text('Coffee Lab')).top,
+        greaterThan(bar.bottom),
+      );
+      // A decoration that sets a border keeps it.
+      expect(
+        tester.widget<TextField>(field).decoration!.border,
+        isA<OutlineInputBorder>(),
+      );
+    });
+
+    testWidgets('Enter on the back button goes back; it does not select', (
+      tester,
+    ) async {
+      PlaceSelection? result;
+      var returned = false;
+      await openAndSearch(
+        tester,
+        PlacesAutocompleteOverlayMode.fullscreen,
+        onResult: (value) {
+          result = value;
+          returned = true;
+        },
+      );
+      // Back from the field: the back button comes before it. Leaving the
+      // field closes the results, so Enter reaches the button.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(returned, isTrue);
+      expect(result, isNull);
+    });
+
+    testWidgets('a dialog too short to pin its field scrolls as a whole', (
+      tester,
+    ) async {
+      // A phone in landscape with the keyboard up.
+      final field = await openAndSearch(
+        tester,
+        PlacesAutocompleteOverlayMode.dialog,
+        size: const Size(640, 360),
+        keyboardHeight: 200,
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(tester.getRect(field).top, greaterThanOrEqualTo(0));
+    });
+
+    testWidgets('dialog draws the title', (tester) async {
+      await openAndSearch(
+        tester,
+        PlacesAutocompleteOverlayMode.dialog,
+        title: 'Find a place',
+      );
+      expect(find.text('Find a place'), findsOneWidget);
+    });
+
+    testWidgets('fullscreen names the screen with the title instead', (
+      tester,
+    ) async {
+      await openAndSearch(
+        tester,
+        PlacesAutocompleteOverlayMode.fullscreen,
+        title: 'Find a place',
+      );
+      expect(find.text('Find a place'), findsNothing);
+      expect(
+        tester.getSemantics(find.bySemanticsLabel('Find a place')),
+        isSemantics(label: 'Find a place', namesRoute: true),
+      );
+    });
+  });
+
+  group('inline suggestions float, anchored to the field', () {
+    const screen = Size(400, 640);
+    const keyboard = 300.0;
+
+    PlacesClient fakeClient() =>
+        PlacesClient.testing(apiKey: 'test', backend: _FakeBackend());
+
+    Future<void> search(WidgetTester tester) async {
+      await tester.enterText(find.byType(TextField), 'cof');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+
+    void useKeyboard(WidgetTester tester) {
+      tester.view.physicalSize = screen;
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.viewInsets = const FakeViewPadding(bottom: keyboard);
+      addTearDown(tester.view.reset);
+    }
+
+    Rect attributionRect(WidgetTester tester) =>
+        tester.getRect(find.bySemanticsLabel('Powered by Google'));
+
+    testWidgets('they cover the content below instead of pushing it down', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: <Widget>[
+                PlacesAutocompleteField(client: fakeClient()),
+                const Text('Below the field'),
+              ],
+            ),
+          ),
+        ),
+      );
+      final below = tester.getTopLeft(find.text('Below the field'));
+      await search(tester);
+
+      expect(tester.getTopLeft(find.text('Below the field')), below);
+      final results = tester.getRect(find.byType(ListView));
+      expect(
+        results.top,
+        greaterThan(tester.getRect(find.byType(TextField)).bottom),
+      );
+      expect(
+        results.overlaps(tester.getRect(find.text('Below the field'))),
+        isTrue,
+        reason: 'drawn over the content below',
+      );
+    });
+
+    testWidgets('they stay above the keyboard, and only they scroll', (
+      tester,
+    ) async {
+      useKeyboard(tester);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: PlacesAutocompleteField(client: fakeClient())),
+        ),
+      );
+      await search(tester);
+      expect(attributionRect(tester).bottom, lessThanOrEqualTo(340));
+      final results = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byType(ListView),
+          matching: find.byType(Scrollable),
+        ),
+      );
+
+      await tester.drag(find.byType(ListView), const Offset(0, -200));
+      await tester.pumpAndSettle();
+
+      expect(results.position.pixels, greaterThan(0));
+      expect(attributionRect(tester).bottom, lessThanOrEqualTo(340));
+    });
+
+    testWidgets('they still show after the field visits a launcher mode', (
+      tester,
+    ) async {
+      // A portal that unmounts loses its shown state for good, so the field
+      // keeps one mounted in every mode.
+      var mode = PlacesAutocompleteFieldMode.inline;
+      late StateSetter setMode;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) {
+                setMode = setState;
+                return PlacesAutocompleteField(
+                  client: fakeClient(),
+                  fieldMode: mode,
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      setMode(() => mode = PlacesAutocompleteFieldMode.dialog);
+      await tester.pump();
+      setMode(() => mode = PlacesAutocompleteFieldMode.inline);
+      await tester.pump();
+
+      await search(tester);
+      expect(find.text('Coffee Lab'), findsOneWidget);
+    });
+
+    testWidgets("scrolling them is not scrolling the page", (tester) async {
+      useKeyboard(tester);
+      var pageNotifications = 0;
+      late BuildContext pageContext;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            appBar: AppBar(title: const Text('Page')),
+            body: NotificationListener<ScrollNotification>(
+              onNotification: (_) {
+                pageNotifications++;
+                return false;
+              },
+              child: Builder(
+                builder: (context) {
+                  pageContext = context;
+                  return Column(
+                    children: <Widget>[
+                      PlacesAutocompleteField(client: fakeClient()),
+                      Expanded(
+                        child: ListView(
+                          children: const <Widget>[Text('Page content')],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      await search(tester);
+      pageNotifications = 0;
+
+      await tester.drag(
+        find.descendant(
+          of: find.byType(PlacesAutocompleteField),
+          matching: find.byType(ListView),
+        ),
+        const Offset(0, -200),
+      );
+      await tester.pumpAndSettle();
+
+      expect(pageNotifications, 0);
+      // The page's own list is the only one on its PrimaryScrollController.
+      expect(PrimaryScrollController.of(pageContext).positions, hasLength(1));
+    });
+
+    testWidgets('they open above a field the keyboard leaves no room under', (
+      tester,
+    ) async {
+      useKeyboard(tester);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.bottomCenter,
+              child: PlacesAutocompleteField(client: fakeClient()),
+            ),
+          ),
+        ),
+      );
+      await search(tester);
+
+      final fieldRect = tester.getRect(find.byType(TextField));
+      expect(fieldRect.bottom, lessThanOrEqualTo(screen.height - keyboard));
+      expect(attributionRect(tester).bottom, lessThanOrEqualTo(fieldRect.top));
+      expect(
+        tester.getRect(find.byType(ListView)).top,
+        greaterThanOrEqualTo(0),
+      );
+    });
   });
 
   testWidgets('Escape closes the suggestion list', (tester) async {

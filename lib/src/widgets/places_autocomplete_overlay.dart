@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:material_ui/material_ui.dart';
 
 import '../models/place_models.dart';
@@ -19,7 +21,11 @@ enum PlacesAutocompleteOverlayMode {
 /// Standalone autocomplete search surface shown as a dialog or fullscreen route.
 ///
 /// This wraps [PlacesAutocompleteField] and is useful when the search UI should
-/// live in a dedicated route instead of inline.
+/// live in a dedicated route instead of inline. The field stays in place and
+/// only the results scroll.
+///
+/// Most apps call [show]. To mount the overlay yourself, give it a bounded
+/// height, as a route or a dialog does.
 class PlacesAutocompleteOverlay extends StatelessWidget {
   /// Creates a standalone autocomplete overlay.
   ///
@@ -78,10 +84,17 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   /// Whether the overlay should be presented as a dialog or fullscreen route.
   final PlacesAutocompleteOverlayMode mode;
 
-  /// Optional title shown above the overlay field.
+  /// Title for the search surface. Defaults to [PlacesStrings.overlayTitle].
+  ///
+  /// Dialog mode shows it above the field. Fullscreen mode puts the field in
+  /// the top bar, as platform search screens do, so the title is not drawn
+  /// there; screen readers announce it as the screen's name instead.
   final String? title;
 
   /// Optional base decoration for the overlay's text field.
+  ///
+  /// In fullscreen mode the field sits in the top bar and has no border unless
+  /// this decoration sets one.
   final InputDecoration? decoration;
 
   /// Localized strings used by the overlay UI.
@@ -273,9 +286,10 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       if (mode == PlacesAutocompleteOverlayMode.fullscreen) {
         return await navigator.push<PlaceSelection>(
           MaterialPageRoute<PlaceSelection>(
-            // The overlay applies PlacesDesignScope itself.
+            // The overlay applies PlacesDesignScope itself. A regular page,
+            // so the back button in its bar matches the platform's own back
+            // navigation, including the iOS edge swipe.
             builder: (_) => child,
-            fullscreenDialog: true,
           ),
         );
       }
@@ -298,17 +312,14 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
           traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
           builder: (dialogContext) => PlacesDesignScope(
             child: Dialog(
+              // Clipped so the results scroll under the rounded corners.
+              clipBehavior: Clip.antiAlias,
               child: ConstrainedBox(
                 constraints: BoxConstraints(
                   maxWidth: 560,
                   maxHeight: MediaQuery.sizeOf(dialogContext).height * 0.8,
                 ),
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: child,
-                  ),
-                ),
+                child: child,
               ),
             ),
           ),
@@ -322,6 +333,9 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       }
     }
   }
+
+  // The title row, the field, one result row, and the attribution.
+  static const double _minPinnedDialogHeight = 240;
 
   @override
   Widget build(BuildContext context) {
@@ -366,47 +380,58 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       autofocus: true,
     );
 
+    final effectiveTitle = title ?? strings.overlayTitle;
     if (mode == PlacesAutocompleteOverlayMode.fullscreen) {
+      // The field builds the top bar itself, with the search input in it.
       return Scaffold(
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          leading: IconButton(
-            tooltip: strings.closeLabel,
-            onPressed: () => Navigator.of(context).maybePop(),
-            icon: const Icon(Icons.close),
-          ),
-          title: Text(title ?? strings.overlayTitle),
-        ),
-        // Scrolls for the same reason dialog mode does: the keyboard, five
-        // suggestions, and the attribution row overflow short viewports.
-        body: SingleChildScrollView(
-          child: Padding(padding: const EdgeInsets.all(16), child: field),
+        body: Semantics(
+          namesRoute: true,
+          explicitChildNodes: true,
+          label: effectiveTitle,
+          child: field,
         ),
       );
     }
 
-    return Column(
+    final content = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: Text(
-                title ?? strings.overlayTitle,
-                style: Theme.of(context).textTheme.titleLarge,
+        Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(16, 8, 8, 8),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  effectiveTitle,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
               ),
-            ),
-            IconButton(
-              tooltip: strings.closeLabel,
-              onPressed: () => Navigator.of(context).maybePop(),
-              icon: const Icon(Icons.close),
-            ),
-          ],
+              IconButton(
+                tooltip: strings.closeLabel,
+                onPressed: () => Navigator.of(context).maybePop(),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 16),
-        field,
+        Flexible(child: field),
       ],
+    );
+    // The title and field stay put while the results scroll — given room for
+    // them above a row of results. A shorter dialog, as on a phone in
+    // landscape with the keyboard up, scrolls as a whole instead of
+    // overflowing. One tree shape either way, so the field is never rebuilt
+    // (and never loses focus) as the keyboard comes and goes.
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: math.max(constraints.maxHeight, _minPinnedDialogHeight),
+          ),
+          child: content,
+        ),
+      ),
     );
   }
 }

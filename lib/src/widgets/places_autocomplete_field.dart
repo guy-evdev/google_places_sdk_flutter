@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -276,6 +277,12 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   PlacesCancellationToken? _searchCancellationToken;
   PlacesCancellationToken? _selectionCancellationToken;
   AutocompleteSessionToken? _observedSessionToken;
+  // Inline suggestions float in the nearest Overlay. Always shown: the overlay
+  // child is empty while the search UI is closed, so visibility follows
+  // _searchUiVisible without a second flag to keep in sync. The portal must
+  // stay mounted in every mode: one that unmounts loses its shown state.
+  final OverlayPortalController _suggestionsPortal = OverlayPortalController()
+    ..show();
 
   PlacesClient get _client => widget.client ?? _ownedClient!;
 
@@ -871,40 +878,39 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   // Takes the context below PlacesDesignScope, so Theme.of and the
   // localizations resolve inside it.
   Widget _buildField(BuildContext context) {
-    final decoration = _buildDecoration();
-
-    return Focus(
-      onKeyEvent: _handleSuggestionKeyEvent,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          TextField(
-            controller: _controller.textController,
-            focusNode: _controller.focusNode,
-            canRequestFocus: !_isLauncherMode,
-            enabled: widget.enabled,
-            // Selection loading keeps the field enabled so focus and the
-            // decoration survive. The progress indicator below and the
-            // disabled clear button carry the loading affordance instead.
-            readOnly: _isLauncherMode || _selectionLoading,
-            autofocus: widget.autofocus,
-            onChanged: _onUserInputChanged,
-            onTap: _isLauncherMode && widget.enabled && !_selectionLoading
-                ? _openOverlay
-                : null,
-            decoration: decoration,
-            contextMenuBuilder: PlacesDesignScope.contextMenuBuilder,
-          ),
-          if (_selectionLoading) const LinearProgressIndicator(),
-          if (_searchUiVisible) ...<Widget>[
-            const SizedBox(height: 8),
-            // The pointer guard covers the whole search surface, not just the
-            // suggestion list. Tapping Retry moves focus to that button on
-            // some platforms — notably web — and without this guard the focus
-            // listener treats it as abandonment and closes the search UI
-            // before the retry can run.
-            Listener(
+    // Only PlacesAutocompleteOverlay builds a field inside itself, so its mode
+    // picks the dedicated-route layouts. Elsewhere the field lays out inline.
+    final overlayMode = context
+        .findAncestorWidgetOfExactType<PlacesAutocompleteOverlay>()
+        ?.mode;
+    final fullscreen = overlayMode == PlacesAutocompleteOverlayMode.fullscreen;
+    final textField = TextField(
+      controller: _controller.textController,
+      focusNode: _controller.focusNode,
+      canRequestFocus: !_isLauncherMode,
+      enabled: widget.enabled,
+      // Selection loading keeps the field enabled so focus and the
+      // decoration survive. The progress indicator below and the
+      // disabled clear button carry the loading affordance instead.
+      readOnly: _isLauncherMode || _selectionLoading,
+      autofocus: widget.autofocus,
+      onChanged: _onUserInputChanged,
+      onTap: _isLauncherMode && widget.enabled && !_selectionLoading
+          ? _openOverlay
+          : null,
+      decoration: _buildDecoration(inTopBar: fullscreen),
+      contextMenuBuilder: PlacesDesignScope.contextMenuBuilder,
+    );
+    const progress = LinearProgressIndicator();
+    // The pointer guard covers the whole search surface, not just the
+    // suggestion list. Tapping Retry moves focus to that button on some
+    // platforms — notably web — and without this guard the focus listener
+    // treats it as abandonment and closes the search UI before the retry can
+    // run. The tap region keeps a click on the surface, on desktop, from
+    // counting as a click outside the field.
+    final surface = _searchUiVisible
+        ? TextFieldTapRegion(
+            child: Listener(
               onPointerDown: (_) {
                 _suggestionPointerDown = true;
               },
@@ -914,24 +920,186 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
               onPointerCancel: (_) {
                 _suggestionPointerDown = false;
               },
-              child: _buildSearchSurface(context),
+              child: _buildSearchSurface(context, overlayMode),
             ),
-          ],
+          )
+        : null;
+    final input = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[textField, if (_selectionLoading) progress],
+    );
+
+    final layout = switch (overlayMode) {
+      // Suggestions float over the page, anchored to the field, rather than
+      // pushing the content below it down. Launchers show none, but keep the
+      // portal mounted all the same.
+      null => OverlayPortal.overlayChildLayoutBuilder(
+        controller: _suggestionsPortal,
+        overlayChildBuilder: (context, info) =>
+            _buildAnchoredSurface(context, info, surface),
+        child: input,
+      ),
+      // The field stays put and only the results scroll, edge to edge.
+      PlacesAutocompleteOverlayMode.dialog => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: input,
+          ),
+          if (surface != null) Flexible(child: surface),
         ],
+      ),
+      // The field sits in the top bar, as in a platform search screen.
+      PlacesAutocompleteOverlayMode.fullscreen => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          _buildTopBar(context, textField),
+          if (_selectionLoading) progress,
+          Expanded(
+            // The bar already took the top inset.
+            child: SafeArea(
+              top: false,
+              child: Align(
+                alignment: AlignmentDirectional.topStart,
+                child: surface,
+              ),
+            ),
+          ),
+        ],
+      ),
+    };
+
+    return Focus(onKeyEvent: _handleSuggestionKeyEvent, child: layout);
+  }
+
+  static const double _anchoredGap = 8;
+
+  // Positions the inline suggestions the way RawAutocomplete positions its
+  // options: inside the part of the overlay that the keyboard and system UI
+  // leave visible, on whichever side of the field has more room.
+  Widget _buildAnchoredSurface(
+    BuildContext context,
+    OverlayChildLayoutInfo info,
+    Widget? surface,
+  ) {
+    if (surface == null || info.childPaintTransform.determinant() == 0) {
+      return const SizedBox.shrink();
+    }
+    final fieldSize = info.childSize;
+    final visible = MediaQuery.paddingOf(context).deflateRect(
+      MediaQuery.viewInsetsOf(
+        context,
+      ).deflateRect(Offset.zero & info.overlaySize),
+    );
+    final visibleInField = MatrixUtils.transformRect(
+      info.childPaintTransform.clone()..invert(),
+      visible,
+    );
+    final spaceAbove = -visibleInField.top - _anchoredGap;
+    final spaceBelow = visibleInField.bottom - fieldSize.height - _anchoredGap;
+    final opensUp = spaceAbove > spaceBelow;
+    // Never smaller than one row; if the field is that cramped, the
+    // suggestions overlap it rather than leave the screen.
+    final height = math.max(
+      opensUp ? spaceAbove : spaceBelow,
+      kMinInteractiveDimension,
+    );
+    final top = opensUp ? visibleInField.top : visibleInField.bottom - height;
+    return Transform(
+      transform: info.childPaintTransform.clone()
+        ..translateByDouble(0, top, 0, 1),
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(
+          width: fieldSize.width,
+          height: height,
+          child: Align(
+            alignment: opensUp
+                ? AlignmentDirectional.bottomStart
+                : AlignmentDirectional.topStart,
+            // Scrolling the suggestions is not scrolling the page: keep it
+            // from the page's app bar, which would tint as if scrolled under.
+            child: NotificationListener<Notification>(
+              onNotification: (notification) =>
+                  notification is ScrollNotification ||
+                  notification is ScrollMetricsNotification,
+              child: surface,
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildSearchSurface(BuildContext context) {
-    final theme = Theme.of(context);
+  // Not an AppBar: its toolbar is a fixed height that clips a field with a
+  // label or an error line, and an app's appBarTheme colours would put the
+  // field's onSurface text on the app's brand colour. This bar grows with the
+  // field and takes its colours from the colour scheme, as a search view does.
+  Widget _buildTopBar(BuildContext context, Widget textField) {
+    final background = Theme.of(context).colorScheme.surface;
+    final dark =
+        ThemeData.estimateBrightnessForColor(background) == Brightness.dark;
+    // The platform's back icon, as platform search screens use, so it cannot
+    // be mistaken for the clear button. The label is the caller's.
+    final dismiss = (ModalRoute.of(context)?.impliesAppBarDismissal ?? false)
+        ? IconButton(
+            tooltip: widget.strings.closeLabel,
+            onPressed: () => Navigator.of(context).maybePop(),
+            icon: const BackButtonIcon(),
+          )
+        : null;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: const Color(0x00000000),
+        statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+        statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+      ),
+      child: Material(
+        color: background,
+        child: SafeArea(
+          bottom: false,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: kToolbarHeight),
+            child: Padding(
+              // Vertical room for an outlined field's floating label.
+              padding: EdgeInsetsDirectional.fromSTEB(
+                dismiss == null ? 16 : 4,
+                8,
+                8,
+                8,
+              ),
+              child: Row(
+                children: <Widget>[
+                  ?dismiss,
+                  if (dismiss != null) const SizedBox(width: 4),
+                  Expanded(child: textField),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchSurface(
+    BuildContext context,
+    PlacesAutocompleteOverlayMode? overlayMode,
+  ) {
+    // Inline, the results float as a card by the field. In a dialog or
+    // fullscreen route they sit directly on the route's surface.
+    final framed = overlayMode == null;
     if (_loading) {
       return _InfoTile(
+        framed: framed,
         child: Row(
           children: <Widget>[
-            const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
+            const SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator.adaptive(strokeWidth: 2),
             ),
             const SizedBox(width: 12),
             Expanded(child: Text(widget.strings.loadingText)),
@@ -941,6 +1109,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     }
     if (_error != null) {
       return _InfoTile(
+        framed: framed,
         child: Row(
           children: <Widget>[
             Expanded(child: Text(widget.strings.errorText)),
@@ -956,29 +1125,45 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       if (_controller.textController.text.trim().isEmpty) {
         return const SizedBox.shrink();
       }
-      return _InfoTile(child: Text(widget.strings.noResultsText));
+      return _InfoTile(
+        framed: framed,
+        child: Text(widget.strings.noResultsText),
+      );
     }
-    return Material(
-      color: theme.colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          for (final indexed in _suggestions.indexed)
-            _buildSuggestionTile(context, indexed.$2, indexed.$1),
-          if (widget.showPoweredByGoogle)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-              child: Align(
-                alignment: AlignmentDirectional.centerEnd,
-                child: _PoweredByGoogleAttribution(
-                  semanticLabel: widget.strings.poweredByGoogleLabel,
-                ),
+    final attribution = widget.showPoweredByGoogle
+        ? Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            child: Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: _PoweredByGoogleAttribution(
+                semanticLabel: widget.strings.poweredByGoogleLabel,
               ),
             ),
-        ],
-      ),
+          )
+        : null;
+    // Only the rows scroll. The attribution follows a short list and stays
+    // in view below a long one, so it is never scrolled away from results.
+    final results = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Flexible(
+          child: ListView.builder(
+            // Sizes to its rows, at most five, so the attribution can follow.
+            shrinkWrap: true,
+            // Inline it floats over someone else's page; never claim that
+            // page's PrimaryScrollController.
+            primary: false,
+            padding: EdgeInsets.zero,
+            itemCount: _suggestions.length,
+            itemBuilder: (context, index) =>
+                _buildSuggestionTile(context, _suggestions[index], index),
+          ),
+        ),
+        ?attribution,
+      ],
     );
+    return framed ? _InfoTile.card(context, results) : results;
   }
 
   Widget _buildSuggestionTile(
@@ -1061,8 +1246,23 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     return Text.rich(TextSpan(style: baseStyle, children: spans));
   }
 
-  InputDecoration _buildDecoration() {
-    final baseDecoration = widget.decoration ?? const InputDecoration();
+  InputDecoration _buildDecoration({required bool inTopBar}) {
+    var baseDecoration = widget.decoration ?? const InputDecoration();
+    if (inTopBar &&
+        baseDecoration.border == null &&
+        baseDecoration.enabledBorder == null &&
+        baseDecoration.focusedBorder == null) {
+      // No border in the top bar unless the decoration sets one — and none
+      // from the theme's per-state borders either.
+      baseDecoration = baseDecoration.copyWith(
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        disabledBorder: InputBorder.none,
+        errorBorder: InputBorder.none,
+        focusedErrorBorder: InputBorder.none,
+      );
+    }
     final clearButton = _hasText
         ? IconButton(
             onPressed: widget.enabled && !_selectionLoading
@@ -1123,17 +1323,24 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
 }
 
 class _InfoTile extends StatelessWidget {
-  const _InfoTile({required this.child});
+  const _InfoTile({required this.framed, required this.child});
 
+  final bool framed;
   final Widget child;
+
+  // The inline surface floats over the page, so it is raised off it.
+  static Widget card(BuildContext context, Widget child) => Material(
+    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+    borderRadius: BorderRadius.circular(12),
+    elevation: 3,
+    clipBehavior: Clip.antiAlias,
+    child: child,
+  );
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(padding: const EdgeInsets.all(16), child: child),
-    );
+    final content = Padding(padding: const EdgeInsets.all(16), child: child);
+    return framed ? card(context, content) : content;
   }
 }
 
