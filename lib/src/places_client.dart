@@ -143,7 +143,7 @@ class PlacesClient {
   Future<void> endAutocompleteSession(AutocompleteSessionToken token) =>
       _backend.endAutocompleteSession(token);
 
-  /// Resolves a place id into rich place details.
+  /// Resolves a place id into place details.
   ///
   /// This is the canonical standalone place-details API for the package.
   Future<PlaceData> fetchPlace(
@@ -157,13 +157,14 @@ class PlacesClient {
     PlacesCancellationToken? cancellationToken,
   }) => _backend.fetchPhotoMedia(request, cancellationToken: cancellationToken);
 
-  /// Resolves a place id into rich place details without requiring a suggestion.
+  /// Resolves a place id into place details without requiring a suggestion.
   ///
   /// This is a convenience wrapper around [fetchPlace] for place-id-first
-  /// workflows.
+  /// workflows. [fields] defaults to [PlaceFieldPresets.address], billed as
+  /// Place Details Essentials.
   Future<PlaceData> fetchPlaceById(
     String placeId, {
-    Set<PlaceField> fields = PlaceFieldPresets.recommended,
+    Set<PlaceField> fields = PlaceFieldPresets.address,
     String? languageCode,
     String? regionCode,
     AutocompleteSessionToken? sessionToken,

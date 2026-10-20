@@ -13,7 +13,7 @@ flutter pub add google_places_sdk_flutter
 
 Requires Flutter >=3.44.0, Dart >=3.12.0. Enable "Places API (New)" (and, for web, "Maps
 JavaScript API") on a Google Cloud project with billing. Do not add `material_ui` to an app just
-for this package; it is this package's own dependency. Import only:
+for this package — it is this package's own dependency — unless the app passes `decoration:`. Import only:
 
 ```dart
 import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
@@ -62,7 +62,8 @@ Common options (same names on all surfaces): `languageCode`, `regionCode`, `orig
 `fetchPlaceDetailsOnSelection` (default `true`), `selectionFields` (default
 `PlaceFieldPresets.address`), `fetchTimeZoneOnSelection` (default `false`), `maxSuggestions`
 (max 5), `decoration` (`material_ui`'s `InputDecoration`), `strings` (`PlacesStrings`),
-`suggestionBuilder`, `onError`, `onClearField`, `enabled`, `autofocus`, `showPoweredByGoogle`,
+`suggestionBuilder`, `onError`, `onClearField`, `enabled`, `showPoweredByGoogle`, `autofocus`
+(field widgets only),
 `controller` (`PlacesAutocompleteController`: text, focus, session, selection, `debounceDuration`
 default 300 ms).
 
@@ -74,15 +75,24 @@ default 300 ms).
 `PlaceData` address getters: `streetAddress`, `streetNumber`, `route`, `unit`, `neighborhood`,
 `city` (falls back `locality` → `postal_town` → `sublocality_level_1` →
 `administrative_area_level_3`), `locality`, `county`, `administrativeArea`, `postalCode`,
-`postalCodeSuffix`, `country`, `countryCode`; most have a `...Short` variant. Also `location`,
+`postalCodeSuffix`, `country`, `countryShort` (ISO code); most have a `...Short` variant. Also `location`,
 `formattedAddress`, `shortFormattedAddress`, `addressComponents`.
 
 ## Field presets and billing
 
-- `PlaceFieldPresets.address` (widget default): `id`, `formattedAddress`, `shortFormattedAddress`,
-  `location`, `addressComponents` — all Place Details **Essentials**.
-- `PlaceFieldPresets.minimal`, `.recommended`, `.rich` — include `displayName` (Pro) and, from
-  `recommended` up, `rating` (Enterprise). Google bills a request at its highest-tier field.
+- `PlaceFieldPresets.address` — default for widget `selectionFields`, `PlaceDetailsRequest`, and
+  `fetchPlaceById`: `id`, `formattedAddress`, `shortFormattedAddress`, `location`,
+  `addressComponents` — all Place Details **Essentials**.
+- `PlaceFieldPresets.minimal` — default for `TextSearchRequest` and `NearbySearchRequest`: `id`,
+  `displayName`, `formattedAddress`, `location` — **Pro**.
+- `.recommended` adds `rating` (Enterprise) but has no `addressComponents`, so `city` and the
+  other parsed getters are `null`; `.rich` adds `reviews` (Enterprise + Atmosphere). To add fields,
+  spread `address` into a larger set.
+  Google bills a request at its highest-tier field. Passing `fields:` overrides any default.
+- `PlaceField.timeZone` and `utcOffsetMinutes` are Pro. `fetchTimeZoneOnSelection: true` instead
+  calls the separately billed Time Zone API.
+- A details request above Essentials that ends an autocomplete session (the widgets' does) is billed
+  at Enterprise + Atmosphere.
 - `displayName` is not in the default; the picked name is `selection.suggestion.primaryText.text`.
 - Photos are not in the default: add `PlaceField.photos` to `selectionFields`, or
   `place.photos` is empty. Each `client.fetchPhotoMedia` call is billed separately.
@@ -93,8 +103,8 @@ default 300 ms).
 ```dart
 final client = PlacesClient(apiKey: key); // close() when done
 final suggestions = await client.autocomplete(AutocompleteRequest(input: 'cof', sessionToken: token));
-final place = await client.fetchPlace(PlaceDetailsRequest(placeId: id, fields: PlaceFieldPresets.address, sessionToken: token));
-final results = await client.searchText(const TextSearchRequest(textQuery: 'coffee', pageSize: 10));
+final place = await client.fetchPlace(PlaceDetailsRequest(placeId: id, sessionToken: token)); // address fields
+final results = await client.searchText(const TextSearchRequest(textQuery: 'coffee', pageSize: 10)); // minimal fields
 final page = await client.searchTextPage(...); // nextPageToken
 final nearby = await client.searchNearby(NearbySearchRequest(...));
 final media = await client.fetchPhotoMedia(PhotoMediaRequest(...));
@@ -111,9 +121,22 @@ Apps still on `package:flutter/material.dart` need no extra code; the widgets us
 default theme there. A `decoration:` must still be `material_ui`'s `InputDecoration`
 (`import 'package:material_ui/material_ui.dart' as mui;`).
 
+## Mistakes to avoid
+
+- Passing both `apiKey:` and `client:`, or neither — a debug assertion fails.
+- Reading `place.displayName`, `rating`, or `photos` without requesting them — they are `null` or
+  empty. Add them to `selectionFields` / `fields`.
+- Using `apiKey:` with an Android- or iOS-restricted key — Google rejects it; pass a `client:` with
+  `applicationIdentity`.
+- Building `decoration:` from `package:flutter/material.dart`'s `InputDecoration` — it must be
+  `material_ui`'s.
+- Enabling the legacy "Places API" instead of "Places API (New)" — requests fail with
+  `PERMISSION_DENIED`.
+
 ## Links
 
 - [README](https://github.com/guy-evdev/google_places_sdk_flutter/blob/main/README.md)
+- [Recipes](https://github.com/guy-evdev/google_places_sdk_flutter/blob/main/doc/recipes.md)
 - [API reference and defaults](https://github.com/guy-evdev/google_places_sdk_flutter/blob/main/doc/api_reference.md)
 - [Security and transports](https://github.com/guy-evdev/google_places_sdk_flutter/blob/main/doc/security_and_transports.md)
 - [Migration guide](https://github.com/guy-evdev/google_places_sdk_flutter/blob/main/MIGRATION.md)

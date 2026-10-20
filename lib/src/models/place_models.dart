@@ -473,11 +473,12 @@ abstract final class PlaceFieldPresets {
   /// Coordinates and a parsed address, billed as Place Details Essentials —
   /// the lowest tier that still returns an address.
   ///
-  /// This is the default `selectionFields` of the autocomplete widgets. It
-  /// leaves out [PlaceField.displayName], which is billed as Place Details
-  /// Pro; the suggestion the user picked already carries the place's name as
-  /// [PlaceSuggestion.primaryText]. Use [recommended] or an explicit set when
-  /// you need more, and see Google's
+  /// This is the default `selectionFields` of the autocomplete widgets and the
+  /// default `fields` of [PlaceDetailsRequest] and
+  /// `PlacesClient.fetchPlaceById`. It leaves out [PlaceField.displayName], a
+  /// Place Details Pro field; the suggestion the user picked already carries
+  /// the place's name as [PlaceSuggestion.primaryText]. Spread it into a larger
+  /// set when you need more fields, and see Google's
   /// [field pricing tiers](https://developers.google.com/maps/documentation/places/web-service/data-fields).
   static const Set<PlaceField> address = <PlaceField>{
     PlaceField.id,
@@ -487,7 +488,10 @@ abstract final class PlaceFieldPresets {
     PlaceField.addressComponents,
   };
 
-  /// Small payload suitable for basic display and coordinates.
+  /// A name, an address, and coordinates.
+  ///
+  /// The default `fields` of [TextSearchRequest] and [NearbySearchRequest].
+  /// It includes [PlaceField.displayName], a Pro field on every operation.
   static const Set<PlaceField> minimal = <PlaceField>{
     PlaceField.id,
     PlaceField.displayName,
@@ -495,7 +499,12 @@ abstract final class PlaceFieldPresets {
     PlaceField.location,
   };
 
-  /// Balanced default payload for common product usage.
+  /// [minimal] plus the place's type, Maps link, icon, and rating.
+  ///
+  /// It includes [PlaceField.rating] and [PlaceField.userRatingCount],
+  /// Enterprise fields on every operation. It has no
+  /// [PlaceField.addressComponents], so the parsed-address getters such as
+  /// [PlaceData.city] return `null`.
   static const Set<PlaceField> recommended = <PlaceField>{
     ...minimal,
     PlaceField.primaryType,
@@ -507,7 +516,11 @@ abstract final class PlaceFieldPresets {
     PlaceField.iconBackgroundColor,
   };
 
-  /// Rich payload with additional business, review, and amenity data.
+  /// [recommended] plus contact details, opening hours, photos, reviews, and
+  /// amenities.
+  ///
+  /// It includes [PlaceField.reviews], an Enterprise + Atmosphere field on
+  /// every operation.
   static const Set<PlaceField> rich = <PlaceField>{
     ...recommended,
     PlaceField.postalAddress,
@@ -2526,7 +2539,7 @@ class PlaceDetailsRequest {
   /// Creates a Place Details request.
   const PlaceDetailsRequest({
     required this.placeId,
-    this.fields = PlaceFieldPresets.recommended,
+    this.fields = PlaceFieldPresets.address,
     this.languageCode,
     this.regionCode,
     this.sessionToken,
@@ -2536,6 +2549,13 @@ class PlaceDetailsRequest {
   final String placeId;
 
   /// Fields to request from Google.
+  ///
+  /// Defaults to [PlaceFieldPresets.address], billed as Place Details
+  /// Essentials. Google bills the request at the tier of its most expensive
+  /// field, so adding one Pro or Enterprise field raises the whole request.
+  /// When [sessionToken] ends an autocomplete session, any field above
+  /// Essentials bills it at Enterprise + Atmosphere; see Google's
+  /// [session pricing](https://developers.google.com/maps/documentation/places/web-service/session-pricing).
   final Set<PlaceField> fields;
 
   /// Preferred BCP-47 language code for the response.
@@ -2626,7 +2646,7 @@ class TextSearchRequest {
   /// Creates a text-search request.
   const TextSearchRequest({
     required this.textQuery,
-    this.fields = PlaceFieldPresets.recommended,
+    this.fields = PlaceFieldPresets.minimal,
     this.languageCode,
     this.regionCode,
     this.includedType,
@@ -2652,6 +2672,10 @@ class TextSearchRequest {
   final String textQuery;
 
   /// Fields to request for each result.
+  ///
+  /// Defaults to [PlaceFieldPresets.minimal], billed as Text Search Pro — the
+  /// lowest tier that names each result. Fields such as [PlaceField.rating]
+  /// raise the request to Enterprise.
   final Set<PlaceField> fields;
 
   /// Preferred BCP-47 language code for the response.
@@ -2868,7 +2892,7 @@ class NearbySearchRequest {
   /// Creates a nearby-search request.
   const NearbySearchRequest({
     required this.locationRestriction,
-    this.fields = PlaceFieldPresets.recommended,
+    this.fields = PlaceFieldPresets.minimal,
     this.languageCode,
     this.regionCode,
     this.includedTypes = const <String>[],
@@ -2884,6 +2908,10 @@ class NearbySearchRequest {
   final LocationRestriction locationRestriction;
 
   /// Fields to request for each result.
+  ///
+  /// Defaults to [PlaceFieldPresets.minimal], billed as Nearby Search Pro,
+  /// which is Nearby Search's lowest tier. Fields such as [PlaceField.rating]
+  /// raise the request to Enterprise.
   final Set<PlaceField> fields;
 
   /// Preferred BCP-47 language code for the response.

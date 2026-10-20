@@ -11,6 +11,7 @@ and why.
 - [Apps on either design library](#apps-on-either-design-library)
 - [`apiKey:` on the widgets](#apikey-on-the-widgets)
 - [Coordinates and an address by default](#coordinates-and-an-address-by-default)
+- [Fewer `PlacesClient` fields by default](#fewer-placesclient-fields-by-default)
 - [More address getters](#more-address-getters)
 - [Why the `material_ui` migration exists](#why-this-release-exists)
 
@@ -76,7 +77,7 @@ default, `PlaceFieldPresets.recommended`, includes `displayName`, `primaryType`,
 every pick at Enterprise. Google's
 [session pricing](https://developers.google.com/maps/documentation/places/web-service/session-pricing)
 goes further: a session ended by a Pro or Enterprise details request is billed at Enterprise +
-Atmosphere, whatever fields it asked for.
+Atmosphere, whatever fields it asked for, though its autocomplete requests are then free.
 
 What this means for the bill: the details request ends the user's autocomplete session, which is how
 Google prices sessions. Before, with details off, a session was never ended, so Google billed every
@@ -88,6 +89,30 @@ future change to the preset cannot silently move picks to a pricier tier.
 
 `displayName` is not in the default. The name the user picked is still at
 `selection.suggestion.primaryText.text`.
+
+## Fewer `PlacesClient` fields by default
+
+The client's own calls follow the same reasoning. When you pass no `fields:`:
+
+| Call | Default fields | Billed as |
+| --- | --- | --- |
+| `fetchPlaceById`, `PlaceDetailsRequest` | `PlaceFieldPresets.address` | Place Details Essentials |
+| `TextSearchRequest` | `PlaceFieldPresets.minimal` | Text Search Pro |
+| `NearbySearchRequest` | `PlaceFieldPresets.minimal` | Nearby Search Pro |
+
+All four used to default to `PlaceFieldPresets.recommended`, billed as Enterprise because it
+includes `rating` and `userRatingCount`. `minimal` — `id`, `displayName`, `formattedAddress`, and
+`location` — is the cheapest set that still names each search result; Nearby Search has no tier
+below Pro. The package sends exactly the fields you ask for, so a call that passes `fields:` is
+billed exactly as before. One exception to "fewer fields, lower tier": a Place Details request that
+ends an autocomplete session at Essentials leaves the session's first 12 autocomplete requests
+billed, where one above Essentials is billed at Enterprise + Atmosphere and makes them free — so a
+long session is not automatically cheaper. See the README's
+[Costs](../README.md#costs). To keep the old fields, pass `fields: PlaceFieldPresets.recommended` —
+see [MIGRATION.md](../MIGRATION.md#070), step 8.
+
+As with the widgets, the tests check the field mask sent by each of the four calls against literal
+field names.
 
 ## More address getters
 
@@ -178,8 +203,8 @@ the real cost of this release.
 
 The floor is `3.44.0` rather than `3.47.0` deliberately. Flutter `3.44.0` ships Dart `3.12.0`,
 which is exactly `material_ui`'s minimum, so `>=3.44.0` is a measured floor rather than a guess.
-Stable went `3.44.8` → `3.47.0` with no `3.45` or `3.46` in between, so flooring at `3.47.0` would
-have dropped the entire `3.44.x` line for no benefit. `material_ui` was verified to resolve, analyze,
+Stable went from `3.44` to `3.47.0` with no `3.45` or `3.46` in between, so flooring at `3.47.0`
+would have dropped the entire `3.44.x` line for no benefit. `material_ui` was verified to resolve, analyze,
 and pass the full test suite on Flutter `3.44.0` exactly, not merely on a newer `3.44` patch.
 
 ## Localization delegates
@@ -207,8 +232,9 @@ one.
 ## Dependencies
 
 The direct dependency list is now `http`, `web`, and `material_ui`. Each floor is the oldest version
-the full test suite passes against: `http` `^1.5.0` (request aborting, which cancellation needs,
-arrived in `1.5.0`), `web` `^1.0.0`, and `material_ui` `^1.0.0`. `material_ui` brings
+the full test suite passes against: `http` `^1.5.0` (was `^1.6.0`; request aborting, which
+cancellation needs, arrived in `1.5.0`), `web` `^1.0.0` (was `^1.1.1`), and `material_ui` `^1.0.0`.
+Apps that must stay on older `http` or `web` releases can now resolve this package. `material_ui` brings
 `cupertino_ui`, `intl`, `material_color_utilities`, `vector_math`, `collection`, and
 `flutter_localizations` transitively.
 

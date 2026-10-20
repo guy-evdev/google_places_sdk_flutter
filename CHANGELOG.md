@@ -2,43 +2,21 @@
 
 **Breaking changes:**
 
-* The widget layer now uses [`material_ui`](https://pub.dev/packages/material_ui) instead of
-  `package:flutter/material.dart`. `InputDecoration` on `PlacesAutocompleteField`,
-  `PlacesAutocompleteOverlay`, `PlacesAutocompleteOverlay.show()`, and
-  `PlacesAutocompleteFormField` now resolves to `material_ui`'s type, so a `decoration:` must be
-  built from `material_ui` — see [Migrating to 0.7.0](MIGRATION.md#070).
-* The supported floor is now Flutter `>=3.44.0` and Dart `>=3.12.0`, up from Flutter `>=3.35.0`
-  and Dart `>=3.9.0`. This is `material_ui`'s own minimum.
-* Place details now load on selection by default: `fetchPlaceDetailsOnSelection` defaults to
-  `true`, so every selection carries coordinates and an address. Each completed selection makes one
-  Place Details request; pass `fetchPlaceDetailsOnSelection: false` to skip it.
-* `selectionFields` defaults to the new `PlaceFieldPresets.address`, billed as Place Details
-  Essentials, instead of `PlaceFieldPresets.recommended`, which includes Pro and Enterprise fields.
-  Pass `selectionFields: PlaceFieldPresets.recommended` to keep the old fields.
-* `client` is optional on the widgets and `show()`, so `PlacesAutocompleteField.client` and
-  `PlacesAutocompleteOverlay.client` are now nullable.
+* Widgets now use [`material_ui`](https://pub.dev/packages/material_ui); build any `decoration:` from it. See [Migrating to 0.7.0](MIGRATION.md#070).
+* Requires Flutter `>=3.44.0` and Dart `>=3.12.0`, `material_ui`'s minimum.
+* `fetchPlaceDetailsOnSelection` now defaults to `true`, and `selectionFields` to the new Essentials-tier `PlaceFieldPresets.address`.
+* `PlacesAutocompleteField.client` and `PlacesAutocompleteOverlay.client` are now nullable.
+* `PlacesClient` requests fewer fields by default: `PlaceFieldPresets.address` for details, `PlaceFieldPresets.minimal` for Text Search and Nearby Search.
 
 **New:**
 
-* `apiKey:` on `PlacesAutocompleteField`, `PlacesAutocompleteFormField`,
-  `PlacesAutocompleteOverlay`, and `PlacesAutocompleteOverlay.show()`. The widget creates, replaces,
-  and closes its own client; pass `client:` instead to share one or to use a proxy.
-* The widgets work in apps that still use `package:flutter/material.dart`, with no extra code. They
-  use `material_ui`'s default theme there, following the app's brightness, or a `material_ui`
-  `Theme` the app wraps around them.
-* `PlaceFieldPresets.address`: coordinates and a parsed address at the Essentials tier.
-* Address getters on `PlaceData`: `city` (falls back to `postal_town` and others when there is no
-  `locality`), `streetAddress`, `county`, `neighborhood`, `unit`, `postalCodeSuffix`, and `*Short`
-  variants.
+* `apiKey:` on the autocomplete widgets and on `PlacesAutocompleteOverlay.show()`.
+* Works in apps still on `package:flutter/material.dart`, with no extra code.
+* Address getters: `city`, `streetAddress`, `county`, `neighborhood`, `unit`, `postalCodeSuffix`.
 
 **Compatibility:**
 
-* `material_ui: ^1.0.0` is a new direct dependency. `cupertino_ui` arrives transitively and needs
-  no constraint of its own.
-* Dependency floors are lowered to the oldest versions the package is tested against:
-  `http: ^1.5.0` (was `^1.6.0`; `1.5.0` added the request aborting that cancellation relies on)
-  and `web: ^1.0.0` (was `^1.1.1`). Apps that must stay on older `http` or `web` releases can now
-  resolve this package.
+* Wider dependency ranges: `http: ^1.5.0`, `web: ^1.0.0`; new `material_ui: ^1.0.0`.
 
 See [What's new in 0.7.0](doc/whats_new_0_7_0.md) for details and examples.
 

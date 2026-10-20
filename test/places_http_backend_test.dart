@@ -885,4 +885,64 @@ void main() {
           'token retains one closure per request issued',
     );
   });
+
+  group('client field defaults bill the cheapest useful tier', () {
+    // Literal names, not the presets, so a preset edit that moves the default
+    // to a pricier tier fails here instead of reaching users' bills.
+    const detailsMask =
+        'id,formattedAddress,shortFormattedAddress,location,addressComponents';
+    const searchMask =
+        'places.id,places.displayName,places.formattedAddress,places.location';
+
+    late List<String?> sentMasks;
+    late PlacesClient client;
+
+    setUp(() {
+      sentMasks = <String?>[];
+      client = PlacesClient.testing(
+        apiKey: 'api-key',
+        backend: PlacesHttpBackend(
+          apiKey: 'api-key',
+          httpClient: MockClient((request) async {
+            sentMasks.add(request.headers['X-Goog-FieldMask']);
+            return http.Response(
+              request.url.path.contains('places:')
+                  ? '{"places": []}'
+                  : '{"id": "place-1"}',
+              200,
+            );
+          }),
+        ),
+      );
+    });
+
+    tearDown(() => client.close());
+
+    test('fetchPlaceById requests the address preset', () async {
+      await client.fetchPlaceById('place-1');
+      expect(sentMasks, <String>[detailsMask]);
+    });
+
+    test('PlaceDetailsRequest requests the address preset', () async {
+      await client.fetchPlace(const PlaceDetailsRequest(placeId: 'place-1'));
+      expect(sentMasks, <String>[detailsMask]);
+    });
+
+    test('TextSearchRequest requests the minimal preset', () async {
+      await client.searchText(const TextSearchRequest(textQuery: 'coffee'));
+      expect(sentMasks, <String>['$searchMask,nextPageToken,searchUri']);
+    });
+
+    test('NearbySearchRequest requests the minimal preset', () async {
+      await client.searchNearby(
+        NearbySearchRequest(
+          locationRestriction: LocationRestriction.circle(
+            center: const PlaceCoordinates(latitude: 32.08, longitude: 34.78),
+            radiusMeters: 500,
+          ),
+        ),
+      );
+      expect(sentMasks, <String>[searchMask]);
+    });
+  });
 }

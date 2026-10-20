@@ -1,7 +1,7 @@
 # API Reference
 
 Detailed defaults and field-mask preset reference for
-`google_places_sdk_flutter`.
+`google_places_sdk_flutter`. For task-by-task guides, see [Recipes](recipes.md).
 
 ## Contents
 
@@ -9,9 +9,10 @@ Detailed defaults and field-mask preset reference for
 - [Client and Request Defaults](#client-and-request-defaults)
 - [Autocomplete Sessions](#autocomplete-sessions)
 - [Errors, Validation, and Ownership](#errors-validation-and-ownership)
+- [Security and Transports](#security-and-transports)
 - [Text Search Pagination](#text-search-pagination)
 - [Place Response Accessors](#place-response-accessors)
-- [Version 0.6 release notes](#version-060-release-notes)
+- [Version 0.6 release notes](#version-06-release-notes)
 - [Place Field Presets](#place-field-presets)
 
 ## Widget Defaults
@@ -37,7 +38,7 @@ unchanged; only the library it is imported from moved. See
 | `strings` | `PlacesStrings` | `const PlacesStrings()` | Localized widget labels and messages. |
 | `languageCode` | `String?` | `null` | Preferred BCP-47 language code for autocomplete. |
 | `regionCode` | `String?` | `null` | Preferred CLDR region code for autocomplete. |
-| `origin` | `PlaceCoordinates?` | `null` | Makes Google return a straight-line distance for each suggestion, which the widget then renders. Does not bias or restrict results. For device location, see the [README recipe](../README.md#using-the-devices-location-as-the-origin) — the package never requests location permission. |
+| `origin` | `PlaceCoordinates?` | `null` | Makes Google return a straight-line distance for each suggestion, which the widget then renders. Does not bias or restrict results. For device location, see the [recipe](recipes.md#using-the-devices-location-as-the-origin) — the package never requests location permission. |
 | `locationBias` | `LocationBias?` | `null` | Soft geographic preference. Cannot be combined with `locationRestriction`. |
 | `locationRestriction` | `LocationRestriction?` | `null` | Hard geographic restriction. Cannot be combined with `locationBias`. |
 | `includedPrimaryTypes` | `List<String>` | `const <String>[]` | Google primary type filters, such as `restaurant`, `cafe`, or `(cities)`. |
@@ -45,7 +46,7 @@ unchanged; only the library it is imported from moved. See
 | `includePureServiceAreaBusinesses` | `bool` | `false` | Includes pure service-area businesses in autocomplete. |
 | `fetchPlaceDetailsOnSelection` | `bool` | `true` | Resolves the selected place before `onSelection`, ending the autocomplete session with one Place Details request. `false` skips it. |
 | `fetchTimeZoneOnSelection` | `bool` | `false` | Resolves details and then Google Time Zone data. |
-| `selectionFields` | `Set<PlaceField>` | `PlaceFieldPresets.address` | Details fields used when selection details are fetched. The default is all Essentials; one Pro or Enterprise field bills the request at that tier. |
+| `selectionFields` | `Set<PlaceField>` | `PlaceFieldPresets.address` | Details fields used when selection details are fetched. The default is all Essentials. Because this request ends the autocomplete session, one Pro or Enterprise field bills it at Enterprise + Atmosphere. |
 | `selectionLanguageCode` | `String?` | `null` | Overrides `languageCode` for follow-up details. |
 | `selectionRegionCode` | `String?` | `null` | Overrides `regionCode` for follow-up details. |
 | `selectionTimeZoneAt` | `DateTime?` | `null` | Time-zone timestamp; when omitted, the backend uses now. |
@@ -130,8 +131,9 @@ overlay, it forwards all of these automatically. Before `0.6.1` it dropped
 | `AutocompleteRequest` | `includePureServiceAreaBusinesses` | `bool` | `false` | Includes service-area businesses. |
 | `AutocompleteRequest` | `includeFutureOpeningBusinesses` | `bool` | `false` | Includes businesses expected to open in the future. |
 | `AutocompleteRequest` | `includeQueryPredictions` | `bool` | `false` | Enables `QuerySuggestion` results in `autocompleteSuggestions()`. |
+| `PlacesClient.fetchPlaceById` | `fields` | `Set<PlaceField>` | `PlaceFieldPresets.address` | Same default as `PlaceDetailsRequest`. |
 | `PlaceDetailsRequest` | `placeId` | `String` | Required | Place id or `places/{id}` resource name. |
-| `PlaceDetailsRequest` | `fields` | `Set<PlaceField>` | `PlaceFieldPresets.recommended` | Place Details field mask. |
+| `PlaceDetailsRequest` | `fields` | `Set<PlaceField>` | `PlaceFieldPresets.address` | Place Details field mask. The default bills as Essentials. |
 | `PlaceDetailsRequest` | `languageCode` | `String?` | `null` | Preferred details language. |
 | `PlaceDetailsRequest` | `regionCode` | `String?` | `null` | Preferred details region. |
 | `PlaceDetailsRequest` | `sessionToken` | `AutocompleteSessionToken?` | `null` | Autocomplete session token for selected place. |
@@ -139,17 +141,11 @@ overlay, it forwards all of these automatically. Before `0.6.1` it dropped
 | `PhotoMediaRequest` | `name` | `String` | Required | Photo resource name from `PlacePhoto.name`. |
 | `PhotoMediaRequest` | `maxWidthPx` | `int?` | `null` | At least one of width or height is required. |
 | `PhotoMediaRequest` | `maxHeightPx` | `int?` | `null` | At least one of width or height is required. |
-
-Every asynchronous `PlacesClient` operation accepts an optional
-`PlacesCancellationToken`. Cancellation is reported as
-`PlacesErrorKind.cancellation`; HTTP transports also abort the underlying
-request. `PlacePhoto.authors` provides typed required author attribution, and
-`PlacesPhotoAttribution` renders it next to a displayed image.
 | `TimeZoneRequest` | `location` | `PlaceCoordinates` | Required | Coordinates to resolve. |
 | `TimeZoneRequest` | `timestamp` | `DateTime?` | `null` | When omitted, the backend uses the current time. |
 | `TimeZoneRequest` | `languageCode` | `String?` | `null` | Localized time-zone names. |
 | `TextSearchRequest` | `textQuery` | `String` | Required | Free-text search query. |
-| `TextSearchRequest` | `fields` | `Set<PlaceField>` | `PlaceFieldPresets.recommended` | Search result field mask. |
+| `TextSearchRequest` | `fields` | `Set<PlaceField>` | `PlaceFieldPresets.minimal` | Search result field mask. The default bills as Text Search Pro. |
 | `TextSearchRequest` | `languageCode` | `String?` | `null` | Preferred result language. |
 | `TextSearchRequest` | `regionCode` | `String?` | `null` | Preferred result region. |
 | `TextSearchRequest` | `includedType` | `String?` | `null` | Optional type filter. |
@@ -166,7 +162,7 @@ request. `PlacePhoto.authors` provides typed required author attribution, and
 | `TextSearchRequest` | `openNow` | `bool?` | `null` | Restricts results to currently open places. |
 | `TextSearchRequest` | `rankPreference` | `SearchByTextRankPreference` | `SearchByTextRankPreference.relevance` | Text-search ranking behavior. |
 | `NearbySearchRequest` | `locationRestriction` | `LocationRestriction` | Required | Required nearby search area. |
-| `NearbySearchRequest` | `fields` | `Set<PlaceField>` | `PlaceFieldPresets.recommended` | Search result field mask. |
+| `NearbySearchRequest` | `fields` | `Set<PlaceField>` | `PlaceFieldPresets.minimal` | Search result field mask. The default bills as Nearby Search Pro. |
 | `NearbySearchRequest` | `languageCode` | `String?` | `null` | Preferred result language. |
 | `NearbySearchRequest` | `regionCode` | `String?` | `null` | Preferred result region. |
 | `NearbySearchRequest` | `includedTypes` | `List<String>` | `const <String>[]` | Included place types. |
@@ -176,6 +172,12 @@ request. `PlacePhoto.authors` provides typed required author attribution, and
 | `NearbySearchRequest` | `maxResultCount` | `int?` | `null` | Requested result cap. |
 | `NearbySearchRequest` | `includeFutureOpeningBusinesses` | `bool` | `false` | Includes businesses expected to open in the future. |
 | `NearbySearchRequest` | `rankPreference` | `SearchNearbyRankPreference` | `SearchNearbyRankPreference.popularity` | Nearby-search ranking behavior. |
+
+Every asynchronous `PlacesClient` operation accepts an optional
+`PlacesCancellationToken`. Cancellation is reported as
+`PlacesErrorKind.cancellation`; HTTP transports also abort the underlying
+request. `PlacePhoto.authors` provides typed required author attribution, and
+`PlacesPhotoAttribution` renders it next to a displayed image.
 
 ## Autocomplete Sessions
 
@@ -281,86 +283,104 @@ For the `0.6.1` security fix, the launcher-mode customization fixes, and
 ## Place Field Presets
 
 `PlaceField` values are used by Place Details, Text Search, and Nearby Search
-field masks. The table shows whether each field is included by the package's
-default presets.
+field masks. The table shows each field's Place Details billing tier, as
+published in Google's
+[data fields](https://developers.google.com/maps/documentation/places/web-service/data-fields)
+table (checked 2026-10-20), and which of the package's presets include it.
 
-| Field | API field name | Minimal | Recommended | Rich |
+Google bills a request at the tier of its most expensive field, so the presets
+bill as:
+
+| Preset | Place Details | Text Search | Nearby Search | Default for |
 | --- | --- | --- | --- | --- |
-| `PlaceField.id` | `id` | Yes | Yes | Yes |
-| `PlaceField.name` | `name` | No | No | No |
-| `PlaceField.displayName` | `displayName` | Yes | Yes | Yes |
-| `PlaceField.formattedAddress` | `formattedAddress` | Yes | Yes | Yes |
-| `PlaceField.shortFormattedAddress` | `shortFormattedAddress` | No | No | No |
-| `PlaceField.adrFormatAddress` | `adrFormatAddress` | No | No | No |
-| `PlaceField.postalAddress` | `postalAddress` | No | No | Yes |
-| `PlaceField.location` | `location` | Yes | Yes | Yes |
-| `PlaceField.viewport` | `viewport` | No | No | Yes |
-| `PlaceField.types` | `types` | No | No | No |
-| `PlaceField.primaryType` | `primaryType` | No | Yes | Yes |
-| `PlaceField.primaryTypeDisplayName` | `primaryTypeDisplayName` | No | Yes | Yes |
-| `PlaceField.googleMapsTypeLabel` | `googleMapsTypeLabel` | No | No | No |
-| `PlaceField.businessStatus` | `businessStatus` | No | No | Yes |
-| `PlaceField.openingDate` | `openingDate` | No | No | No |
-| `PlaceField.googleMapsUri` | `googleMapsUri` | No | Yes | Yes |
-| `PlaceField.googleMapsLinks` | `googleMapsLinks` | No | No | No |
-| `PlaceField.websiteUri` | `websiteUri` | No | No | Yes |
-| `PlaceField.nationalPhoneNumber` | `nationalPhoneNumber` | No | No | Yes |
-| `PlaceField.internationalPhoneNumber` | `internationalPhoneNumber` | No | No | Yes |
-| `PlaceField.rating` | `rating` | No | Yes | Yes |
-| `PlaceField.userRatingCount` | `userRatingCount` | No | Yes | Yes |
-| `PlaceField.priceLevel` | `priceLevel` | No | No | Yes |
-| `PlaceField.priceRange` | `priceRange` | No | No | No |
-| `PlaceField.plusCode` | `plusCode` | No | No | No |
-| `PlaceField.attributions` | `attributions` | No | No | No |
-| `PlaceField.iconMaskBaseUri` | `iconMaskBaseUri` | No | Yes | Yes |
-| `PlaceField.iconBackgroundColor` | `iconBackgroundColor` | No | Yes | Yes |
-| `PlaceField.utcOffsetMinutes` | `utcOffsetMinutes` | No | No | No |
-| `PlaceField.timeZone` | `timeZone` | No | No | No |
-| `PlaceField.editorialSummary` | `editorialSummary` | No | No | No |
-| `PlaceField.currentOpeningHours` | `currentOpeningHours` | No | No | Yes |
-| `PlaceField.regularOpeningHours` | `regularOpeningHours` | No | No | Yes |
-| `PlaceField.currentSecondaryOpeningHours` | `currentSecondaryOpeningHours` | No | No | No |
-| `PlaceField.regularSecondaryOpeningHours` | `regularSecondaryOpeningHours` | No | No | No |
-| `PlaceField.photos` | `photos` | No | No | Yes |
-| `PlaceField.reviews` | `reviews` | No | No | Yes |
-| `PlaceField.addressComponents` | `addressComponents` | No | No | Yes |
-| `PlaceField.containingPlaces` | `containingPlaces` | No | No | No |
-| `PlaceField.subDestinations` | `subDestinations` | No | No | No |
-| `PlaceField.delivery` | `delivery` | No | No | Yes |
-| `PlaceField.dineIn` | `dineIn` | No | No | Yes |
-| `PlaceField.takeout` | `takeout` | No | No | Yes |
-| `PlaceField.curbsidePickup` | `curbsidePickup` | No | No | No |
-| `PlaceField.reservable` | `reservable` | No | No | Yes |
-| `PlaceField.servesBreakfast` | `servesBreakfast` | No | No | Yes |
-| `PlaceField.servesLunch` | `servesLunch` | No | No | Yes |
-| `PlaceField.servesDinner` | `servesDinner` | No | No | Yes |
-| `PlaceField.servesBeer` | `servesBeer` | No | No | Yes |
-| `PlaceField.servesWine` | `servesWine` | No | No | Yes |
-| `PlaceField.servesBrunch` | `servesBrunch` | No | No | No |
-| `PlaceField.servesVegetarianFood` | `servesVegetarianFood` | No | No | No |
-| `PlaceField.servesCocktails` | `servesCocktails` | No | No | No |
-| `PlaceField.servesDessert` | `servesDessert` | No | No | Yes |
-| `PlaceField.servesCoffee` | `servesCoffee` | No | No | Yes |
-| `PlaceField.outdoorSeating` | `outdoorSeating` | No | No | Yes |
-| `PlaceField.liveMusic` | `liveMusic` | No | No | No |
-| `PlaceField.menuForChildren` | `menuForChildren` | No | No | No |
-| `PlaceField.allowsDogs` | `allowsDogs` | No | No | No |
-| `PlaceField.restroom` | `restroom` | No | No | Yes |
-| `PlaceField.goodForChildren` | `goodForChildren` | No | No | Yes |
-| `PlaceField.goodForGroups` | `goodForGroups` | No | No | Yes |
-| `PlaceField.goodForWatchingSports` | `goodForWatchingSports` | No | No | No |
-| `PlaceField.paymentOptions` | `paymentOptions` | No | No | Yes |
-| `PlaceField.parkingOptions` | `parkingOptions` | No | No | Yes |
-| `PlaceField.accessibilityOptions` | `accessibilityOptions` | No | No | Yes |
-| `PlaceField.addressDescriptor` | `addressDescriptor` | No | No | No |
-| `PlaceField.evChargeOptions` | `evChargeOptions` | No | No | No |
-| `PlaceField.fuelOptions` | `fuelOptions` | No | No | No |
-| `PlaceField.generativeSummary` | `generativeSummary` | No | No | No |
-| `PlaceField.reviewSummary` | `reviewSummary` | No | No | No |
-| `PlaceField.evChargeAmenitySummary` | `evChargeAmenitySummary` | No | No | No |
-| `PlaceField.neighborhoodSummary` | `neighborhoodSummary` | No | No | No |
-| `PlaceField.consumerAlert` | `consumerAlert` | No | No | No |
-| `PlaceField.transitStation` | `transitStation` | No | No | No |
-| `PlaceField.pureServiceAreaBusiness` | `pureServiceAreaBusiness` | No | No | No |
-| `PlaceField.movedPlace` | `movedPlace` | No | No | No |
-| `PlaceField.movedPlaceId` | `movedPlaceId` | No | No | No |
+| `address` | Essentials | Pro | Pro | widget `selectionFields`, `PlaceDetailsRequest`, `fetchPlaceById` |
+| `minimal` | Pro | Pro | Pro | `TextSearchRequest`, `NearbySearchRequest` |
+| `recommended` | Enterprise | Enterprise | Enterprise | — |
+| `rich` | Enterprise + Atmosphere | Enterprise + Atmosphere | Enterprise + Atmosphere | — |
+
+Text Search and Nearby Search bill address and location fields as Pro, and
+Nearby Search has no tier below Pro. When a Place Details request above
+Essentials ends an autocomplete session, Google bills it at Enterprise +
+Atmosphere regardless of its fields; see
+[session pricing](https://developers.google.com/maps/documentation/places/web-service/session-pricing).
+
+| Field | API field name | Place Details tier | Address | Minimal | Recommended | Rich |
+| --- | --- | --- | --- | --- | --- | --- |
+| `PlaceField.id` | `id` | Essentials (IDs Only) | Yes | Yes | Yes | Yes |
+| `PlaceField.name` | `name` | Essentials (IDs Only) | No | No | No | No |
+| `PlaceField.displayName` | `displayName` | Pro | No | Yes | Yes | Yes |
+| `PlaceField.formattedAddress` | `formattedAddress` | Essentials | Yes | Yes | Yes | Yes |
+| `PlaceField.shortFormattedAddress` | `shortFormattedAddress` | Essentials | Yes | No | No | No |
+| `PlaceField.adrFormatAddress` | `adrFormatAddress` | Essentials | No | No | No | No |
+| `PlaceField.postalAddress` | `postalAddress` | Essentials | No | No | No | Yes |
+| `PlaceField.location` | `location` | Essentials | Yes | Yes | Yes | Yes |
+| `PlaceField.viewport` | `viewport` | Essentials | No | No | No | Yes |
+| `PlaceField.types` | `types` | Essentials | No | No | No | No |
+| `PlaceField.primaryType` | `primaryType` | Pro | No | No | Yes | Yes |
+| `PlaceField.primaryTypeDisplayName` | `primaryTypeDisplayName` | Pro | No | No | Yes | Yes |
+| `PlaceField.googleMapsTypeLabel` | `googleMapsTypeLabel` | Pro | No | No | No | No |
+| `PlaceField.businessStatus` | `businessStatus` | Pro | No | No | No | Yes |
+| `PlaceField.openingDate` | `openingDate` | Pro | No | No | No | No |
+| `PlaceField.googleMapsUri` | `googleMapsUri` | Pro | No | No | Yes | Yes |
+| `PlaceField.googleMapsLinks` | `googleMapsLinks` | Pro | No | No | No | No |
+| `PlaceField.websiteUri` | `websiteUri` | Enterprise | No | No | No | Yes |
+| `PlaceField.nationalPhoneNumber` | `nationalPhoneNumber` | Enterprise | No | No | No | Yes |
+| `PlaceField.internationalPhoneNumber` | `internationalPhoneNumber` | Enterprise | No | No | No | Yes |
+| `PlaceField.rating` | `rating` | Enterprise | No | No | Yes | Yes |
+| `PlaceField.userRatingCount` | `userRatingCount` | Enterprise | No | No | Yes | Yes |
+| `PlaceField.priceLevel` | `priceLevel` | Enterprise | No | No | No | Yes |
+| `PlaceField.priceRange` | `priceRange` | Enterprise | No | No | No | No |
+| `PlaceField.plusCode` | `plusCode` | Essentials | No | No | No | No |
+| `PlaceField.attributions` | `attributions` | Essentials (IDs Only) | No | No | No | No |
+| `PlaceField.iconMaskBaseUri` | `iconMaskBaseUri` | Pro | No | No | Yes | Yes |
+| `PlaceField.iconBackgroundColor` | `iconBackgroundColor` | Pro | No | No | Yes | Yes |
+| `PlaceField.utcOffsetMinutes` | `utcOffsetMinutes` | Pro | No | No | No | No |
+| `PlaceField.timeZone` | `timeZone` | Pro | No | No | No | No |
+| `PlaceField.editorialSummary` | `editorialSummary` | Enterprise + Atmosphere | No | No | No | No |
+| `PlaceField.currentOpeningHours` | `currentOpeningHours` | Enterprise | No | No | No | Yes |
+| `PlaceField.regularOpeningHours` | `regularOpeningHours` | Enterprise | No | No | No | Yes |
+| `PlaceField.currentSecondaryOpeningHours` | `currentSecondaryOpeningHours` | Enterprise | No | No | No | No |
+| `PlaceField.regularSecondaryOpeningHours` | `regularSecondaryOpeningHours` | Enterprise | No | No | No | No |
+| `PlaceField.photos` | `photos` | Essentials (IDs Only) | No | No | No | Yes |
+| `PlaceField.reviews` | `reviews` | Enterprise + Atmosphere | No | No | No | Yes |
+| `PlaceField.addressComponents` | `addressComponents` | Essentials | Yes | No | No | Yes |
+| `PlaceField.containingPlaces` | `containingPlaces` | Pro | No | No | No | No |
+| `PlaceField.subDestinations` | `subDestinations` | Pro | No | No | No | No |
+| `PlaceField.delivery` | `delivery` | Enterprise + Atmosphere | No | No | No | Yes |
+| `PlaceField.dineIn` | `dineIn` | Enterprise + Atmosphere | No | No | No | Yes |
+| `PlaceField.takeout` | `takeout` | Enterprise + Atmosphere | No | No | No | Yes |
+| `PlaceField.curbsidePickup` | `curbsidePickup` | Enterprise + Atmosphere | No | No | No | No |
+| `PlaceField.reservable` | `reservable` | Enterprise + Atmosphere | No | No | No | Yes |
+| `PlaceField.servesBreakfast` | `servesBreakfast` | Enterprise + Atmosphere | No | No | No | Yes |
+| `PlaceField.servesLunch` | `servesLunch` | Enterprise + Atmosphere | No | No | No | Yes |
+| `PlaceField.servesDinner` | `servesDinner` | Enterprise + Atmosphere | No | No | No | Yes |
+| `PlaceField.servesBeer` | `servesBeer` | Enterprise + Atmosphere | No | No | No | Yes |
+| `PlaceField.servesWine` | `servesWine` | Enterprise + Atmosphere | No | No | No | Yes |
+| `PlaceField.servesBrunch` | `servesBrunch` | Enterprise + Atmosphere | No | No | No | No |
+| `PlaceField.servesVegetarianFood` | `servesVegetarianFood` | Enterprise + Atmosphere | No | No | No | No |
+| `PlaceField.servesCocktails` | `servesCocktails` | Enterprise + Atmosphere | No | No | No | No |
+| `PlaceField.servesDessert` | `servesDessert` | Enterprise + Atmosphere | No | No | No | Yes |
+| `PlaceField.servesCoffee` | `servesCoffee` | Enterprise + Atmosphere | No | No | No | Yes |
+| `PlaceField.outdoorSeating` | `outdoorSeating` | Enterprise + Atmosphere | No | No | No | Yes |
+| `PlaceField.liveMusic` | `liveMusic` | Enterprise + Atmosphere | No | No | No | No |
+| `PlaceField.menuForChildren` | `menuForChildren` | Enterprise + Atmosphere | No | No | No | No |
+| `PlaceField.allowsDogs` | `allowsDogs` | Enterprise + Atmosphere | No | No | No | No |
+| `PlaceField.restroom` | `restroom` | Enterprise + Atmosphere | No | No | No | Yes |
+| `PlaceField.goodForChildren` | `goodForChildren` | Enterprise + Atmosphere | No | No | No | Yes |
+| `PlaceField.goodForGroups` | `goodForGroups` | Enterprise + Atmosphere | No | No | No | Yes |
+| `PlaceField.goodForWatchingSports` | `goodForWatchingSports` | Enterprise + Atmosphere | No | No | No | No |
+| `PlaceField.paymentOptions` | `paymentOptions` | Enterprise + Atmosphere | No | No | No | Yes |
+| `PlaceField.parkingOptions` | `parkingOptions` | Enterprise + Atmosphere | No | No | No | Yes |
+| `PlaceField.accessibilityOptions` | `accessibilityOptions` | Pro | No | No | No | Yes |
+| `PlaceField.addressDescriptor` | `addressDescriptor` | Essentials | No | No | No | No |
+| `PlaceField.evChargeOptions` | `evChargeOptions` | Enterprise + Atmosphere | No | No | No | No |
+| `PlaceField.fuelOptions` | `fuelOptions` | Enterprise + Atmosphere | No | No | No | No |
+| `PlaceField.generativeSummary` | `generativeSummary` | Enterprise + Atmosphere | No | No | No | No |
+| `PlaceField.reviewSummary` | `reviewSummary` | Enterprise + Atmosphere | No | No | No | No |
+| `PlaceField.evChargeAmenitySummary` | `evChargeAmenitySummary` | Enterprise + Atmosphere | No | No | No | No |
+| `PlaceField.neighborhoodSummary` | `neighborhoodSummary` | Enterprise + Atmosphere | No | No | No | No |
+| `PlaceField.consumerAlert` | `consumerAlert` | Essentials (IDs Only) | No | No | No | No |
+| `PlaceField.transitStation` | `transitStation` | Enterprise | No | No | No | No |
+| `PlaceField.pureServiceAreaBusiness` | `pureServiceAreaBusiness` | Pro | No | No | No | No |
+| `PlaceField.movedPlace` | `movedPlace` | Essentials (IDs Only) | No | No | No | No |
+| `PlaceField.movedPlaceId` | `movedPlaceId` | Essentials (IDs Only) | No | No | No | No |

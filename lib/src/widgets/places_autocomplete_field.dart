@@ -171,10 +171,10 @@ class PlacesAutocompleteField extends StatefulWidget {
   ///
   /// On by default, so a selection carries coordinates and a parsed address.
   /// The details request ends the user's autocomplete session, which is how
-  /// Google prices sessions: each completed selection costs one Place Details
-  /// request at the tier of [selectionFields] — Essentials for the default
-  /// [PlaceFieldPresets.address]. Set this to `false` to receive only the
-  /// suggestion and skip that request.
+  /// Google prices sessions. With the default [PlaceFieldPresets.address] it is
+  /// billed as Place Details Essentials, along with the session's first 12
+  /// autocomplete requests. Set this to `false` to receive only the suggestion
+  /// and skip that request.
   final bool fetchPlaceDetailsOnSelection;
 
   /// Whether a selected suggestion should also resolve time-zone metadata.
@@ -185,10 +185,12 @@ class PlacesAutocompleteField extends StatefulWidget {
 
   /// The fields to request when [fetchPlaceDetailsOnSelection] is enabled.
   ///
-  /// Defaults to [PlaceFieldPresets.address]. Google bills the whole request
-  /// at the highest tier of any field in it, so adding one Pro or Enterprise
-  /// field — [PlaceFieldPresets.recommended] has several — moves every
-  /// selection to that tier.
+  /// Defaults to [PlaceFieldPresets.address], all Essentials. Because this
+  /// request ends the autocomplete session, one Pro or Enterprise field —
+  /// [PlaceFieldPresets.recommended] has several — bills it at Place Details
+  /// Enterprise + Atmosphere instead, and makes the session's autocomplete
+  /// requests free. See Google's
+  /// [session pricing](https://developers.google.com/maps/documentation/places/web-service/session-pricing).
   ///
   /// If [fetchTimeZoneOnSelection] is enabled, the widget will automatically
   /// ensure that [PlaceField.location] is included even if it is not present

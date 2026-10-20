@@ -7,14 +7,15 @@ changes.
 
 `0.7.0` moves the widget layer from the in-framework `package:flutter/material.dart` to the
 standalone [`material_ui`](https://pub.dev/packages/material_ui) package, following Flutter's own
-Material and Cupertino decoupling. It also changes two defaults so a selection carries coordinates
-and an address.
+Material and Cupertino decoupling. It also changes defaults: a selection now carries coordinates
+and an address, and `PlacesClient` requests fewer fields when you pass none.
 
 | If your app… | Do |
 | --- | --- |
 | Uses `material_ui`, or is migrating to it | Steps 1, 2, 4, 5, and 6 if you build localization delegates |
 | Still uses `package:flutter/material.dart` | Steps 1, 4, and 5; step 3 if you pass `decoration:` |
 | Reads `PlacesAutocompleteField.client` or `PlacesAutocompleteOverlay.client` | Step 7 |
+| Calls `PlacesClient` for details or search without passing `fields:` | Step 8 |
 
 ### 1. Raise your SDK floor
 
@@ -192,4 +193,36 @@ final client = field.client;
 
 // After
 final client = field.client!; // non-null whenever the widget was given a client
+```
+
+### 8. `PlacesClient` requests fewer fields by default
+
+`fetchPlaceById` and `PlaceDetailsRequest` default to `PlaceFieldPresets.address`, billed as Place
+Details Essentials. `TextSearchRequest` and `NearbySearchRequest` default to
+`PlaceFieldPresets.minimal` — `id`, `displayName`, `formattedAddress`, and `location` — billed as
+Pro. All four used to default to `PlaceFieldPresets.recommended`, which includes `rating` and
+`userRatingCount` and is billed as Enterprise.
+
+A call that passes `fields:` is unchanged. A call that relied on the default no longer receives
+`primaryType`, `primaryTypeDisplayName`, `googleMapsUri`, `rating`, `userRatingCount`, or the icon
+fields, and Place Details no longer receives `displayName`. If you read any of them, ask for them:
+
+```dart
+// Before — recommended was the default
+final place = await client.fetchPlaceById(placeId);
+final results = await client.searchText(
+  const TextSearchRequest(textQuery: 'coffee'),
+);
+
+// After
+final place = await client.fetchPlaceById(
+  placeId,
+  fields: PlaceFieldPresets.recommended,
+);
+final results = await client.searchText(
+  const TextSearchRequest(
+    textQuery: 'coffee',
+    fields: PlaceFieldPresets.recommended,
+  ),
+);
 ```
