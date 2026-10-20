@@ -30,6 +30,7 @@ export 'src/models/place_models.dart';
 export 'src/places_client.dart';
 export 'src/places_cancellation_token.dart';
 export 'src/places_client_options.dart';
+export 'src/widgets/places_autocomplete_builders.dart';
 export 'src/widgets/places_autocomplete_controller.dart';
 export 'src/widgets/places_autocomplete_field.dart';
 export 'src/widgets/places_autocomplete_form_field.dart';

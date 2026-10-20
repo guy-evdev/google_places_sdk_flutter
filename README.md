@@ -56,7 +56,8 @@ Not a fit if your users need to pick a point on a map: this package searches by 
 - [Troubleshooting](#troubleshooting)
 - [What's new](#whats-new)
 - [More documentation](#more-documentation)
-- [Recipes](doc/recipes.md) — forms, dialogs, search without a widget, and advanced setup
+- [Recipes](doc/recipes.md) — forms, dialogs, the widget's text, areas, search without a widget,
+  and advanced setup
 
 ## Ways to use it
 
@@ -71,6 +72,7 @@ Not a fit if your users need to pick a point on a map: this package searches by 
 | A search field on a page or in a form | `PlacesAutocompleteField`, `PlacesAutocompleteFormField` | [Quick start](#quick-start), [forms](doc/recipes.md#use-the-field-inside-a-form) |
 | Search in a dialog or on a full screen, awaiting the pick | `PlacesAutocompleteOverlay.show()` | [Dialog and full screen](doc/recipes.md#search-in-a-dialog-or-on-a-full-screen) |
 | Place data with no UI — details, Text Search, Nearby Search, photos, time zone | `PlacesClient` | [Search without a widget](doc/recipes.md#search-without-a-widget) |
+| The widget, with your own field, rows, or styling | `fieldBuilder`, `suggestionItemBuilder`, `suggestionsViewBuilder` | [Customize](doc/recipes.md#customize-the-field-and-the-suggestions) |
 | Your own suggestion UI, still billed per session | `PlacesClient.autocomplete()` with an `AutocompleteSessionToken` | [Your own autocomplete UI](doc/recipes.md#build-your-own-autocomplete-ui) |
 
 Every option and default is in the [API reference](doc/api_reference.md).
@@ -111,12 +113,16 @@ Given `apiKey:`, the widget creates its own `PlacesClient` and closes it when it
 `client:` instead to share one client across screens, to use a key restricted to your Android or
 iOS app (see [Security](#security)), or to use a keyless proxy.
 
+The widget's own text — the hint, the loading and error messages — is English by default. Pass
+`strings:` to [change or translate it](doc/recipes.md#change-or-translate-the-widgets-text).
+
 ### Apps that still use `package:flutter/material.dart`
 
 The widgets work there too, with no extra code. They use `material_ui`'s default theme, following
 your app's light or dark brightness, and print a one-time note in debug builds. To style the field,
-wrap it in `material_ui`'s `Theme`, or migrate the app with
-`dart fix --apply --code=migrate_design_widgets` so it uses your app's own theme.
+wrap it in `material_ui`'s `Theme`; to keep your app's own theme, return your own `TextField` from
+[`fieldBuilder`](doc/recipes.md#your-own-field-in-an-app-on-packagefluttermaterialdart), or migrate
+the app with `dart fix --apply --code=migrate_design_widgets`.
 
 Passing `decoration:` from such an app needs `material_ui`'s `InputDecoration`, imported with a
 prefix — see [MIGRATION.md](MIGRATION.md#070).
@@ -139,7 +145,9 @@ place.countryShort; // US
 ```
 
 `city` falls back to the postal town and other components for addresses that have no locality,
-which is common in the UK. The place's name is `selection.suggestion.primaryText.text`.
+which is common in the UK. The place's name is `selection.suggestion.primaryText.text`. For an
+address format the getters do not fit, `place.addressComponents` holds Google's parts as
+`PlaceAddressComponent` values — see [the API reference](doc/api_reference.md#place-response-accessors).
 
 ### Asking for more
 
@@ -196,7 +204,8 @@ PlacesAutocompleteField(
 longer Essentials — see [Costs](#costs). `fetchTimeZoneOnSelection` leaves the details request as
 it is and makes a second request to the Time Zone API, which is billed separately and must be
 enabled for the key. It also returns the offset at a given moment, including daylight saving; set
-the moment with `selectionTimeZoneAt`.
+the moment with `selectionTimeZoneAt`. [The recipe](doc/recipes.md#get-a-places-time-zone) shows
+what each way returns.
 
 ## Restricting results
 
@@ -213,11 +222,27 @@ PlacesAutocompleteField(
 - `includedPrimaryTypes` — only these [place types](https://developers.google.com/maps/documentation/places/web-service/place-types),
   such as `restaurant`, or `(cities)` or `(regions)` on its own.
 - `locationBias` prefers an area; `locationRestriction` only returns places inside it. Use one, not
-  both.
+  both. Each takes a circle or a rectangle.
 - `languageCode` — the language of the results; `regionCode` adjusts ranking and formatting.
 - `origin` — not a filter: Google returns the straight-line distance to each suggestion and the field
   shows it. See [the recipe](doc/recipes.md#show-the-distance-from-the-users-location) for using the
   device's location.
+
+To prefer places near a point:
+
+```dart
+PlacesAutocompleteField(
+  apiKey: apiKey,
+  locationBias: LocationBias.circle(
+    center: const PlaceCoordinates(latitude: 51.5074, longitude: -0.1278),
+    radiusMeters: 20000,
+  ),
+)
+```
+
+[Limit results to an area](doc/recipes.md#limit-results-to-an-area) covers rectangles, restriction,
+and which shapes each call accepts — through Maps JavaScript, the web default, `locationRestriction`
+must be a rectangle.
 
 All of them are listed with their defaults in the
 [API reference](doc/api_reference.md#widget-defaults).
@@ -276,6 +301,7 @@ Version `0.7.0` moves the widget layer from `package:flutter/material.dart` to t
 not migrated. The widgets take an `apiKey:`, return coordinates and an address by default, and
 `PlaceData` gains `city`, `streetAddress`, and other address getters. Inline suggestions float
 over the page instead of pushing it down, and the fullscreen search puts the field in the top bar.
+Three builders let you supply the field, each row, or the whole suggestion area.
 `PlacesClient` requests fewer fields by default. The supported floor rises to Flutter `>=3.44.0` and Dart `>=3.12.0`. See
 [MIGRATION.md](MIGRATION.md#070) for the defaults that changed.
 
@@ -305,6 +331,8 @@ notices, and the extended feature summaries.
 - [Recipes](doc/recipes.md) — forms, dialogs, search without a widget, your own UI, distances,
   proxies, errors
 - [API reference and defaults](doc/api_reference.md)
+- [Generated API docs](https://pub.dev/documentation/google_places_sdk_flutter/latest/) — every
+  class and member
 - [Example app](example/README.md) — run it with
   `flutter run --dart-define=GOOGLE_MAPS_API_KEY=your_key_here` from `example/`
 - [What's new in 0.7.0](doc/whats_new_0_7_0.md)

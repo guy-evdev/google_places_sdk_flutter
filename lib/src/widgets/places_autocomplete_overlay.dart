@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../models/place_models.dart';
 import '../places_client.dart';
+import 'places_autocomplete_builders.dart';
 import 'places_autocomplete_controller.dart';
 import 'places_autocomplete_field.dart';
 import 'places_design_scope.dart';
@@ -58,6 +59,13 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     this.enabled = true,
     this.showPoweredByGoogle = true,
     this.includeQueryPredictions = false,
+    this.fieldBuilder,
+    this.suggestionItemBuilder,
+    this.suggestionsViewBuilder,
+    @Deprecated(
+      'Use suggestionItemBuilder, which builds the whole row. '
+      'suggestionBuilder is deprecated in 0.7.0 and will be removed in 1.0.0.',
+    )
     this.suggestionBuilder,
     this.onSelection,
     this.onQuerySelection,
@@ -66,6 +74,11 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   }) : assert(
          (client == null) != (apiKey == null),
          'Pass exactly one of client or apiKey.',
+       ),
+       assert(
+         suggestionBuilder == null || suggestionItemBuilder == null,
+         'Pass suggestionItemBuilder or the deprecated suggestionBuilder, '
+         'not both.',
        );
 
   /// Client used to issue autocomplete and optional place-details requests.
@@ -94,10 +107,11 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   /// Optional base decoration for the overlay's text field.
   ///
   /// In fullscreen mode the field sits in the top bar and has no border unless
-  /// this decoration sets one.
+  /// this decoration sets one. Not used with a [fieldBuilder].
   final InputDecoration? decoration;
 
-  /// Localized strings used by the overlay UI.
+  /// The overlay's own text: the title, the hint, the messages, and the
+  /// screen-reader labels. Every default is English.
   final PlacesStrings strings;
 
   /// Preferred BCP-47 language code for autocomplete results.
@@ -115,6 +129,10 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   final LocationBias? locationBias;
 
   /// Hard geographic restriction applied to autocomplete results.
+  ///
+  /// A circle or a rectangle, except through the Maps JavaScript backend — the
+  /// web default — which accepts only a rectangle
+  /// ([LocationRestriction.rectangle]) for autocomplete.
   final LocationRestriction? locationRestriction;
 
   /// Restricts autocomplete results to Google primary place types.
@@ -164,7 +182,24 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   /// Whether autocomplete should include query suggestions as well as places.
   final bool includeQueryPredictions;
 
-  /// Optional builder for rendering custom suggestion tiles.
+  /// Builds the search field. See [PlacesAutocompleteField.fieldBuilder].
+  final PlacesFieldBuilder? fieldBuilder;
+
+  /// Builds each suggestion row. See
+  /// [PlacesAutocompleteField.suggestionItemBuilder].
+  final PlacesSuggestionItemBuilder? suggestionItemBuilder;
+
+  /// Builds the suggestion area. See
+  /// [PlacesAutocompleteField.suggestionsViewBuilder].
+  final PlacesSuggestionsViewBuilder? suggestionsViewBuilder;
+
+  /// Builds the title of a place suggestion's default row.
+  ///
+  /// Deprecated: [suggestionItemBuilder] builds the whole row.
+  @Deprecated(
+    'Use suggestionItemBuilder, which builds the whole row. '
+    'suggestionBuilder is deprecated in 0.7.0 and will be removed in 1.0.0.',
+  )
   final Widget Function(BuildContext context, PlaceSuggestion suggestion)?
   suggestionBuilder;
 
@@ -229,6 +264,13 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     bool enabled = true,
     bool showPoweredByGoogle = true,
     bool includeQueryPredictions = false,
+    PlacesFieldBuilder? fieldBuilder,
+    PlacesSuggestionItemBuilder? suggestionItemBuilder,
+    PlacesSuggestionsViewBuilder? suggestionsViewBuilder,
+    @Deprecated(
+      'Use suggestionItemBuilder, which builds the whole row. '
+      'suggestionBuilder is deprecated in 0.7.0 and will be removed in 1.0.0.',
+    )
     Widget Function(BuildContext context, PlaceSuggestion suggestion)?
     suggestionBuilder,
     ValueChanged<PlaceSelection>? onSelection,
@@ -245,6 +287,9 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
         : null;
     final effectiveController = controller ?? ownedController!;
     final navigator = Navigator.of(context, rootNavigator: useRootNavigator);
+    // Themes set around the caller — a Theme, a ListTileTheme — reach the
+    // route, as showDialog does.
+    final themes = InheritedTheme.capture(from: context, to: navigator.context);
     final child = PlacesAutocompleteOverlay(
       client: client,
       apiKey: apiKey,
@@ -272,6 +317,9 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       enabled: enabled,
       showPoweredByGoogle: showPoweredByGoogle,
       includeQueryPredictions: includeQueryPredictions,
+      fieldBuilder: fieldBuilder,
+      suggestionItemBuilder: suggestionItemBuilder,
+      suggestionsViewBuilder: suggestionsViewBuilder,
       suggestionBuilder: suggestionBuilder,
       onSelection: (selection) {
         navigator.pop(selection);
@@ -289,7 +337,7 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
             // The overlay applies PlacesDesignScope itself. A regular page,
             // so the back button in its bar matches the platform's own back
             // navigation, including the iOS edge swipe.
-            builder: (_) => child,
+            builder: (_) => themes.wrap(child),
           ),
         );
       }
@@ -301,7 +349,7 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       return await navigator.push<PlaceSelection>(
         DialogRoute<PlaceSelection>(
           context: context,
-          themes: InheritedTheme.capture(from: context, to: navigator.context),
+          themes: themes,
           barrierColor: DialogTheme.of(context).barrierColor ?? Colors.black54,
           barrierLabel:
               Localizations.of<MaterialLocalizations>(
@@ -372,6 +420,9 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       enabled: enabled,
       showPoweredByGoogle: showPoweredByGoogle,
       includeQueryPredictions: includeQueryPredictions,
+      fieldBuilder: fieldBuilder,
+      suggestionItemBuilder: suggestionItemBuilder,
+      suggestionsViewBuilder: suggestionsViewBuilder,
       suggestionBuilder: suggestionBuilder,
       onSelection: onSelection,
       onQuerySelection: onQuerySelection,

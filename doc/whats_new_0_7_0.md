@@ -14,6 +14,7 @@ and why.
 - [Fewer `PlacesClient` fields by default](#fewer-placesclient-fields-by-default)
 - [More address getters](#more-address-getters)
 - [Search layouts](#search-layouts)
+- [Your own field, rows, and suggestion area](#your-own-field-rows-and-suggestion-area)
 - [Why the `material_ui` migration exists](#why-this-release-exists)
 
 ## Apps on either design library
@@ -26,7 +27,9 @@ In a `material_ui` app nothing changes. In an app that has not migrated, the wid
 `material_ui` localizations and `Material` they need themselves, using `material_ui`'s default theme
 in your app's light or dark brightness. A debug build prints a one-time note saying so. To style the
 field without migrating, wrap it in `material_ui`'s `Theme`; the widgets keep a `Theme` they find
-above them. To get your app's own theme on the field, migrate the app:
+above them. To keep your app's own theme on the field, return your own `TextField` from
+`fieldBuilder` — see [Your own field, rows, and suggestion area](#your-own-field-rows-and-suggestion-area)
+— or migrate the app:
 
 ```shell
 dart fix --apply --code=migrate_design_widgets
@@ -164,6 +167,54 @@ Three things behave differently:
   announce it as the screen's name.
 - If you mount `PlacesAutocompleteOverlay` yourself rather than calling `show()`, give it a bounded
   height, as a route or a dialog does — like Flutter's own `AlertDialog`.
+
+## Your own field, rows, and suggestion area
+
+Three builders replace parts of the default UI, each in every mode — inline, the dialog, and the
+fullscreen search:
+
+- **`suggestionItemBuilder`** builds each suggestion row, for places and for query suggestions. It
+  gets the suggestion, whether the keyboard has highlighted it, and `onSelected`.
+- **`suggestionsViewBuilder`** builds the area around the rows in each of its states — loading,
+  results, empty, and error — and gets the built rows, the typed `PlacesException` when a search
+  fails, `onRetry`, Google's attribution, and `defaultView`, the package's own view, to return for
+  the states you keep:
+
+  ```dart
+  PlacesAutocompleteField(
+    apiKey: apiKey,
+    suggestionsViewBuilder: (context, view) => switch (view.status) {
+      PlacesSuggestionsStatus.error
+          when view.error?.kind == PlacesErrorKind.network =>
+        const Card(child: ListTile(title: Text('You are offline.'))),
+      _ => view.defaultView,
+    },
+  )
+  ```
+
+  Until now the error state showed one fixed message whatever went wrong; the view now sees why.
+- **`fieldBuilder`** builds the text field. It receives only `package:flutter/widgets.dart` types,
+  so it can return a `CupertinoSearchTextField`, or — in an app still on
+  `package:flutter/material.dart` — that app's own `TextField` with its own theme.
+
+Together they build a search with no Material widget in it; the
+[recipes](recipes.md#a-cupertino-style-search) show a Cupertino one. For lighter changes, a
+`Theme` around the field with a `listTileTheme` restyles the default rows, including the bold matched
+text.
+
+`suggestionBuilder`, which built only a place row's title, is deprecated in favour of
+`suggestionItemBuilder` and will be removed in `1.0.0`. It still works; the two cannot be combined.
+
+Fixed on the way:
+
+- Typing the first characters showed "No matching places found." until the first response
+  arrived. It now shows the loading state.
+- The keyboard-highlighted row had no background, and its subtitle took the primary colour. It now
+  uses the theme's focus colour, as Flutter's own `Autocomplete` does, and the text is unchanged.
+- Arrow keys could move the highlight to a row scrolled out of view. The list now scrolls to it.
+- Matched text in a subtitle was drawn at the title's size.
+- A `Theme` around the field reached the dialog but not the fullscreen search. It now reaches both.
+- Rows for the previous text could be picked with the keyboard while the next search was loading.
 
 ## Why this release exists
 

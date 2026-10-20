@@ -40,6 +40,32 @@ The application sends its own short-lived authentication to the proxy. The
 proxy verifies that authentication and adds the restricted Google credential
 only when it calls Google.
 
+### What the authentication callback receives
+
+`authentication` is called before **every** proxy request, so it can return a
+fresh or rotated token each time. It receives a `PlacesProxyRequest`:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `operation` | `PlacesOperation` | Which call this is — `autocomplete`, `placeDetails`, `photoMedia`, `timeZone`, `textSearch`, or `nearbySearch`. |
+| `method` | `String` | The HTTP method, uppercase. |
+| `uri` | `Uri` | The final proxy URI. It can contain request parameters, so do not log it. |
+
+Return the headers to add, for example to scope a token by operation:
+
+```dart
+authentication: (request) async => <String, String>{
+  'Authorization': 'Bearer ${await tokens.forOperation(request.operation)}',
+},
+```
+
+The callback is subject to `requestTimeout` and to cancellation. If it throws,
+the request fails with a `PlacesException` of kind `proxy`. Returning `Content-Type`,
+`Content-Length`, `Host`, `X-Goog-Api-Key`, `X-Goog-FieldMask`, or
+`X-Goog-User-Project` — or a header with a line break — fails the request with
+a `configuration` error instead of sending it. `PlacesProxyRequest.toString()`
+redacts the URI.
+
 The package never adds `key` or `X-Goog-Api-Key` to a proxy request. Endpoints
 must use HTTPS, except for loopback development, and cannot contain credentials,
 query parameters, or fragments.

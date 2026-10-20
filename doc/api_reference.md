@@ -2,10 +2,15 @@
 
 Detailed defaults and field-mask preset reference for
 `google_places_sdk_flutter`. For task-by-task guides, see [Recipes](recipes.md).
+Every class and member, with its documentation, is in the
+[generated API docs](https://pub.dev/documentation/google_places_sdk_flutter/latest/)
+on pub.dev.
 
 ## Contents
 
 - [Widget Defaults](#widget-defaults)
+- [Display Strings](#display-strings)
+- [Builders](#builders)
 - [Client and Request Defaults](#client-and-request-defaults)
 - [Autocomplete Sessions](#autocomplete-sessions)
 - [Errors, Validation, and Ownership](#errors-validation-and-ownership)
@@ -35,7 +40,7 @@ unchanged; only the library it is imported from moved. See
 | `apiKey` | `String?` | `null` | The widget creates its own client from this key, closes it on dispose, and replaces it when the key changes. Sends no application identity — use `client` for an app-restricted mobile key. |
 | `controller` | `PlacesAutocompleteController?` | `null` | When omitted, the widget owns an internal controller. |
 | `decoration` | `InputDecoration?` | `null` | Falls back to `InputDecoration()` and preserves user styling. In the fullscreen search, where the field sits in the top bar, it has no border unless the decoration sets one. |
-| `strings` | `PlacesStrings` | `const PlacesStrings()` | Localized widget labels and messages. |
+| `strings` | `PlacesStrings` | `const PlacesStrings()` | The widget's own text. Every default is English; see [Display Strings](#display-strings). |
 | `languageCode` | `String?` | `null` | Preferred BCP-47 language code for autocomplete. |
 | `regionCode` | `String?` | `null` | Preferred CLDR region code for autocomplete. |
 | `origin` | `PlaceCoordinates?` | `null` | Makes Google return a straight-line distance for each suggestion, which the widget then renders. Does not bias or restrict results. For device location, see the [recipe](recipes.md#using-the-devices-location-as-the-origin) — the package never requests location permission. |
@@ -61,7 +66,10 @@ unchanged; only the library it is imported from moved. See
 | `showPoweredByGoogle` | `bool` | `true` | Shows required Google attribution for suggestion UI. |
 | `includeQueryPredictions` | `bool` | `false` | Adds query suggestions alongside place suggestions. |
 | `onQuerySelection` | `ValueChanged<QuerySuggestion>?` | `null` | Called when a query suggestion is selected. |
-| `suggestionBuilder` | `Widget Function(BuildContext, PlaceSuggestion)?` | `null` | Custom renderer for place suggestions. |
+| `fieldBuilder` | `PlacesFieldBuilder?` | `null` | Builds the text field instead of the default one; see [Builders](#builders). Only `decoration`'s `errorText` is then used. |
+| `suggestionItemBuilder` | `PlacesSuggestionItemBuilder?` | `null` | Builds each suggestion row, place or query. |
+| `suggestionsViewBuilder` | `PlacesSuggestionsViewBuilder?` | `null` | Builds the suggestion area in each state: loading, results, empty, error. |
+| `suggestionBuilder` | `Widget Function(BuildContext, PlaceSuggestion)?` | `null` | **Deprecated in `0.7.0`, removed in `1.0.0`** — use `suggestionItemBuilder`. Builds only the title of a place row. Cannot be combined with `suggestionItemBuilder`. |
 
 Additional `PlacesAutocompleteFormField` defaults:
 
@@ -71,14 +79,21 @@ Additional `PlacesAutocompleteFormField` defaults:
 | `onSaved` | `FormFieldSetter<PlaceSelection?>?` | `null` | Standard form save callback. |
 | `onReset` | `VoidCallback?` | `null` | Called after the initial selection is restored. |
 | `forceErrorText` | `String?` | `null` | Forces the standard FormField error state. |
-| `errorBuilder` | `FormFieldErrorBuilder?` | `null` | Builds custom error presentation. |
+| `errorBuilder` | `FormFieldErrorBuilder?` | `null` | Builds custom error presentation for the default field. With `fieldBuilder`, the message reaches your field as `PlacesFieldData.errorText` instead. |
 | `restorationId` | `String?` | `null` | Enables FormField state restoration. |
 | `initialValue` | `PlaceSelection?` | `null` | Initial form value. |
 | `autovalidateMode` | `AutovalidateMode` | `AutovalidateMode.disabled` | Standard form autovalidation mode. |
 
+`PlacesAutocompleteController` options, for a controller passed as `controller:`:
+
+| Field | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `initialText` | `String` | `''` | Text the field starts with. |
+| `debounceDuration` | `Duration` | 300 milliseconds | How long typing must pause before an autocomplete request is sent. A longer pause sends fewer billed requests. |
+
 `PlacesAutocompleteOverlay.show()` accepts the same autocomplete options as the
 field widgets, including `decoration`, `origin`, `enabled`,
-`showPoweredByGoogle`, `suggestionBuilder`, and `onClearField`, plus these
+`showPoweredByGoogle`, the three builders, and `onClearField`, plus these
 overlay-specific fields:
 
 | Field | Type | Default | Notes |
@@ -95,6 +110,87 @@ When a `PlacesAutocompleteField` in `dialog` or `fullscreen` mode opens an
 overlay, it forwards all of these automatically. Before `0.6.1` it dropped
 `decoration`, `suggestionBuilder`, `showPoweredByGoogle`, `onClearField`, and
 `enabled`.
+
+## Display Strings
+
+`PlacesStrings` holds every piece of text the autocomplete widgets show. Pass
+one to `strings:` to change any of them; omitted values keep their default. The
+package does not yet choose strings from the app's locale, so an app in another
+language supplies them itself — see the
+[recipe](recipes.md#change-or-translate-the-widgets-text).
+
+| Field | Default | Where it appears |
+| --- | --- | --- |
+| `searchHint` | `'Search places'` | Placeholder in an empty field, unless `decoration` sets `hintText`. |
+| `loadingText` | `'Loading places…'` | While suggestions load. |
+| `noResultsText` | `'No matching places found.'` | When Google returns no suggestions. |
+| `errorText` | `'Unable to load places.'` | When a request fails. |
+| `retryText` | `'Retry'` | The retry button beside `errorText`. |
+| `poweredByGoogleLabel` | `'Powered by Google'` | Screen-reader label of the Google attribution. |
+| `overlayTitle` | `'Search places'` | Dialog title; the fullscreen search's screen name for screen readers. Overridden by `title`. |
+| `closeLabel` | `'Close'` | The dialog's close button and the fullscreen back button. |
+| `clearLabel` | `'Clear search'` | Tooltip and screen-reader label of the clear button. |
+| `placeSuggestionLabel` | `'Place suggestion'` | Screen-reader prefix for a place suggestion. |
+| `querySuggestionLabel` | `'Query suggestion'` | Screen-reader prefix for a query suggestion. |
+| `distanceUnitMeters` | `'m'` | Suffix of the distance beside a suggestion when `origin` is set. Distances are shown in meters. |
+
+`PlacesPhotoAttribution` takes its "Photo by" text from its own `prefix`
+parameter, not from `PlacesStrings`.
+
+## Builders
+
+Three builders replace parts of the default UI. Each receives one data object,
+so new fields can be added later without breaking your builder. They reach the
+field, the form field, the overlay, and `show()`, in every mode. For worked
+examples, including a Cupertino-style search, see the
+[recipe](recipes.md#customize-the-field-and-the-suggestions).
+
+`fieldBuilder` receives a `PlacesFieldData`:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `controller` | `TextEditingController` | The text controller your field must use. |
+| `focusNode` | `FocusNode` | The focus node your field must use. |
+| `onChanged` | `ValueChanged<String>` | Call it when the user edits the text; it starts the search. |
+| `onTap` | `VoidCallback?` | Opens the dialog or fullscreen search in those field modes; otherwise `null`. |
+| `onClear` | `VoidCallback?` | Clears the text, the selection, and the search; `null` while there is nothing to clear. |
+| `enabled` | `bool` | Whether the field accepts input. |
+| `readOnly` | `bool` | `true` in the launcher field modes and while a selection loads. A field that ignores it still behaves: launcher edits are ignored, and typing over a loading pick abandons it. |
+| `autofocus` | `bool` | Whether to take focus when first built. |
+| `selectionLoading` | `bool` | The picked place's details are loading. A custom field shows this itself. |
+| `errorText` | `String?` | The decoration's `errorText` — the form field's validation message. |
+| `strings` | `PlacesStrings` | The widget's strings, such as `searchHint`. |
+
+`suggestionItemBuilder` receives a `PlacesSuggestionItemData`:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `suggestion` | `AutocompleteSuggestion` | A `PlaceSuggestion` or a `QuerySuggestion`; the type is sealed. |
+| `highlighted` | `bool` | Highlighted from the keyboard. The first row is highlighted when results arrive. |
+| `onSelected` | `VoidCallback` | Selects the suggestion, exactly as a tap on a default row does. |
+| `strings` | `PlacesStrings` | The widget's strings, such as `placeSuggestionLabel`. |
+
+`suggestionsViewBuilder` receives a `PlacesSuggestionsViewData`:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `status` | `PlacesSuggestionsStatus` | `loading`, `results`, `empty`, or `error`. `loading` covers the debounce too when no earlier results are on screen; over earlier results the debounce keeps `results`. |
+| `suggestions` | `List<AutocompleteSuggestion>` | The suggestions, in Google's order. |
+| `items` | `List<Widget>` | One built row per suggestion. Use these, so the highlighted row stays in view. |
+| `error` | `PlacesException?` | Why the search failed, with its `kind`, `code`, and `retryable`. |
+| `onRetry` | `VoidCallback` | Runs the failed search again. |
+| `attribution` | `Widget?` | Google's attribution; `null` with `showPoweredByGoogle: false`. |
+| `defaultView` | `Widget` | The package's own view for this state. |
+| `strings` | `PlacesStrings` | The widget's strings, such as `retryText`. |
+
+The suggestions themselves:
+
+| Type | Fields |
+| --- | --- |
+| `AutocompleteSuggestion` | `fullText` (`StructuredText`), `displayText` (its text), `rawData` |
+| `PlaceSuggestion` | `placeId`, `placeResourceName`, `primaryText` (the name), `secondaryText` (the rest of the address), `distanceMeters` (only with `origin`), `types` |
+| `QuerySuggestion` | `matches` — a suggested search phrase, not a place. Arrives only with `includeQueryPredictions: true` |
+| `StructuredText` | `text` and `matches`, the `TextMatch` ranges that match what the user typed |
 
 ## Client and Request Defaults
 
@@ -259,6 +355,22 @@ structures use typed models: `PlaceDate`, `PlacePlusCode`, `PlaceTimeZone`,
 
 The REST resource's `name` field is exposed as `PlaceData.resourceName` to
 distinguish it from the human-readable `displayName`.
+
+The address getters (`city`, `postalCode`, `streetAddress`, …) read
+`PlaceData.addressComponents`, a list of `PlaceAddressComponent` values each
+with `longText`, `shortText`, and Google's address `types`. Read the list
+directly for an address format the getters do not cover. `PlaceField.postalAddress`
+returns a `PlacePostalAddress` — `regionCode`, `postalCode`,
+`administrativeArea`, `locality`, `addressLines`, and more — and is not in the
+default fields.
+
+Time zone comes back in two shapes. `PlaceField.timeZone` gives
+`PlaceData.timeZone`, a `PlaceTimeZone` with the IANA `id` (such as
+`America/New_York`), and `PlaceField.utcOffsetMinutes` gives the place's current
+offset in minutes. `fetchTimeZoneOnSelection` and `PlacesClient.fetchTimeZone()`
+return a `PlaceTimeZoneData` from the Time Zone API: `timeZoneId`,
+`timeZoneName`, and the `rawOffset` and `dstOffset` that apply at its
+`timestamp`.
 
 Large or evolving payloads—including opening hours, address descriptors, EV
 and fuel options, generative/review/area summaries, and consumer alerts—are

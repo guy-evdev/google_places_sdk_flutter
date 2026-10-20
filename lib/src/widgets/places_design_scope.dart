@@ -90,7 +90,8 @@ class PlacesDesignScope extends StatelessWidget {
         "Places widgets use material_ui's default theme, following the app's "
         "brightness. To style them, wrap them in material_ui's Theme, or "
         "migrate the app to use its own theme: "
-        '`dart fix --apply --code=migrate_design_widgets`.',
+        '`dart fix --apply --code=migrate_design_widgets`. To use your own '
+        'text field and its theme, return it from fieldBuilder.',
       );
     }
     return true;

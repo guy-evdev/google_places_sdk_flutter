@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../models/place_models.dart';
 import '../places_client.dart';
+import 'places_autocomplete_builders.dart';
 import 'places_autocomplete_controller.dart';
 import 'places_autocomplete_field.dart';
 import 'places_strings.dart';
@@ -48,6 +49,13 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
     bool showPoweredByGoogle = true,
     bool includeQueryPredictions = false,
     ValueChanged<QuerySuggestion>? onQuerySelection,
+    PlacesFieldBuilder? fieldBuilder,
+    PlacesSuggestionItemBuilder? suggestionItemBuilder,
+    PlacesSuggestionsViewBuilder? suggestionsViewBuilder,
+    @Deprecated(
+      'Use suggestionItemBuilder, which builds the whole row. '
+      'suggestionBuilder is deprecated in 0.7.0 and will be removed in 1.0.0.',
+    )
     Widget Function(BuildContext context, PlaceSuggestion suggestion)?
     suggestionBuilder,
     super.validator,
@@ -62,13 +70,21 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
          (client == null) != (apiKey == null),
          'Pass exactly one of client or apiKey.',
        ),
+       assert(
+         suggestionBuilder == null || suggestionItemBuilder == null,
+         'Pass suggestionItemBuilder or the deprecated suggestionBuilder, '
+         'not both.',
+       ),
        super(
          builder: (FormFieldState<PlaceSelection?> field) {
            final errorText = field.errorText;
+           // A custom field gets the message as PlacesFieldData.errorText;
+           // errorBuilder styles the default field's error only.
+           final buildsError = errorBuilder != null && fieldBuilder == null;
            final effectiveDecoration = (decoration ?? const InputDecoration())
                .copyWith(
-                 errorText: errorBuilder == null ? errorText : null,
-                 error: errorBuilder != null && errorText != null
+                 errorText: buildsError ? null : errorText,
+                 error: buildsError && errorText != null
                      ? errorBuilder(field.context, errorText)
                      : null,
                );
@@ -113,6 +129,9 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
                showPoweredByGoogle: showPoweredByGoogle,
                includeQueryPredictions: includeQueryPredictions,
                onQuerySelection: onQuerySelection,
+               fieldBuilder: fieldBuilder,
+               suggestionItemBuilder: suggestionItemBuilder,
+               suggestionsViewBuilder: suggestionsViewBuilder,
                suggestionBuilder: suggestionBuilder,
              ),
            );

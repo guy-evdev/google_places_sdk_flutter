@@ -291,6 +291,7 @@ void main() {
 
     expect(printed, hasLength(1));
     expect(printed.single, contains('migrate_design_widgets'));
+    expect(printed.single, contains('fieldBuilder'));
   });
 
   testWidgets('does nothing in a material_ui app', (tester) async {
@@ -312,4 +313,60 @@ void main() {
     );
     expect(printed, isEmpty);
   });
+
+  for (final fieldMode in PlacesAutocompleteFieldMode.values) {
+    testWidgets('fieldBuilder returns the app\'s own field and theme, '
+        '${fieldMode.name} mode', (tester) async {
+      final appTheme = legacy.ThemeData(primaryColor: const Color(0xFFAD1457));
+      PlaceSelection? selection;
+      await tester.pumpWidget(
+        _legacyApp(
+          PlacesAutocompleteField(
+            client: _client(),
+            fieldMode: fieldMode,
+            onSelection: (value) => selection = value,
+            // A legacy Material above it, as the dartdoc says: the package's
+            // dialog and fullscreen search are material_ui surfaces.
+            fieldBuilder: (context, field) => legacy.Material(
+              type: legacy.MaterialType.transparency,
+              child: legacy.TextField(
+                controller: field.controller,
+                focusNode: field.focusNode,
+                onChanged: field.onChanged,
+                onTap: field.onTap,
+                readOnly: field.readOnly,
+                autofocus: field.autofocus,
+              ),
+            ),
+          ),
+          theme: appTheme,
+        ),
+      );
+      final Finder scope;
+      if (fieldMode == PlacesAutocompleteFieldMode.inline) {
+        scope = find.byType(PlacesAutocompleteField);
+      } else {
+        await tester.tap(find.byType(legacy.TextField));
+        await tester.pumpAndSettle();
+        scope = find.byType(PlacesAutocompleteOverlay);
+      }
+      final legacyField = find.descendant(
+        of: scope,
+        matching: find.byType(legacy.TextField),
+      );
+
+      expect(
+        legacy.Theme.of(tester.element(legacyField)).primaryColor,
+        appTheme.primaryColor,
+      );
+      await tester.enterText(legacyField, 'cof');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Coffee Lab'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(selection?.placeId, 'place-1');
+    });
+  }
 }

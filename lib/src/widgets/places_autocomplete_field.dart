@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import '../models/place_models.dart';
 import '../places_client.dart';
 import '../places_cancellation_token.dart';
+import 'places_autocomplete_builders.dart';
 import 'places_autocomplete_controller.dart';
 import 'places_autocomplete_overlay.dart';
 import 'places_design_scope.dart';
@@ -85,10 +86,22 @@ class PlacesAutocompleteField extends StatefulWidget {
     this.showPoweredByGoogle = true,
     this.includeQueryPredictions = false,
     this.onQuerySelection,
+    this.fieldBuilder,
+    this.suggestionItemBuilder,
+    this.suggestionsViewBuilder,
+    @Deprecated(
+      'Use suggestionItemBuilder, which builds the whole row. '
+      'suggestionBuilder is deprecated in 0.7.0 and will be removed in 1.0.0.',
+    )
     this.suggestionBuilder,
   }) : assert(
          (client == null) != (apiKey == null),
          'Pass exactly one of client or apiKey.',
+       ),
+       assert(
+         suggestionBuilder == null || suggestionItemBuilder == null,
+         'Pass suggestionItemBuilder or the deprecated suggestionBuilder, '
+         'not both.',
        );
 
   /// Client used for autocomplete, place-details, and optional time-zone calls.
@@ -118,9 +131,13 @@ class PlacesAutocompleteField extends StatefulWidget {
   final PlacesAutocompleteController? controller;
 
   /// Optional base decoration for the text field UI.
+  ///
+  /// Used by the default field only. A [fieldBuilder] builds its own field
+  /// and receives this decoration's `errorText` as [PlacesFieldData.errorText].
   final InputDecoration? decoration;
 
-  /// Localized strings used by the field and its overlays.
+  /// The widget's own text: the hint, the loading, empty, and error messages,
+  /// and the screen-reader labels. Every default is English.
   final PlacesStrings strings;
 
   /// Preferred BCP-47 language code for results, such as `'en'` or `'he'`.
@@ -144,6 +161,10 @@ class PlacesAutocompleteField extends StatefulWidget {
   final LocationBias? locationBias;
 
   /// Hard geographic restriction applied to autocomplete results.
+  ///
+  /// A circle or a rectangle, except through the Maps JavaScript backend — the
+  /// web default — which accepts only a rectangle
+  /// ([LocationRestriction.rectangle]) for autocomplete.
   final LocationRestriction? locationRestriction;
 
   /// Restricts autocomplete results to places whose primary type matches one
@@ -250,7 +271,59 @@ class PlacesAutocompleteField extends StatefulWidget {
   /// Called when the user selects a query suggestion.
   final ValueChanged<QuerySuggestion>? onQuerySelection;
 
-  /// Optional builder for rendering custom suggestion tiles.
+  /// Builds the text field in place of the default `material_ui` one.
+  ///
+  /// The builder receives the controller, focus node, and callbacks the field
+  /// must use; see [PlacesFieldData]. It builds the launcher field in dialog
+  /// and fullscreen field modes, and the search field inside the dialog or
+  /// fullscreen search. [decoration] is used only for its `errorText`, passed
+  /// on as [PlacesFieldData.errorText] — so in `PlacesAutocompleteFormField`
+  /// the validation message reaches your field, and that form field's
+  /// `errorBuilder` is not used. The progress bar the default field shows
+  /// while a selection loads is not drawn: render
+  /// [PlacesFieldData.selectionLoading] yourself.
+  ///
+  /// Every type it receives comes from `package:flutter/widgets.dart`, so an
+  /// app still on `package:flutter/material.dart` can return its own
+  /// `TextField` and get its own theme. Inside the dialog and fullscreen
+  /// search such a field needs a `Material` from that library above it.
+  final PlacesFieldBuilder? fieldBuilder;
+
+  /// Builds each suggestion row in place of the default `ListTile`.
+  ///
+  /// It receives both kinds of suggestion — [PlaceSuggestion] and, with
+  /// [includeQueryPredictions], [QuerySuggestion] — with whether the row is
+  /// highlighted from the keyboard and a callback that selects it. See
+  /// [PlacesSuggestionItemData]. The row it returns is not wrapped in
+  /// `Semantics`; label it yourself.
+  ///
+  /// To restyle the default rows without building them, set
+  /// `ThemeData.listTileTheme` on a `Theme` around the field instead. A
+  /// `ListTileTheme` widget works inline only: Flutter does not carry its text
+  /// styles into the dialog or fullscreen search.
+  final PlacesSuggestionItemBuilder? suggestionItemBuilder;
+
+  /// Builds the suggestion area in place of the default card or list.
+  ///
+  /// It receives the area's status — loading, results, empty, or error — the
+  /// built rows, the typed [PlacesException] when a search fails, a retry
+  /// callback, Google's attribution, and the package's own view for the
+  /// current state; see [PlacesSuggestionsViewData]. Return
+  /// [PlacesSuggestionsViewData.defaultView] for the states you keep.
+  ///
+  /// Inline, the area floats over the page beside the field, with the
+  /// field's width and the height left between it and the screen edge or the
+  /// keyboard. In the dialog and fullscreen search it sits below the field.
+  final PlacesSuggestionsViewBuilder? suggestionsViewBuilder;
+
+  /// Builds the title of a place suggestion's default row.
+  ///
+  /// Deprecated: [suggestionItemBuilder] builds the whole row, for place and
+  /// query suggestions alike.
+  @Deprecated(
+    'Use suggestionItemBuilder, which builds the whole row. '
+    'suggestionBuilder is deprecated in 0.7.0 and will be removed in 1.0.0.',
+  )
   final Widget Function(BuildContext context, PlaceSuggestion suggestion)?
   suggestionBuilder;
 
@@ -264,7 +337,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   PlacesClient? _ownedClient;
   Timer? _debounce;
   List<AutocompleteSuggestion> _suggestions = const <AutocompleteSuggestion>[];
-  Object? _error;
+  PlacesException? _error;
   bool _loading = false;
   bool _selectionLoading = false;
   bool _searchUiVisible = false;
@@ -461,7 +534,16 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   }
 
   void _onFocusChanged() {
-    if (_controller.focusNode.hasFocus || _isLauncherMode) {
+    if (_isLauncherMode) {
+      // The launcher only opens the search. A custom field can still take
+      // focus — on a tap, or when the closing route restores it — so give it
+      // straight back.
+      if (_controller.focusNode.hasFocus) {
+        _controller.focusNode.unfocus();
+      }
+      return;
+    }
+    if (_controller.focusNode.hasFocus) {
       return;
     }
     if (_suggestionPointerDown || _selectionInProgress) {
@@ -486,8 +568,16 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   }
 
   void _onUserInputChanged(String value) {
-    if (_isLauncherMode) {
+    // The default field cannot be edited in these states; a custom one
+    // might ignore readOnly or enabled.
+    if (_isLauncherMode || !widget.enabled) {
       return;
+    }
+    if (_selectionInProgress) {
+      // Typing over a pick whose details are still loading abandons it: they
+      // would arrive for text the user has replaced. A new session also
+      // cancels the details request.
+      _controller.resetSession();
     }
     if (_controller.selectedSelection != null) {
       _controller.clearSelection();
@@ -506,7 +596,9 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     }
     setState(() {
       _searchUiVisible = true;
-      _loading = false;
+      // With nothing on screen yet, the pending search shows as loading —
+      // not as an empty result before any request has been sent.
+      _loading = _suggestions.isEmpty;
       _error = null;
       _highlightedSuggestionIndex = -1;
     });
@@ -547,8 +639,17 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     });
   }
 
+  // A search that can no longer show its result. If it was the latest, nothing
+  // will replace its loading state, so close the search rather than spin.
+  void _dropSearch(int generation) {
+    if (generation == _searchGeneration) {
+      _closeSearchUi();
+    }
+  }
+
   Future<void> _search(String input, int generation) async {
     if (!_isActiveSearch(input, generation)) {
+      _dropSearch(generation);
       return;
     }
     _searchCancellationToken?.cancel();
@@ -558,6 +659,10 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       setState(() {
         _loading = true;
         _error = null;
+        // The rows for the previous text: hidden behind the loading state, so
+        // the keyboard must not be able to pick them.
+        _suggestions = const <AutocompleteSuggestion>[];
+        _highlightedSuggestionIndex = -1;
       });
       final request = AutocompleteRequest(
         input: input,
@@ -584,6 +689,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
               cancellationToken: cancellationToken,
             );
       if (!_isActiveSearch(input, generation)) {
+        _dropSearch(generation);
         return;
       }
       final limitedSuggestions = suggestions
@@ -596,11 +702,22 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       });
     } catch (error) {
       if (!_isActiveSearch(input, generation)) {
+        _dropSearch(generation);
         return;
       }
       setState(() {
         _loading = false;
-        _error = error;
+        // The client only throws PlacesException; anything else is wrapped
+        // so the view builder always gets the typed error.
+        _error = error is PlacesException
+            ? error
+            : PlacesException(
+                'The autocomplete request failed.',
+                operation: PlacesOperation.autocomplete,
+                metadata: <String, Object?>{
+                  'errorType': error.runtimeType.toString(),
+                },
+              );
         _suggestions = const <AutocompleteSuggestion>[];
         _highlightedSuggestionIndex = -1;
       });
@@ -620,6 +737,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     _debounce?.cancel();
     setState(() {
       _searchUiVisible = true;
+      _loading = true;
       _error = null;
       _highlightedSuggestionIndex = -1;
     });
@@ -856,6 +974,9 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       enabled: widget.enabled,
       showPoweredByGoogle: widget.showPoweredByGoogle,
       includeQueryPredictions: widget.includeQueryPredictions,
+      fieldBuilder: widget.fieldBuilder,
+      suggestionItemBuilder: widget.suggestionItemBuilder,
+      suggestionsViewBuilder: widget.suggestionsViewBuilder,
       suggestionBuilder: widget.suggestionBuilder,
       onQuerySelection: widget.onQuerySelection,
       onClearField: widget.onClearField,
@@ -884,24 +1005,42 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
         .findAncestorWidgetOfExactType<PlacesAutocompleteOverlay>()
         ?.mode;
     final fullscreen = overlayMode == PlacesAutocompleteOverlayMode.fullscreen;
-    final textField = TextField(
+    final interactive = widget.enabled && !_selectionLoading;
+    final field = PlacesFieldData(
       controller: _controller.textController,
       focusNode: _controller.focusNode,
-      canRequestFocus: !_isLauncherMode,
+      onChanged: _onUserInputChanged,
+      onTap: _isLauncherMode && interactive ? _openOverlay : null,
+      onClear: _hasText && interactive ? _clearField : null,
       enabled: widget.enabled,
       // Selection loading keeps the field enabled so focus and the
       // decoration survive. The progress indicator below and the
       // disabled clear button carry the loading affordance instead.
       readOnly: _isLauncherMode || _selectionLoading,
-      autofocus: widget.autofocus,
-      onChanged: _onUserInputChanged,
-      onTap: _isLauncherMode && widget.enabled && !_selectionLoading
-          ? _openOverlay
-          : null,
-      decoration: _buildDecoration(inTopBar: fullscreen),
-      contextMenuBuilder: PlacesDesignScope.contextMenuBuilder,
+      autofocus: widget.autofocus && !_isLauncherMode,
+      selectionLoading: _selectionLoading,
+      errorText: widget.decoration?.errorText,
+      strings: widget.strings,
     );
-    const progress = LinearProgressIndicator();
+    final customField = widget.fieldBuilder?.call(context, field);
+    final textField =
+        customField ??
+        TextField(
+          controller: field.controller,
+          focusNode: field.focusNode,
+          canRequestFocus: !_isLauncherMode,
+          enabled: field.enabled,
+          readOnly: field.readOnly,
+          autofocus: field.autofocus,
+          onChanged: field.onChanged,
+          onTap: field.onTap,
+          decoration: _buildDecoration(inTopBar: fullscreen),
+          contextMenuBuilder: PlacesDesignScope.contextMenuBuilder,
+        );
+    // A custom field shows selection loading itself.
+    final progress = _selectionLoading && customField == null
+        ? const LinearProgressIndicator()
+        : null;
     // The pointer guard covers the whole search surface, not just the
     // suggestion list. Tapping Retry moves focus to that button on some
     // platforms — notably web — and without this guard the focus listener
@@ -927,7 +1066,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     final input = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[textField, if (_selectionLoading) progress],
+      children: <Widget>[textField, ?progress],
     );
 
     final layout = switch (overlayMode) {
@@ -957,7 +1096,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           _buildTopBar(context, textField),
-          if (_selectionLoading) progress,
+          ?progress,
           Expanded(
             // The bar already took the top inset.
             child: SafeArea(
@@ -1089,11 +1228,35 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     BuildContext context,
     PlacesAutocompleteOverlayMode? overlayMode,
   ) {
+    final status = _loading
+        ? PlacesSuggestionsStatus.loading
+        : _error != null
+        ? PlacesSuggestionsStatus.error
+        : _suggestions.isNotEmpty
+        ? PlacesSuggestionsStatus.results
+        : _controller.textController.text.trim().isEmpty
+        ? null
+        : PlacesSuggestionsStatus.empty;
+    if (status == null) {
+      return const SizedBox.shrink();
+    }
     // Inline, the results float as a card by the field. In a dialog or
     // fullscreen route they sit directly on the route's surface.
     final framed = overlayMode == null;
-    if (_loading) {
-      return _InfoTile(
+    final attribution = widget.showPoweredByGoogle
+        ? _PoweredByGoogleAttribution(
+            semanticLabel: widget.strings.poweredByGoogleLabel,
+          )
+        : null;
+    final items = <Widget>[
+      for (var index = 0; index < _suggestions.length; index++)
+        _RevealWhenHighlighted(
+          highlighted: index == _highlightedSuggestionIndex,
+          child: _buildSuggestionItem(context, _suggestions[index], index),
+        ),
+    ];
+    final defaultView = switch (status) {
+      PlacesSuggestionsStatus.loading => _InfoTile(
         framed: framed,
         child: Row(
           children: <Widget>[
@@ -1105,10 +1268,8 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
             Expanded(child: Text(widget.strings.loadingText)),
           ],
         ),
-      );
-    }
-    if (_error != null) {
-      return _InfoTile(
+      ),
+      PlacesSuggestionsStatus.error => _InfoTile(
         framed: framed,
         child: Row(
           children: <Widget>[
@@ -1119,28 +1280,40 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
             ),
           ],
         ),
-      );
-    }
-    if (_suggestions.isEmpty) {
-      if (_controller.textController.text.trim().isEmpty) {
-        return const SizedBox.shrink();
-      }
-      return _InfoTile(
+      ),
+      PlacesSuggestionsStatus.empty => _InfoTile(
         framed: framed,
         child: Text(widget.strings.noResultsText),
-      );
-    }
-    final attribution = widget.showPoweredByGoogle
-        ? Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-            child: Align(
-              alignment: AlignmentDirectional.centerEnd,
-              child: _PoweredByGoogleAttribution(
-                semanticLabel: widget.strings.poweredByGoogleLabel,
-              ),
-            ),
-          )
-        : null;
+      ),
+      PlacesSuggestionsStatus.results => _buildResults(
+        context,
+        framed: framed,
+        items: items,
+        attribution: attribution,
+      ),
+    };
+    return widget.suggestionsViewBuilder?.call(
+          context,
+          PlacesSuggestionsViewData(
+            status: status,
+            suggestions: _suggestions,
+            items: items,
+            error: _error,
+            onRetry: _retrySearch,
+            attribution: attribution,
+            defaultView: defaultView,
+            strings: widget.strings,
+          ),
+        ) ??
+        defaultView;
+  }
+
+  Widget _buildResults(
+    BuildContext context, {
+    required bool framed,
+    required List<Widget> items,
+    required Widget? attribution,
+  }) {
     // Only the rows scroll. The attribution follows a short list and stays
     // in view below a long one, so it is never scrolled away from results.
     final results = Column(
@@ -1148,80 +1321,96 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         Flexible(
-          child: ListView.builder(
+          child: ListView(
             // Sizes to its rows, at most five, so the attribution can follow.
             shrinkWrap: true,
             // Inline it floats over someone else's page; never claim that
             // page's PrimaryScrollController.
             primary: false,
             padding: EdgeInsets.zero,
-            itemCount: _suggestions.length,
-            itemBuilder: (context, index) =>
-                _buildSuggestionTile(context, _suggestions[index], index),
+            children: items,
           ),
         ),
-        ?attribution,
+        if (attribution != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            child: Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: attribution,
+            ),
+          ),
       ],
     );
     return framed ? _InfoTile.card(context, results) : results;
   }
 
-  Widget _buildSuggestionTile(
+  Widget _buildSuggestionItem(
     BuildContext context,
     AutocompleteSuggestion suggestion,
     int index,
   ) {
-    final theme = Theme.of(context);
-    final selected = index == _highlightedSuggestionIndex;
-    final backgroundColor = selected
-        ? theme.colorScheme.secondaryContainer.withValues(alpha: 0.55)
-        : null;
+    final item = PlacesSuggestionItemData(
+      suggestion: suggestion,
+      highlighted: index == _highlightedSuggestionIndex,
+      onSelected: () => _handleSuggestionTap(suggestion),
+      strings: widget.strings,
+    );
+    return widget.suggestionItemBuilder?.call(context, item) ??
+        _buildDefaultSuggestionItem(context, item);
+  }
 
-    if (suggestion is QuerySuggestion) {
-      return Semantics(
-        button: true,
-        label:
-            '${widget.strings.querySuggestionLabel}: '
-            '${suggestion.displayText}',
-        child: ListTile(
-          selected: selected,
-          tileColor: backgroundColor,
+  Widget _buildDefaultSuggestionItem(
+    BuildContext context,
+    PlacesSuggestionItemData item,
+  ) {
+    final strings = item.strings;
+    // The keyboard highlight is not a selection, so not ListTile.selected:
+    // that recolours the text and ignores tileColor. Flutter's own
+    // Autocomplete marks it with the theme's focus colour.
+    final tileColor = item.highlighted ? Theme.of(context).focusColor : null;
+    final (label, tile) = switch (item.suggestion) {
+      QuerySuggestion(:final fullText, :final displayText) => (
+        '${strings.querySuggestionLabel}: $displayText',
+        ListTile(
+          tileColor: tileColor,
           leading: const Icon(Icons.search),
-          onTap: () => _handleSuggestionTap(suggestion),
-          title: _structuredText(suggestion.fullText, theme),
+          onTap: item.onSelected,
+          title: _structuredText(fullText),
         ),
-      );
-    }
-
-    final place = suggestion as PlaceSuggestion;
+      ),
+      final PlaceSuggestion place => (
+        '${strings.placeSuggestionLabel}: ${place.displayText}',
+        ListTile(
+          tileColor: tileColor,
+          onTap: item.onSelected,
+          title:
+              widget.suggestionBuilder?.call(context, place) ??
+              _structuredText(place.primaryText),
+          subtitle: place.secondaryText == null
+              ? null
+              : _structuredText(place.secondaryText!),
+          trailing: place.distanceMeters == null
+              ? null
+              : Text('${place.distanceMeters} ${strings.distanceUnitMeters}'),
+        ),
+      ),
+    };
+    // Its own Material, so the tile colour and ink paint here even inside a
+    // custom suggestions view with no Material of its own.
     return Semantics(
       button: true,
-      label: '${widget.strings.placeSuggestionLabel}: ${place.displayText}',
-      child: ListTile(
-        selected: selected,
-        tileColor: backgroundColor,
-        onTap: () => _handleSuggestionTap(place),
-        title:
-            widget.suggestionBuilder?.call(context, place) ??
-            _structuredText(place.primaryText, theme),
-        subtitle: place.secondaryText == null
-            ? null
-            : _structuredText(place.secondaryText!, theme),
-        trailing: place.distanceMeters == null
-            ? null
-            : Text(
-                '${place.distanceMeters} ${widget.strings.distanceUnitMeters}',
-              ),
-      ),
+      label: label,
+      child: Material(type: MaterialType.transparency, child: tile),
     );
   }
 
-  Widget _structuredText(StructuredText value, ThemeData theme) {
+  // Matched characters are bold. The rest inherits the tile's text style, so
+  // a ListTileTheme restyles titles and subtitles alike.
+  Widget _structuredText(StructuredText value) {
     if (value.matches.isEmpty) {
       return Text(value.text);
     }
-    final baseStyle = theme.textTheme.bodyLarge;
-    final highlightStyle = baseStyle?.copyWith(fontWeight: FontWeight.w700);
+    const highlightStyle = TextStyle(fontWeight: FontWeight.w700);
     final spans = <TextSpan>[];
     var cursor = 0;
     for (final match in value.matches) {
@@ -1243,7 +1432,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     if (cursor < value.text.length) {
       spans.add(TextSpan(text: value.text.substring(cursor)));
     }
-    return Text.rich(TextSpan(style: baseStyle, children: spans));
+    return Text.rich(TextSpan(children: spans));
   }
 
   InputDecoration _buildDecoration({required bool inTopBar}) {
@@ -1320,6 +1509,51 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       children: items,
     );
   }
+}
+
+/// Scrolls its row into view when the keyboard highlights it.
+class _RevealWhenHighlighted extends StatefulWidget {
+  const _RevealWhenHighlighted({
+    required this.highlighted,
+    required this.child,
+  });
+
+  final bool highlighted;
+  final Widget child;
+
+  @override
+  State<_RevealWhenHighlighted> createState() => _RevealWhenHighlightedState();
+}
+
+class _RevealWhenHighlightedState extends State<_RevealWhenHighlighted> {
+  @override
+  void didUpdateWidget(_RevealWhenHighlighted oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.highlighted && !oldWidget.highlighted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _reveal());
+    }
+  }
+
+  void _reveal() {
+    if (!mounted) {
+      return;
+    }
+    final row = context.findRenderObject();
+    final scrollable = Scrollable.maybeOf(context);
+    final scrollableBox = scrollable?.context.findRenderObject();
+    // Inline, the rows inherit from the field's place on the page, so the
+    // nearest Scrollable can be the page's own. Scroll only one that holds
+    // the row — as Flutter's Autocomplete does, centring it.
+    for (var node = row?.parent; node != null; node = node.parent) {
+      if (identical(node, scrollableBox)) {
+        unawaited(scrollable!.position.ensureVisible(row!, alignment: 0.5));
+        return;
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _InfoTile extends StatelessWidget {

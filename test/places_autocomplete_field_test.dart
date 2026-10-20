@@ -234,6 +234,44 @@ class _RetryBackend extends _FakeBackend {
   }
 }
 
+/// Answers the first autocomplete request at once and holds every later one.
+class _HoldsLaterSearchesBackend extends _FakeBackend {
+  int autocompleteCount = 0;
+
+  @override
+  Future<List<PlaceSuggestion>> autocomplete(
+    AutocompleteRequest request, {
+    PlacesCancellationToken? cancellationToken,
+  }) {
+    autocompleteCount++;
+    return autocompleteCount == 1
+        ? super.autocomplete(request)
+        : Completer<List<PlaceSuggestion>>().future;
+  }
+}
+
+class _EmptyBackend extends _FakeBackend {
+  @override
+  Future<List<PlaceSuggestion>> autocomplete(
+    AutocompleteRequest request, {
+    PlacesCancellationToken? cancellationToken,
+  }) async => const <PlaceSuggestion>[];
+}
+
+/// A text field built from the widgets layer only, wired the way
+/// [PlacesFieldData] asks.
+Widget _plainField(PlacesFieldData field) => EditableText(
+  key: const ValueKey<String>('plain-field'),
+  controller: field.controller,
+  focusNode: field.focusNode,
+  onChanged: field.onChanged,
+  readOnly: field.readOnly,
+  autofocus: field.autofocus,
+  style: const TextStyle(fontSize: 16),
+  cursorColor: const Color(0xFF000000),
+  backgroundCursorColor: const Color(0xFF808080),
+);
+
 void main() {
   testWidgets('renders custom strings and suggestion results', (tester) async {
     final client = PlacesClient.testing(
@@ -1327,6 +1365,145 @@ void main() {
         expect(backend.lastAutocompleteRequest?.origin?.latitude, 40.7);
         expect(within(fieldMode, find.text('1234 meters')), findsOneWidget);
       });
+
+      testWidgets('${fieldMode.name} honours fieldBuilder', (tester) async {
+        final client = PlacesClient.testing(
+          apiKey: 'test',
+          backend: _FakeBackend(),
+        );
+        PlaceSelection? selection;
+
+        await openMode(
+          tester,
+          fieldMode,
+          PlacesAutocompleteField(
+            client: client,
+            fieldMode: fieldMode,
+            onSelection: (value) => selection = value,
+            fieldBuilder: (context, field) => TextField(
+              key: const ValueKey<String>('custom-field'),
+              controller: field.controller,
+              focusNode: field.focusNode,
+              onChanged: field.onChanged,
+              onTap: field.onTap,
+              readOnly: field.readOnly,
+              decoration: InputDecoration(hintText: 'custom hint'),
+            ),
+          ),
+        );
+        await search(tester, fieldMode);
+
+        expect(
+          within(fieldMode, find.byKey(const ValueKey<String>('custom-field'))),
+          findsOneWidget,
+        );
+        expect(within(fieldMode, find.text('custom hint')), findsOneWidget);
+        await tester.tap(within(fieldMode, find.text('Coffee Lab')));
+        await tester.pumpAndSettle();
+        expect(selection?.placeId, 'place-1');
+      });
+
+      testWidgets('${fieldMode.name} honours suggestionItemBuilder', (
+        tester,
+      ) async {
+        final client = PlacesClient.testing(
+          apiKey: 'test',
+          backend: _FakeBackend(),
+        );
+        PlaceSelection? selection;
+
+        await openMode(
+          tester,
+          fieldMode,
+          PlacesAutocompleteField(
+            client: client,
+            fieldMode: fieldMode,
+            onSelection: (value) => selection = value,
+            suggestionItemBuilder: (context, item) => GestureDetector(
+              onTap: item.onSelected,
+              child: Text(
+                'row ${(item.suggestion as PlaceSuggestion).placeId} '
+                '${item.highlighted}',
+              ),
+            ),
+          ),
+        );
+        await search(tester, fieldMode);
+
+        expect(
+          within(fieldMode, find.text('row place-1 true')),
+          findsOneWidget,
+        );
+        expect(
+          within(fieldMode, find.text('row place-2 false')),
+          findsOneWidget,
+        );
+        await tester.tap(within(fieldMode, find.text('row place-2 false')));
+        await tester.pumpAndSettle();
+        expect(selection?.placeId, 'place-2');
+      });
+
+      testWidgets("${fieldMode.name} honours a Theme's listTileTheme", (
+        tester,
+      ) async {
+        final client = PlacesClient.testing(
+          apiKey: 'test',
+          backend: _FakeBackend(),
+        );
+
+        await openMode(
+          tester,
+          fieldMode,
+          Builder(
+            builder: (context) => Theme(
+              data: Theme.of(context).copyWith(
+                listTileTheme: const ListTileThemeData(
+                  titleTextStyle: TextStyle(fontSize: 31),
+                ),
+              ),
+              child: PlacesAutocompleteField(
+                client: client,
+                fieldMode: fieldMode,
+              ),
+            ),
+          ),
+        );
+        await search(tester, fieldMode);
+
+        final title = tester.widget<RichText>(
+          within(fieldMode, find.text('Coffee Lab', findRichText: true)),
+        );
+        expect(title.text.style?.fontSize, 31);
+      });
+
+      testWidgets('${fieldMode.name} honours suggestionsViewBuilder', (
+        tester,
+      ) async {
+        final client = PlacesClient.testing(
+          apiKey: 'test',
+          backend: _FakeBackend(),
+        );
+
+        await openMode(
+          tester,
+          fieldMode,
+          PlacesAutocompleteField(
+            client: client,
+            fieldMode: fieldMode,
+            suggestionsViewBuilder: (context, view) => ListView(
+              shrinkWrap: true,
+              children: <Widget>[
+                Text('view ${view.status.name} ${view.suggestions.length}'),
+                ...view.items,
+              ],
+            ),
+          ),
+        );
+        await search(tester, fieldMode);
+
+        expect(within(fieldMode, find.text('view results 5')), findsOneWidget);
+        expect(within(fieldMode, find.text('Coffee Lab')), findsOneWidget);
+      });
     }
   });
 
@@ -1902,5 +2079,600 @@ void main() {
 
     backend.completer.complete(const PlaceData(id: 'place-1'));
     await tester.pumpAndSettle();
+  });
+
+  group('builders', () {
+    PlacesClient clientFor(PlacesBackend backend) =>
+        PlacesClient.testing(apiKey: 'test', backend: backend);
+
+    Widget app(Widget field) => MaterialApp(home: Scaffold(body: field));
+
+    Future<void> type(WidgetTester tester, String text) async {
+      await tester.enterText(find.byType(TextField), text);
+      await tester.pump();
+    }
+
+    testWidgets('the view sees loading, then results — never an empty '
+        'result before the first request', (tester) async {
+      final statuses = <PlacesSuggestionsStatus>[];
+      await tester.pumpWidget(
+        app(
+          PlacesAutocompleteField(
+            client: clientFor(_FakeBackend()),
+            suggestionsViewBuilder: (context, view) {
+              statuses.add(view.status);
+              return view.defaultView;
+            },
+          ),
+        ),
+      );
+
+      await type(tester, 'cof');
+      // Inside the debounce: no request has been sent yet.
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Loading places…'), findsOneWidget);
+      expect(find.text('No matching places found.'), findsNothing);
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pumpAndSettle();
+
+      expect(statuses.toSet(), <PlacesSuggestionsStatus>{
+        PlacesSuggestionsStatus.loading,
+        PlacesSuggestionsStatus.results,
+      });
+      expect(statuses.last, PlacesSuggestionsStatus.results);
+    });
+
+    testWidgets('the view sees empty once a search finds nothing', (
+      tester,
+    ) async {
+      PlacesSuggestionsViewData? last;
+      await tester.pumpWidget(
+        app(
+          PlacesAutocompleteField(
+            client: clientFor(_EmptyBackend()),
+            suggestionsViewBuilder: (context, view) {
+              last = view;
+              return view.defaultView;
+            },
+          ),
+        ),
+      );
+
+      await type(tester, 'zzz');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+
+      expect(last?.status, PlacesSuggestionsStatus.empty);
+      expect(last?.items, isEmpty);
+      expect(find.text('No matching places found.'), findsOneWidget);
+    });
+
+    testWidgets('the view gets the typed error and a working retry', (
+      tester,
+    ) async {
+      final backend = _RetryBackend();
+      PlacesSuggestionsViewData? last;
+      await tester.pumpWidget(
+        app(
+          PlacesAutocompleteField(
+            client: clientFor(backend),
+            suggestionsViewBuilder: (context, view) {
+              last = view;
+              if (view.status != PlacesSuggestionsStatus.error) {
+                return view.defaultView;
+              }
+              return GestureDetector(
+                onTap: view.onRetry,
+                child: Text('failed: ${view.error?.kind.name}'),
+              );
+            },
+          ),
+        ),
+      );
+
+      await type(tester, 'cof');
+      await tester.pump(const Duration(milliseconds: 350));
+      backend.failFirstAttempt();
+      await tester.pumpAndSettle();
+
+      expect(last?.error?.kind, PlacesErrorKind.network);
+      expect(last?.error?.retryable, isTrue);
+      expect(find.text('failed: network'), findsOneWidget);
+
+      await tester.tap(find.text('failed: network'));
+      await tester.pumpAndSettle();
+
+      expect(backend.attempts, 2);
+      expect(last?.status, PlacesSuggestionsStatus.results);
+      expect(find.text('Coffee Lab'), findsOneWidget);
+    });
+
+    testWidgets('the attribution is handed to the view, or null when off', (
+      tester,
+    ) async {
+      final attributions = <bool, Widget?>{};
+      for (final show in <bool>[true, false]) {
+        await tester.pumpWidget(
+          app(
+            PlacesAutocompleteField(
+              key: ValueKey<bool>(show),
+              client: clientFor(_FakeBackend()),
+              showPoweredByGoogle: show,
+              suggestionsViewBuilder: (context, view) {
+                attributions[show] = view.attribution;
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[?view.attribution],
+                );
+              },
+            ),
+          ),
+        );
+        await type(tester, 'cof');
+        await tester.pump(const Duration(milliseconds: 350));
+        await tester.pumpAndSettle();
+      }
+
+      expect(attributions[true], isNotNull);
+      expect(attributions[false], isNull);
+    });
+
+    testWidgets('the keyboard highlight paints the focus colour and leaves '
+        'the text alone', (tester) async {
+      await tester.pumpWidget(
+        app(PlacesAutocompleteField(client: clientFor(_FakeBackend()))),
+      );
+      await type(tester, 'cof');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+
+      final tiles = tester.widgetList<ListTile>(find.byType(ListTile)).toList();
+      final focusColor = Theme.of(
+        tester.element(find.byType(ListTile).first),
+      ).focusColor;
+      expect(tiles.first.tileColor, focusColor);
+      expect(tiles.first.selected, isFalse);
+      expect(tiles[1].tileColor, isNull);
+      // Previously `selected: true`, which tinted the highlighted subtitle
+      // with the primary colour.
+      final subtitle = tester.widget<RichText>(
+        find
+            .descendant(
+              of: find.byType(ListTile).first,
+              matching: find.byType(RichText),
+            )
+            .at(1),
+      );
+      final primary = Theme.of(
+        tester.element(find.byType(ListTile).first),
+      ).colorScheme.primary;
+      expect(subtitle.text.style?.color, isNot(primary));
+    });
+
+    testWidgets('arrow keys keep the highlighted row in view', (tester) async {
+      tester.view.physicalSize = const Size(400, 640);
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.viewInsets = const FakeViewPadding(bottom: 420);
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        app(PlacesAutocompleteField(client: clientFor(_FakeBackend()))),
+      );
+      await type(tester, 'cof');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      final list = tester.getRect(find.byType(ListView));
+      expect(
+        tester.getRect(find.text('Coffee Lab 5', skipOffstage: false)).top,
+        greaterThan(list.bottom),
+        reason: 'the last row starts out of view',
+      );
+
+      for (var i = 0; i < 4; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+      }
+
+      final last = tester.getRect(find.text('Coffee Lab 5'));
+      expect(last.top, greaterThanOrEqualTo(list.top));
+      expect(last.bottom, lessThanOrEqualTo(list.bottom));
+    });
+
+    testWidgets('a ListTileTheme styles matched text too', (tester) async {
+      await tester.pumpWidget(
+        app(
+          ListTileTheme(
+            data: const ListTileThemeData(
+              titleTextStyle: TextStyle(fontSize: 31),
+            ),
+            child: PlacesAutocompleteField(
+              client: clientFor(_FakeBackend()),
+              includeQueryPredictions: true,
+            ),
+          ),
+        ),
+      );
+      await type(tester, 'cof');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+
+      // The query suggestion has a match, so it renders as rich text.
+      final query = tester.widget<RichText>(
+        find.text('coffee near me', findRichText: true),
+      );
+      // Each run of text, matched or not, ends up at the theme's size.
+      final sizes = <double?>[];
+      void visit(InlineSpan span, TextStyle? inherited) {
+        final style = inherited?.merge(span.style) ?? span.style;
+        if (span is TextSpan && span.text != null) {
+          sizes.add(style?.fontSize);
+        }
+        if (span is TextSpan) {
+          for (final child in span.children ?? const <InlineSpan>[]) {
+            visit(child, style);
+          }
+        }
+      }
+
+      visit(query.text, null);
+      expect(sizes, hasLength(2));
+      expect(sizes, everyElement(31));
+    });
+
+    testWidgets('a custom field shows selection loading; the package draws '
+        'no progress bar', (tester) async {
+      final backend = _SlowDetailsBackend();
+      final loading = <bool>[];
+      await tester.pumpWidget(
+        app(
+          PlacesAutocompleteField(
+            client: clientFor(backend),
+            fieldBuilder: (context, field) {
+              loading.add(field.selectionLoading);
+              return TextField(
+                controller: field.controller,
+                focusNode: field.focusNode,
+                onChanged: field.onChanged,
+                readOnly: field.readOnly,
+              );
+            },
+          ),
+        ),
+      );
+      await type(tester, 'cof');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Coffee Lab'));
+      await tester.pump();
+
+      expect(loading.last, isTrue);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+
+      backend.completer.complete(const PlaceData(id: 'place-1'));
+      await tester.pumpAndSettle();
+      expect(loading.last, isFalse);
+    });
+
+    testWidgets('a custom field gets onClear only while there is text', (
+      tester,
+    ) async {
+      PlacesFieldData? last;
+      var cleared = 0;
+      await tester.pumpWidget(
+        app(
+          PlacesAutocompleteField(
+            client: clientFor(_FakeBackend()),
+            onClearField: () => cleared++,
+            fieldBuilder: (context, field) {
+              last = field;
+              return TextField(
+                controller: field.controller,
+                focusNode: field.focusNode,
+                onChanged: field.onChanged,
+              );
+            },
+          ),
+        ),
+      );
+      expect(last?.onClear, isNull);
+      expect(last?.onTap, isNull);
+
+      await type(tester, 'cof');
+      expect(last?.onClear, isNotNull);
+      last!.onClear!();
+      await tester.pumpAndSettle();
+
+      expect(cleared, 1);
+      expect(last?.controller.text, isEmpty);
+      expect(last?.onClear, isNull);
+    });
+
+    testWidgets('the form field hands its validation error to a custom field', (
+      tester,
+    ) async {
+      final formKey = GlobalKey<FormState>();
+      PlacesFieldData? last;
+      await tester.pumpWidget(
+        app(
+          Form(
+            key: formKey,
+            child: PlacesAutocompleteFormField(
+              client: clientFor(_FakeBackend()),
+              validator: (value) => value == null ? 'Pick a place' : null,
+              // Styles the default field's error; a custom field renders the
+              // text itself.
+              errorBuilder: (context, error) => Text('styled $error'),
+              fieldBuilder: (context, field) {
+                last = field;
+                return TextField(
+                  controller: field.controller,
+                  focusNode: field.focusNode,
+                  onChanged: field.onChanged,
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      formKey.currentState!.validate();
+      await tester.pump();
+
+      expect(last?.errorText, 'Pick a place');
+    });
+
+    testWidgets('builders made of widgets-layer types alone run the whole '
+        'search', (tester) async {
+      PlaceSelection? selection;
+      await tester.pumpWidget(
+        app(
+          PlacesAutocompleteField(
+            client: clientFor(_FakeBackend()),
+            onSelection: (value) => selection = value,
+            fieldBuilder: (context, field) => _plainField(field),
+            suggestionItemBuilder: (context, item) => GestureDetector(
+              onTap: item.onSelected,
+              child: Text(switch (item.suggestion) {
+                PlaceSuggestion(:final primaryText) => primaryText.text,
+                QuerySuggestion(:final displayText) => displayText,
+              }),
+            ),
+            suggestionsViewBuilder: (context, view) => switch (view.status) {
+              PlacesSuggestionsStatus.results => Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[...view.items, ?view.attribution],
+              ),
+              _ => Text(view.status.name),
+            },
+          ),
+        ),
+      );
+
+      await tester.enterText(
+        find.byKey(const ValueKey<String>('plain-field')),
+        'cof',
+      );
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNothing);
+      expect(find.byType(ListTile), findsNothing);
+
+      await tester.tap(find.text('Coffee Lab 2'));
+      await tester.pumpAndSettle();
+
+      expect(selection?.placeId, 'place-2');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Enter cannot pick a row hidden behind the loading state', (
+      tester,
+    ) async {
+      final backend = _HoldsLaterSearchesBackend();
+      PlaceSelection? selection;
+      PlacesSuggestionsViewData? last;
+      await tester.pumpWidget(
+        app(
+          PlacesAutocompleteField(
+            client: clientFor(backend),
+            onSelection: (value) => selection = value,
+            suggestionsViewBuilder: (context, view) {
+              last = view;
+              return view.defaultView;
+            },
+          ),
+        ),
+      );
+      await type(tester, 'cof');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      expect(find.text('Coffee Lab'), findsOneWidget);
+
+      await type(tester, 'coff');
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(backend.autocompleteCount, 2);
+      expect(last?.status, PlacesSuggestionsStatus.loading);
+      expect(last?.suggestions, isEmpty);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      expect(selection, isNull);
+    });
+
+    testWidgets('typing over a loading pick in a custom field abandons it', (
+      tester,
+    ) async {
+      final backend = _SlowDetailsBackend();
+      PlaceSelection? selection;
+      var cleared = 0;
+      final controller = PlacesAutocompleteController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        app(
+          PlacesAutocompleteField(
+            client: clientFor(backend),
+            controller: controller,
+            onSelection: (value) => selection = value,
+            onClearField: () => cleared++,
+            // Ignores readOnly, as CupertinoSearchTextField has no such option.
+            fieldBuilder: (context, field) => TextField(
+              controller: field.controller,
+              focusNode: field.focusNode,
+              onChanged: field.onChanged,
+            ),
+          ),
+        ),
+      );
+      await type(tester, 'cof');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Coffee Lab'));
+      await tester.pump();
+      expect(backend.fetchPlaceCount, 1);
+
+      await type(tester, 'tea');
+      expect(cleared, 1);
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      backend.completer.complete(const PlaceData(id: 'place-1'));
+      await tester.pumpAndSettle();
+
+      expect(selection, isNull, reason: 'the abandoned pick never completes');
+      expect(controller.selectedSelection, isNull);
+      expect(find.text('Coffee Lab'), findsOneWidget, reason: 'the new search');
+    });
+
+    testWidgets('a disabled widget ignores typing in a custom field', (
+      tester,
+    ) async {
+      final backend = _SlowAutocompleteBackend();
+      final controller = PlacesAutocompleteController();
+      addTearDown(controller.dispose);
+      const picked = PlaceSelection(
+        suggestion: PlaceSuggestion(
+          placeId: 'place-1',
+          placeResourceName: 'places/place-1',
+          fullText: StructuredText(text: 'Coffee Lab'),
+          primaryText: StructuredText(text: 'Coffee Lab'),
+        ),
+      );
+      controller.restoreSelection(picked);
+      var cleared = 0;
+      await tester.pumpWidget(
+        app(
+          PlacesAutocompleteField(
+            client: clientFor(backend),
+            controller: controller,
+            enabled: false,
+            onClearField: () => cleared++,
+            // Ignores enabled.
+            fieldBuilder: (context, field) => TextField(
+              controller: field.controller,
+              focusNode: field.focusNode,
+              onChanged: field.onChanged,
+            ),
+          ),
+        ),
+      );
+      await type(tester, 'cof');
+      expect(find.text('Loading places…'), findsNothing);
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+
+      expect(backend.autocompleteCount, 0);
+      expect(find.text('Loading places…'), findsNothing);
+      expect(controller.selectedSelection, same(picked));
+      expect(cleared, 0);
+    });
+
+    testWidgets('text set from code during the debounce does not leave the '
+        'search spinning', (tester) async {
+      final backend = _SlowAutocompleteBackend();
+      final controller = PlacesAutocompleteController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        app(
+          PlacesAutocompleteField(
+            client: clientFor(backend),
+            controller: controller,
+          ),
+        ),
+      );
+      await type(tester, 'cof');
+      expect(find.text('Loading places…'), findsOneWidget);
+
+      controller.textController.text = 'something else';
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+
+      expect(backend.autocompleteCount, 0);
+      expect(find.text('Loading places…'), findsNothing);
+    });
+
+    testWidgets('a custom launcher field does not keep focus', (tester) async {
+      final controller = PlacesAutocompleteController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        app(
+          PlacesAutocompleteField(
+            client: clientFor(_FakeBackend()),
+            controller: controller,
+            fieldMode: PlacesAutocompleteFieldMode.dialog,
+            // Ignores readOnly and can take focus, unlike the default field.
+            fieldBuilder: (context, field) => TextField(
+              controller: field.controller,
+              focusNode: field.focusNode,
+              onChanged: field.onChanged,
+              onTap: field.onTap,
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byType(TextField));
+      await tester.pumpAndSettle();
+      expect(find.byType(PlacesAutocompleteOverlay), findsOneWidget);
+      expect(controller.focusNode.hasFocus, isFalse);
+
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PlacesAutocompleteOverlay), findsNothing);
+      expect(controller.focusNode.hasFocus, isFalse);
+    });
+
+    test('suggestionItemBuilder and the deprecated suggestionBuilder are '
+        'exclusive', () {
+      final client = clientFor(_FakeBackend());
+      Widget row(BuildContext context, PlacesSuggestionItemData item) =>
+          const SizedBox();
+      Widget title(BuildContext context, PlaceSuggestion suggestion) =>
+          const SizedBox();
+      expect(
+        () => PlacesAutocompleteField(
+          client: client,
+          suggestionItemBuilder: row,
+          suggestionBuilder: title,
+        ),
+        throwsAssertionError,
+      );
+      expect(
+        () => PlacesAutocompleteOverlay(
+          client: client,
+          controller: PlacesAutocompleteController(),
+          mode: PlacesAutocompleteOverlayMode.dialog,
+          suggestionItemBuilder: row,
+          suggestionBuilder: title,
+        ),
+        throwsAssertionError,
+      );
+      expect(
+        () => PlacesAutocompleteFormField(
+          client: client,
+          suggestionItemBuilder: row,
+          suggestionBuilder: title,
+        ),
+        throwsAssertionError,
+      );
+    });
   });
 }

@@ -345,7 +345,10 @@ class LocationBias {
 @immutable
 /// Hard geographic restriction for autocomplete and search results.
 ///
-/// Use this when results must fall inside the specified area.
+/// Use this when results must fall inside the specified area. Which shapes
+/// an operation accepts differs: autocomplete takes either over HTTP but only
+/// a rectangle through the Maps JavaScript backend (the web default), Text
+/// Search takes only a rectangle, and Nearby Search takes only a circle.
 ///
 /// Official reference:
 /// https://developers.google.com/maps/documentation/places/web-service/place-autocomplete#locationRestriction
@@ -2399,6 +2402,9 @@ class AutocompleteRequest {
   final LocationBias? locationBias;
 
   /// Hard geographic restriction for suggestions.
+  ///
+  /// A circle or a rectangle over HTTP. Through the Maps JavaScript backend —
+  /// the web default — only a rectangle ([LocationRestriction.rectangle]).
   final LocationRestriction? locationRestriction;
 
   /// Restricts autocomplete results to places whose primary type matches one
@@ -2694,6 +2700,9 @@ class TextSearchRequest {
   final LocationBias? locationBias;
 
   /// Hard geographic restriction applied to the search.
+  ///
+  /// Must be a rectangle ([LocationRestriction.rectangle]); a circle fails
+  /// validation.
   final LocationRestriction? locationRestriction;
 
   /// Maximum number of results requested per page.

@@ -15,6 +15,17 @@
 * Works in apps still on `package:flutter/material.dart`, with no extra code.
 * Address getters: `city`, `streetAddress`, `county`, `neighborhood`, `unit`, `postalCodeSuffix`.
 * Dialog and fullscreen search keep the field in place and scroll only the results; fullscreen puts the field in the top bar.
+* `fieldBuilder`, `suggestionItemBuilder`, and `suggestionsViewBuilder` build the field, each row, and the suggestion area; the view gets the typed `PlacesException` when a search fails.
+
+**Fixed:**
+
+* The first keystrokes no longer flash "No matching places found." before any response.
+* The keyboard-highlighted row has a background, keeps its text colours, and scrolls into view.
+* A `Theme` around the field now reaches the fullscreen search, as it already reached the dialog.
+
+**Deprecated:**
+
+* `suggestionBuilder` — use `suggestionItemBuilder`. Removed in `1.0.0`.
 
 **Compatibility:**
 

@@ -62,10 +62,53 @@ Common options (same names on all surfaces): `languageCode`, `regionCode`, `orig
 `fetchPlaceDetailsOnSelection` (default `true`), `selectionFields` (default
 `PlaceFieldPresets.address`), `fetchTimeZoneOnSelection` (default `false`), `maxSuggestions`
 (max 5), `decoration` (`material_ui`'s `InputDecoration`), `strings` (`PlacesStrings`),
-`suggestionBuilder`, `onError`, `onClearField`, `enabled`, `showPoweredByGoogle`, `autofocus`
+`fieldBuilder` / `suggestionItemBuilder` / `suggestionsViewBuilder` (below), `onError`,
+`onClearField`, `enabled`, `showPoweredByGoogle`, `autofocus`
 (field widgets only),
 `controller` (`PlacesAutocompleteController`: text, focus, session, selection, `debounceDuration`
 default 300 ms).
+
+Widget text: `strings: const PlacesStrings(searchHint: ..., loadingText: ..., noResultsText: ...,
+errorText: ..., retryText: ..., poweredByGoogleLabel: ..., overlayTitle: ..., closeLabel: ...,
+clearLabel: ..., placeSuggestionLabel: ..., querySuggestionLabel: ..., distanceUnitMeters: ...)`.
+Every default is English and the package does not pick strings from the app's locale yet, so a
+non-English app passes them all. `languageCode` sets Google's result language, not the widget's
+text. `PlacesPhotoAttribution`'s "Photo by" is its own `prefix:` parameter.
+
+Builders — each gets one data object and reaches every mode:
+
+```dart
+suggestionItemBuilder: (context, PlacesSuggestionItemData item) => switch (item.suggestion) {
+  final PlaceSuggestion place => ListTile(title: Text(place.primaryText.text), onTap: item.onSelected),
+  final QuerySuggestion query => ListTile(title: Text(query.displayText), onTap: item.onSelected),
+}, // item.highlighted: keyboard highlight
+suggestionsViewBuilder: (context, PlacesSuggestionsViewData view) => switch (view.status) {
+  PlacesSuggestionsStatus.error => Card(child: ListTile(title: Text('Failed: ${view.error?.kind.name}'), onTap: view.onRetry)),
+  _ => view.defaultView, // loading, results, empty: the package's own
+}, // also view.items (built rows — use them), view.attribution, view.suggestions
+fieldBuilder: (context, PlacesFieldData field) => CupertinoSearchTextField(
+  controller: field.controller, focusNode: field.focusNode,
+  onChanged: field.onChanged, // required: starts the search
+  onTap: field.onTap, onSuffixTap: field.onClear ?? () {}, enabled: field.enabled,
+), // also field.readOnly, autofocus, selectionLoading (no progress bar drawn), errorText, strings
+```
+
+A `Theme` around the field with `listTileTheme` set restyles the default rows without a builder, in
+every mode (a `ListTileTheme` widget only reaches inline mode). `suggestionBuilder`
+(title only) is deprecated — use `suggestionItemBuilder`; the two cannot be combined. A legacy
+`package:flutter/material.dart` `TextField` returned from `fieldBuilder` needs a `Material` from that
+library around it in dialog and fullscreen modes.
+
+Areas:
+
+```dart
+locationBias: LocationBias.circle(center: const PlaceCoordinates(latitude: 51.5, longitude: -0.12), radiusMeters: 20000),
+locationRestriction: LocationRestriction.rectangle(low: southWest, high: northEast),
+```
+
+Radius at most 50000 m. Shapes accepted: autocomplete (widgets, `autocomplete()`) — both, except
+through Maps JavaScript (the web default), where `locationRestriction` must be a rectangle; `TextSearchRequest.locationRestriction` —
+rectangle only; `NearbySearchRequest.locationRestriction` — circle only, required.
 
 ## What a selection carries
 
@@ -76,7 +119,15 @@ default 300 ms).
 `city` (falls back `locality` → `postal_town` → `sublocality_level_1` →
 `administrative_area_level_3`), `locality`, `county`, `administrativeArea`, `postalCode`,
 `postalCodeSuffix`, `country`, `countryShort` (ISO code); most have a `...Short` variant. Also `location`,
-`formattedAddress`, `shortFormattedAddress`, `addressComponents`.
+`formattedAddress`, `shortFormattedAddress`, `addressComponents` (`List<PlaceAddressComponent>`:
+`longText`, `shortText`, `types` — read it for formats the getters do not fit). `postalAddress`
+(`PlacePostalAddress`) needs `PlaceField.postalAddress`, which is not in the default.
+
+Time zone, two ways: `PlaceField.timeZone` → `place.timeZone?.id` (`PlaceTimeZone`, IANA id) and
+`PlaceField.utcOffsetMinutes` → `place.utcOffsetMinutes` (current offset), both Pro; or
+`fetchTimeZoneOnSelection: true` → `selection.timeZone` (`PlaceTimeZoneData`: `timeZoneId`,
+`timeZoneName`, `rawOffset`, `dstOffset`, `timestamp`), from the separately billed Time Zone API,
+at `selectionTimeZoneAt` (default now).
 
 ## Field presets and billing
 
@@ -113,7 +164,14 @@ final zone = await client.fetchTimeZoneForPlace(place);
 
 Every operation takes an optional `cancellationToken: PlacesCancellationToken()`. Failures are
 `PlacesException` with `kind` (`PlacesErrorKind`), `statusCode`, `code` (Google's status, e.g.
-`PERMISSION_DENIED`), `retryable`, `message`.
+`PERMISSION_DENIED`), `retryable`, `message`. `PlacesErrorKind` values: `validation` (never sent),
+`configuration`, `network`, `timeout`, `cancellation`, `http`, `googleApi`, `proxy`, `javascript`
+(web), `unknown`.
+
+`PlacesClient.proxy(placesEndpoint: ..., authentication: (PlacesProxyRequest request) async =>
+{'Authorization': ...})` — the callback runs before every proxy request and receives
+`operation`, `method`, and `uri` (do not log the URI). It may not return `Content-Type`,
+`Content-Length`, `Host`, `X-Goog-Api-Key`, `X-Goog-FieldMask`, or `X-Goog-User-Project`.
 
 ## Apps not yet on material_ui
 
@@ -130,6 +188,12 @@ default theme there. A `decoration:` must still be `material_ui`'s `InputDecorat
   `applicationIdentity`.
 - Building `decoration:` from `package:flutter/material.dart`'s `InputDecoration` — it must be
   `material_ui`'s.
+- A `fieldBuilder` field that never calls `field.onChanged` — nothing is searched.
+- Building rows inside `suggestionsViewBuilder` instead of using `view.items` — keyboard
+  highlighting then cannot keep the highlighted row in view.
+- Passing `LocationRestriction.circle(...)` to autocomplete through Maps JavaScript (web), or to
+  `TextSearchRequest` — use
+  `.rectangle(...)`. Setting both `locationBias` and `locationRestriction` fails validation.
 - Enabling the legacy "Places API" instead of "Places API (New)" — requests fail with
   `PERMISSION_DENIED`.
 
@@ -138,5 +202,6 @@ default theme there. A `decoration:` must still be `material_ui`'s `InputDecorat
 - [README](https://github.com/guy-evdev/google_places_sdk_flutter/blob/main/README.md)
 - [Recipes](https://github.com/guy-evdev/google_places_sdk_flutter/blob/main/doc/recipes.md)
 - [API reference and defaults](https://github.com/guy-evdev/google_places_sdk_flutter/blob/main/doc/api_reference.md)
+- [Generated API docs](https://pub.dev/documentation/google_places_sdk_flutter/latest/)
 - [Security and transports](https://github.com/guy-evdev/google_places_sdk_flutter/blob/main/doc/security_and_transports.md)
 - [Migration guide](https://github.com/guy-evdev/google_places_sdk_flutter/blob/main/MIGRATION.md)
