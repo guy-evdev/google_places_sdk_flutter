@@ -4,6 +4,32 @@ import 'package:google_places_sdk_flutter/src/internal/place_field_mapping.dart'
 
 void main() {
   group('AutocompleteRequest', () {
+    // Literal values, so an edit to a preset cannot silently change what is
+    // sent to Google.
+    test('the type presets are valid and sent as Google type names', () {
+      final presets = <List<String>, List<String>>{
+        PlaceTypePresets.cities: <String>['(cities)'],
+        PlaceTypePresets.regions: <String>['(regions)'],
+        PlaceTypePresets.postalCode: <String>['postal_code'],
+        PlaceTypePresets.address: <String>[
+          'street_address',
+          'premise',
+          'subpremise',
+        ],
+        PlaceTypePresets.establishment: <String>['establishment'],
+        // The combination the dartdoc shows.
+        <String>[...PlaceTypePresets.address, ...PlaceTypePresets.postalCode]:
+            <String>['street_address', 'premise', 'subpremise', 'postal_code'],
+      };
+      for (final MapEntry(key: preset, value: wire) in presets.entries) {
+        final request = AutocompleteRequest(
+          input: 'main',
+          includedPrimaryTypes: preset,
+        )..validate();
+        expect(request.toRestJson()['includedPrimaryTypes'], wire);
+      }
+    });
+
     test('serializes the new API request shape', () {
       final request = AutocompleteRequest(
         input: 'coffee',

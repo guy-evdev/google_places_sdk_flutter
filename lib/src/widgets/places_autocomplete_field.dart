@@ -131,6 +131,7 @@ class PlacesAutocompleteField extends StatefulWidget {
     this.showPoweredByGoogle = true,
     this.includeQueryPredictions = false,
     this.onQuerySelection,
+    this.searchOnQuerySelection = false,
     this._keyboardType = TextInputType.streetAddress,
     this._textInputAction,
     this._textCapitalization = TextCapitalization.none,
@@ -355,7 +356,12 @@ class PlacesAutocompleteField extends StatefulWidget {
   /// Called when the user selects a suggestion or resolved place.
   final ValueChanged<PlaceSelection>? onSelection;
 
-  /// Called after the field's clear action is pressed.
+  /// Called when the user presses the clear button — in the dialog or
+  /// fullscreen search too, which clears this field as well — or types over
+  /// a picked place.
+  ///
+  /// With [onSelection], it keeps other fields filled from the pick in step;
+  /// see the address-form recipe in `doc/recipes.md`.
   final VoidCallback? onClearField;
 
   /// Called when autocomplete, place-details, or time-zone loading fails.
@@ -420,6 +426,16 @@ class PlacesAutocompleteField extends StatefulWidget {
 
   /// Called when the user selects a query suggestion.
   final ValueChanged<QuerySuggestion>? onQuerySelection;
+
+  /// Whether picking a query suggestion searches for its text at once.
+  ///
+  /// A query pick puts the suggested text in the field, closes the
+  /// suggestions, ends the billing session, and calls [onQuerySelection].
+  /// When `true`, it then searches for that text in a new session, so the
+  /// user can pick a place from the results — unless the text is shorter
+  /// than [minInputLength]. Works in every field mode; in the dialog and
+  /// fullscreen search the results show there. Defaults to `false`.
+  final bool searchOnQuerySelection;
 
   /// Builds the text field in place of the default `material_ui` one.
   ///
@@ -731,7 +747,10 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   }
 
   void _clearField() {
-    _controller.clear();
+    // An open search can outlive its launcher, whose controller is then gone.
+    if (mounted) {
+      _controller.clear();
+    }
     widget.onClearField?.call();
   }
 
@@ -874,7 +893,10 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       suggestionsViewBuilder: widget.suggestionsViewBuilder,
       suggestionBuilder: widget.suggestionBuilder,
       onQuerySelection: widget.onQuerySelection,
-      onClearField: widget.onClearField,
+      searchOnQuerySelection: widget.searchOnQuerySelection,
+      // Clearing the search clears this field too, so it never shows a pick
+      // that onClearField has reported gone.
+      onClearField: _clearField,
       onError: widget.onError,
     );
 

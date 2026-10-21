@@ -148,6 +148,7 @@ place.countryShort; // US
 which is common in the UK. The place's name is `selection.suggestion.primaryText.text`. For an
 address format the getters do not fit, `place.addressComponents` holds Google's parts as
 `PlaceAddressComponent` values — see [the API reference](doc/api_reference.md#place-response-accessors).
+To fill the rest of an address form from one pick, see [the recipe](doc/recipes.md#fill-an-address-form).
 
 ### Asking for more
 
@@ -219,14 +220,15 @@ what each way returns.
 PlacesAutocompleteField(
   apiKey: apiKey,
   includedRegionCodes: const ['us', 'ca'],
-  includedPrimaryTypes: const ['(cities)'],
+  includedPrimaryTypes: PlaceTypePresets.cities,
   languageCode: 'fr',
 )
 ```
 
 - `includedRegionCodes` — only places in these countries, as CLDR region codes.
 - `includedPrimaryTypes` — only these [place types](https://developers.google.com/maps/documentation/places/web-service/place-types),
-  such as `restaurant`, or `(cities)` or `(regions)` on its own.
+  such as `restaurant`. `PlaceTypePresets` has `cities`, `regions`, `postalCode`, `address` (precise
+  addresses), and `establishment`.
 - `locationBias` prefers an area; `locationRestriction` only returns places inside it. Use one, not
   both. Each takes a circle or a rectangle.
 - `languageCode` — the language of the results; `regionCode` adjusts ranking and formatting.

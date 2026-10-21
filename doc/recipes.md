@@ -5,6 +5,7 @@ Task-by-task guides for `google_places_sdk_flutter`, beyond the
 [API reference](api_reference.md).
 
 - [Use the field inside a Form](#use-the-field-inside-a-form)
+- [Fill an address form](#fill-an-address-form)
 - [Search in a dialog or on a full screen](#search-in-a-dialog-or-on-a-full-screen)
 - [Change or translate the widget's text](#change-or-translate-the-widgets-text)
 - [Limit results to an area](#limit-results-to-an-area)
@@ -67,6 +68,46 @@ controller instead:
 final controller = PlacesAutocompleteController()
   ..restoreSelection(PlaceSelection.fromPlace(place));
 ```
+
+## Fill an address form
+
+One pick can fill the rest of an address form. Set your other fields from the place in
+`onSelection`, and empty them in `onClearField`, which is called when the user clears the field or
+types over the pick:
+
+```dart
+final street = TextEditingController();
+final city = TextEditingController();
+final region = TextEditingController();
+final postalCode = TextEditingController();
+final country = TextEditingController();
+
+void fill(PlaceData? place) {
+  street.text = place?.streetAddress ?? '';
+  city.text = place?.city ?? '';
+  region.text = place?.administrativeArea ?? '';
+  postalCode.text = place?.postalCode ?? '';
+  country.text = place?.country ?? '';
+}
+
+PlacesAutocompleteFormField(
+  apiKey: apiKey,
+  includedPrimaryTypes: PlaceTypePresets.address,
+  onSelection: (selection) => fill(selection.place),
+  onClearField: () => fill(null),
+);
+```
+
+The default `selectionFields`, `PlaceFieldPresets.address`, returns every part these getters read,
+so each pick costs one Place Details Essentials request. It works the same in dialog and
+fullscreen field modes, where clearing inside the search clears the field too.
+`FormState.reset()` does not call `onClearField`.
+
+`PlaceTypePresets.address` limits the suggestions to precise addresses: a street address, a
+building, or a unit in one. The other presets are `cities`, `regions`, `postalCode`, and
+`establishment`. `cities` and `regions` must be used on their own; the others combine with each
+other and with your own types, up to five:
+`includedPrimaryTypes: [...PlaceTypePresets.address, ...PlaceTypePresets.postalCode]`.
 
 ## Search in a dialog or on a full screen
 
@@ -618,8 +659,22 @@ given. Pass your own `textController` or `focusNode` to share them with the rest
 ### Search again with a picked query suggestion
 
 With `includeQueryPredictions: true` the suggestions include phrases such as "coffee near me".
-Picking one fills the field and ends the session. To search for it straight away, pass a
-controller and call `search()`:
+Picking one fills the field and ends the session. To search for it straight away, so the user can
+pick a place from the results, set `searchOnQuerySelection`:
+
+```dart
+PlacesAutocompleteField(
+  apiKey: apiKey,
+  includeQueryPredictions: true,
+  searchOnQuerySelection: true,
+)
+```
+
+It works in every field mode, on `PlacesAutocompleteFormField`, and on
+`PlacesAutocompleteOverlay.show()`. The search runs in a new billing session.
+
+For something else — searching for different text, say — pass a controller and do it in
+`onQuerySelection`, which is called first:
 
 ```dart
 final controller = PlacesAutocompleteController();
@@ -628,13 +683,15 @@ PlacesAutocompleteField(
   apiKey: apiKey,
   controller: controller,
   includeQueryPredictions: true,
-  onQuerySelection: (_) => controller.search(),
+  onQuerySelection: (query) {
+    controller.textController.text = '${query.displayText} open now';
+    controller.search();
+  },
 )
 ```
 
-It works the same with `PlacesAutocompleteFormField`, and with `PlacesAutocompleteOverlay.show()`
-given `controller:`. A field in dialog or fullscreen mode opens its search with a controller of
-its own, so for those, open the search with `show()` instead.
+A field in dialog or fullscreen mode opens its search with a controller of its own, so for those
+pass the controller to `PlacesAutocompleteOverlay.show()` instead.
 
 ### A controller passed to a widget
 
@@ -913,7 +970,7 @@ field.
 | `languageCode` | `null` | You want localized Google results. |
 | `regionCode` | `null` | You want region-aware ranking or formatting. |
 | `includedRegionCodes` | empty | You only want results in some countries. |
-| `includedPrimaryTypes` | empty | You want types such as `restaurant` or `(cities)`. |
+| `includedPrimaryTypes` | empty | You want types such as `restaurant` or `PlaceTypePresets.cities`. |
 | `locationBias` | `null` | You prefer results near an area. |
 | `locationRestriction` | `null` | You only want results inside an area. |
 | `origin` | `null` | You want a distance beside each suggestion. |

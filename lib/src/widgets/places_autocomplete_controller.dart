@@ -350,7 +350,8 @@ class PlacesAutocompleteController extends ChangeNotifier {
   ///
   /// For a [QuerySuggestion] it puts the suggested text in [textController],
   /// closes the results, ends the session, and completes with `null`; call
-  /// [search] to search for that text.
+  /// [search] to search for that text. A widget using the controller does
+  /// that itself when its `searchOnQuerySelection` is `true`.
   ///
   /// Throws a [StateError] if neither the controller nor a widget using it
   /// has a client.
@@ -819,6 +820,9 @@ class PlacesAutocompleteController extends ChangeNotifier {
         );
       resetSession();
       widget?.onQuerySelection?.call(suggestion);
+      if (widget?.searchOnQuerySelection ?? false) {
+        _retrySearch();
+      }
       return null;
     }
     if (suggestion is! PlaceSuggestion) {

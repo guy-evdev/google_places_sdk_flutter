@@ -14,8 +14,12 @@ import 'places_strings.dart';
 /// FormField wrapper around [PlacesAutocompleteField].
 ///
 /// The selected [PlaceSelection] participates in validation, saving,
-/// restoration, and [FormState.reset]. When no [controller] is supplied this
-/// widget owns one and disposes it automatically.
+/// restoration, and [FormState.reset]. A reset puts back the `initialValue`
+/// and its text — empty without one — even over text typed without a pick,
+/// and abandons the field's search or pick in progress, ending its billing
+/// session without a details request. A dialog or fullscreen search that is
+/// open at the time is not closed. When no [controller] is supplied this widget
+/// owns one and disposes it automatically.
 class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
   /// Creates a Places autocomplete form field.
   ///
@@ -63,6 +67,7 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
     bool showPoweredByGoogle = true,
     bool includeQueryPredictions = false,
     ValueChanged<QuerySuggestion>? onQuerySelection,
+    bool searchOnQuerySelection = false,
     TextInputType keyboardType = TextInputType.streetAddress,
     TextInputAction? textInputAction,
     TextCapitalization textCapitalization = TextCapitalization.none,
@@ -150,6 +155,7 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
        assert(minInputLength >= 1, 'minInputLength must be at least 1.'),
        super(
          builder: (FormFieldState<PlaceSelection?> field) {
+           final state = field as _PlacesAutocompleteFormFieldState;
            final errorText = field.errorText;
            // A custom field gets the message as PlacesFieldData.errorText;
            // errorBuilder styles the default field's error only.
@@ -164,6 +170,8 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
            return _ControllerBinding(
              externalController: controller,
              value: field.value,
+             resets: state._resets,
+             onController: (controller) => state._controller = controller,
              builder: (effectiveController) => PlacesAutocompleteField(
                client: client,
                apiKey: apiKey,
@@ -207,6 +215,7 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
                showPoweredByGoogle: showPoweredByGoogle,
                includeQueryPredictions: includeQueryPredictions,
                onQuerySelection: onQuerySelection,
+               searchOnQuerySelection: searchOnQuerySelection,
                keyboardType: keyboardType,
                textInputAction: textInputAction,
                textCapitalization: textCapitalization,
@@ -271,17 +280,41 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
            );
          },
        );
+
+  @override
+  FormFieldState<PlaceSelection?> createState() =>
+      _PlacesAutocompleteFormFieldState();
+}
+
+class _PlacesAutocompleteFormFieldState
+    extends FormFieldState<PlaceSelection?> {
+  // The controller the field uses, and how many times the form was reset.
+  PlacesAutocompleteController? _controller;
+  int _resets = 0;
+
+  @override
+  void reset() {
+    // Outside a build, so listeners hear it now: the pending search, any
+    // request, and a loading pick stop here, before another can start.
+    _controller?.resetSession();
+    _resets++;
+    super.reset();
+  }
 }
 
 class _ControllerBinding extends StatefulWidget {
   const _ControllerBinding({
     required this.externalController,
     required this.value,
+    required this.resets,
+    required this.onController,
     required this.builder,
   });
 
   final PlacesAutocompleteController? externalController;
   final PlaceSelection? value;
+  final int resets;
+  final ValueChanged<PlacesAutocompleteController> onController;
   final Widget Function(PlacesAutocompleteController controller) builder;
 
   @override
@@ -318,8 +351,10 @@ class _ControllerBindingState extends State<_ControllerBinding> {
     }
     // Only a value the controller does not already hold: when the user types
     // over a pick, the controller clears its selection and the form follows,
-    // and restoring that null would wipe what they typed.
-    if (!identical(_controller.selectedSelection, widget.value)) {
+    // and restoring that null would wipe what they typed. A reset restores
+    // regardless, so it also replaces text typed without a pick.
+    if (widget.resets != oldWidget.resets ||
+        !identical(_controller.selectedSelection, widget.value)) {
       _scheduleRestoreSelection(_controller, widget.value);
     }
   }
@@ -347,5 +382,8 @@ class _ControllerBindingState extends State<_ControllerBinding> {
   }
 
   @override
-  Widget build(BuildContext context) => widget.builder(_controller);
+  Widget build(BuildContext context) {
+    widget.onController(_controller);
+    return widget.builder(_controller);
+  }
 }

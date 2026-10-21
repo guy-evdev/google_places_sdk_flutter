@@ -341,9 +341,54 @@ Fixed on the way: in `PlacesAutocompleteFormField`, typing after picking a place
 — the form followed the controller in clearing its value, and then put that empty value back into
 the text. Typing now keeps the text and clears only the value.
 
-Picking a query suggestion now ends the session *before* `onQuerySelection` is called, so
-`onQuerySelection: (_) => controller.search()` searches for the picked phrase in a new session; see
-the [recipe](recipes.md#search-again-with-a-picked-query-suggestion).
+Also fixed: `FormState.reset()` left text the user had typed without picking a place, since the
+form value was empty before and after. A reset now puts back the `initialValue`'s text, or clears
+the field, and ends the search and its billing session without a details request.
+
+`searchOnQuerySelection: true` makes picking a query suggestion search for that phrase at once, in
+a new session, so the user can pick a place from the results — in every field mode, on the form
+field, and through `show()`. Picking a query suggestion also now ends the session *before*
+`onQuerySelection` is called, so a controller's `search()` called from there searches in a new
+session too; see the [recipe](recipes.md#search-again-with-a-picked-query-suggestion).
+
+## Address forms
+
+One pick can fill the rest of an address form — street, city, region, postal code, country — with
+the address getters, set in `onSelection` and emptied in `onClearField`:
+
+```dart
+PlacesAutocompleteFormField(
+  apiKey: apiKey,
+  includedPrimaryTypes: PlaceTypePresets.address,
+  onSelection: (selection) {
+    city.text = selection.place?.city ?? '';
+    postalCode.text = selection.place?.postalCode ?? '';
+  },
+  onClearField: () {
+    city.clear();
+    postalCode.clear();
+  },
+)
+```
+
+The full version is the [address-form recipe](recipes.md#fill-an-address-form). `onClearField` is
+called when the user clears the field or types over the pick. In dialog and fullscreen field
+modes, clearing inside the search used to report the pick gone while the field went on showing it
+once the search closed; the field now clears too.
+
+`PlaceTypePresets` names the `includedPrimaryTypes` values most searches want, so there are no
+strings like `'(cities)'` to look up:
+
+| Preset | Sends |
+| --- | --- |
+| `cities` | `(cities)` |
+| `regions` | `(regions)` |
+| `postalCode` | `postal_code` |
+| `address` | `street_address`, `premise`, `subpremise` |
+| `establishment` | `establishment` |
+
+They are plain lists of Google's type names, so the last three combine with each other and with
+your own types: `[...PlaceTypePresets.address, ...PlaceTypePresets.postalCode]`.
 
 ## Entrances, navigation points, and every field at once
 

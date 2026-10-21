@@ -252,6 +252,24 @@ class _HoldsLaterSearchesBackend extends _FakeBackend {
   }
 }
 
+/// Returns a place with a parsed address, as the default `address` fields do.
+class _AddressBackend extends _FakeBackend {
+  @override
+  Future<PlaceData> fetchPlace(
+    PlaceDetailsRequest request, {
+    PlacesCancellationToken? cancellationToken,
+  }) async => const PlaceData(
+    id: 'place-1',
+    formattedAddress: '1 Main Street, Springfield',
+    addressComponents: <PlaceAddressComponent>[
+      PlaceAddressComponent(
+        longText: 'Springfield',
+        types: <String>['locality'],
+      ),
+    ],
+  );
+}
+
 class _EmptyBackend extends _FakeBackend {
   @override
   Future<List<PlaceSuggestion>> autocomplete(
@@ -1336,6 +1354,155 @@ void main() {
     expect(resetCount, 1);
     await tester.pumpWidget(const SizedBox.shrink());
     controller.dispose();
+  });
+
+  group('FormState.reset()', () {
+    final initial = PlaceSelection(
+      suggestion: const PlaceSuggestion(
+        placeId: 'initial-place',
+        placeResourceName: 'places/initial-place',
+        fullText: StructuredText(text: 'Initial Place'),
+        primaryText: StructuredText(text: 'Initial Place'),
+      ),
+    );
+
+    Future<GlobalKey<FormState>> pumpForm(
+      WidgetTester tester,
+      _FakeBackend backend, {
+      PlacesAutocompleteFieldMode fieldMode =
+          PlacesAutocompleteFieldMode.inline,
+      PlaceSelection? initialValue,
+      VoidCallback? onClearField,
+    }) async {
+      final formKey = GlobalKey<FormState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Form(
+              key: formKey,
+              child: PlacesAutocompleteFormField(
+                client: PlacesClient.testing(apiKey: 'test', backend: backend),
+                fieldMode: fieldMode,
+                initialValue: initialValue,
+                onClearField: onClearField,
+              ),
+            ),
+          ),
+        ),
+      );
+      return formKey;
+    }
+
+    String text(WidgetTester tester) =>
+        tester.widget<TextField>(find.byType(TextField)).controller!.text;
+
+    PlaceSelection? value(WidgetTester tester) => tester
+        .state<FormFieldState<PlaceSelection?>>(
+          find.byType(PlacesAutocompleteFormField),
+        )
+        .value;
+
+    for (final initialValue in <PlaceSelection?>[null, initial]) {
+      final restored = initialValue?.displayText ?? '';
+
+      // The reported case: typed, never picked, so the form value was null
+      // before and after and nothing used to be restored.
+      testWidgets('inline: typing without a pick, then reset, gives '
+          '"$restored"', (tester) async {
+        final backend = _SlowDetailsBackend();
+        var cleared = 0;
+        final formKey = await pumpForm(
+          tester,
+          backend,
+          initialValue: initialValue,
+          onClearField: () => cleared++,
+        );
+        await tester.enterText(find.byType(TextField), 'cof');
+        await tester.pump(const Duration(milliseconds: 350));
+        await tester.pumpAndSettle();
+        expect(find.text('Coffee Lab'), findsOneWidget);
+        final session = backend.lastAutocompleteRequest!.sessionToken;
+
+        formKey.currentState!.reset();
+        await tester.pumpAndSettle();
+
+        expect(text(tester), restored);
+        expect(value(tester), same(initialValue));
+        expect(find.text('Coffee Lab'), findsNothing);
+        expect(backend.endedSessions, contains(session));
+        expect(backend.fetchPlaceCount, 0);
+        // Typing over the initial value clears it once; the reset does not.
+        expect(cleared, initialValue == null ? 0 : 1);
+      });
+
+      for (final mode in <PlacesAutocompleteFieldMode>[
+        PlacesAutocompleteFieldMode.dialog,
+        PlacesAutocompleteFieldMode.fullscreen,
+      ]) {
+        testWidgets('${mode.name}: a pick, then reset, gives "$restored"', (
+          tester,
+        ) async {
+          var cleared = 0;
+          final formKey = await pumpForm(
+            tester,
+            _FakeBackend(),
+            fieldMode: mode,
+            initialValue: initialValue,
+            onClearField: () => cleared++,
+          );
+          await tester.tap(find.byType(TextField));
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField).last, 'cof');
+          await tester.pump(const Duration(milliseconds: 350));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Coffee Lab'));
+          await tester.pumpAndSettle();
+          expect(text(tester), 'Coffee Lab, Main Street');
+
+          formKey.currentState!.reset();
+          await tester.pumpAndSettle();
+
+          expect(text(tester), restored);
+          expect(value(tester), same(initialValue));
+          expect(cleared, 0);
+        });
+      }
+    }
+
+    testWidgets('a reset cancels the pending search', (tester) async {
+      final backend = _FakeBackend();
+      final formKey = await pumpForm(tester, backend);
+      await tester.enterText(find.byType(TextField), 'cof');
+      await tester.pump(const Duration(milliseconds: 100));
+
+      formKey.currentState!.reset();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+
+      expect(backend.lastAutocompleteRequest, isNull);
+      expect(text(tester), isEmpty);
+    });
+
+    testWidgets('a reset abandons a loading pick', (tester) async {
+      final backend = _SlowDetailsBackend();
+      final formKey = await pumpForm(tester, backend);
+      await tester.enterText(find.byType(TextField), 'cof');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Coffee Lab'));
+      await tester.pump();
+      expect(backend.fetchPlaceCount, 1);
+
+      formKey.currentState!.reset();
+      await tester.pump();
+      backend.completer.complete(
+        const PlaceData(id: 'place-1', formattedAddress: 'Main Street'),
+      );
+      await tester.pumpAndSettle();
+
+      expect(text(tester), isEmpty);
+      expect(value(tester), isNull);
+    });
   });
 
   testWidgets(
@@ -3761,6 +3928,249 @@ void main() {
           expect(field.focusNode!.hasFocus, !unfocus);
         });
       }
+    }
+
+    // A query pick searches again for its text only when asked to — in a
+    // launcher field too, whose search runs on a controller of its own.
+    for (final surface in _Surface.values) {
+      for (final again in <bool>[true, false]) {
+        testWidgets('${surface.name}: searchOnQuerySelection: $again', (
+          tester,
+        ) async {
+          final backend = _FakeBackend();
+          final client = PlacesClient.testing(apiKey: 'test', backend: backend);
+          await open(
+            tester,
+            surface,
+            surface == _Surface.form
+                ? PlacesAutocompleteFormField(
+                    client: client,
+                    includeQueryPredictions: true,
+                    searchOnQuerySelection: again,
+                  )
+                : PlacesAutocompleteField(
+                    client: client,
+                    fieldMode: surface.fieldMode,
+                    includeQueryPredictions: true,
+                    searchOnQuerySelection: again,
+                  ),
+          );
+          await type(tester, surface, 'cof');
+          final firstSession = backend.lastAutocompleteRequest!.sessionToken;
+
+          await tester.tap(find.text('coffee near me'));
+          await tester.pumpAndSettle();
+
+          expect(
+            tester.widget<TextField>(textField(surface)).controller!.text,
+            'coffee near me',
+          );
+          if (again) {
+            expect(backend.lastAutocompleteRequest!.input, 'coffee near me');
+            expect(
+              backend.lastAutocompleteRequest!.sessionToken,
+              isNot(firstSession),
+            );
+            expect(find.text('Coffee Lab'), findsOneWidget);
+          } else {
+            expect(backend.lastAutocompleteRequest!.input, 'cof');
+            expect(find.text('Coffee Lab'), findsNothing);
+          }
+        });
+      }
+    }
+
+    // The address-form recipe: onSelection fills another field and
+    // onClearField empties it, in every mode. In dialog and fullscreen modes
+    // the clear is pressed inside the search, and the field clears too.
+    for (final surface in _Surface.values) {
+      testWidgets('${surface.name}: an address form fills and clears', (
+        tester,
+      ) async {
+        final city = TextEditingController();
+        addTearDown(city.dispose);
+        void fill(PlaceData? place) => city.text = place?.city ?? '';
+        final client = PlacesClient.testing(
+          apiKey: 'test',
+          backend: _AddressBackend(),
+        );
+        await open(
+          tester,
+          surface,
+          surface == _Surface.form
+              ? PlacesAutocompleteFormField(
+                  client: client,
+                  onSelection: (selection) => fill(selection.place),
+                  onClearField: () => fill(null),
+                )
+              : PlacesAutocompleteField(
+                  client: client,
+                  fieldMode: surface.fieldMode,
+                  onSelection: (selection) => fill(selection.place),
+                  onClearField: () => fill(null),
+                ),
+        );
+        await type(tester, surface, 'cof');
+        await tester.tap(find.text('Coffee Lab'));
+        await tester.pumpAndSettle();
+        expect(city.text, 'Springfield');
+
+        if (surface.launches) {
+          await tester.tap(find.byType(TextField));
+          await tester.pumpAndSettle();
+        }
+        await tester.tap(find.byTooltip('Clear search').last);
+        await tester.pumpAndSettle();
+        if (surface.launches) {
+          tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+          await tester.pumpAndSettle();
+        }
+
+        expect(city.text, isEmpty);
+        expect(
+          tester.widget<TextField>(find.byType(TextField)).controller!.text,
+          isEmpty,
+        );
+      });
+    }
+
+    testWidgets('form in dialog mode: an address form fills and clears', (
+      tester,
+    ) async {
+      final city = TextEditingController();
+      addTearDown(city.dispose);
+      await open(
+        tester,
+        _Surface.dialog,
+        PlacesAutocompleteFormField(
+          client: PlacesClient.testing(
+            apiKey: 'test',
+            backend: _AddressBackend(),
+          ),
+          fieldMode: PlacesAutocompleteFieldMode.dialog,
+          onSelection: (selection) => city.text = selection.place?.city ?? '',
+          onClearField: city.clear,
+        ),
+      );
+      await type(tester, _Surface.dialog, 'cof');
+      await tester.tap(find.text('Coffee Lab'));
+      await tester.pumpAndSettle();
+      expect(city.text, 'Springfield');
+
+      await tester.tap(find.byType(TextField));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Clear search').last);
+      await tester.pumpAndSettle();
+      tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+      await tester.pumpAndSettle();
+
+      expect(city.text, isEmpty);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        isEmpty,
+      );
+    });
+
+    // The search is a route, so it can outlive the launcher that opened it.
+    testWidgets('clearing a search whose launcher is gone still reports it', (
+      tester,
+    ) async {
+      final show = ValueNotifier<bool>(true);
+      addTearDown(show.dispose);
+      var cleared = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ValueListenableBuilder<bool>(
+              valueListenable: show,
+              builder: (context, visible, _) => visible
+                  ? PlacesAutocompleteField(
+                      client: PlacesClient.testing(
+                        apiKey: 'test',
+                        backend: _FakeBackend(),
+                      ),
+                      fieldMode: PlacesAutocompleteFieldMode.dialog,
+                      onClearField: () => cleared++,
+                    )
+                  : const SizedBox(),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byType(TextField));
+      await tester.pumpAndSettle();
+      await type(tester, _Surface.dialog, 'cof');
+
+      show.value = false;
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Clear search').last);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(cleared, 1);
+    });
+
+    testWidgets('inline: typing over the pick empties the address form', (
+      tester,
+    ) async {
+      final city = TextEditingController();
+      addTearDown(city.dispose);
+      await open(
+        tester,
+        _Surface.inline,
+        PlacesAutocompleteField(
+          client: PlacesClient.testing(
+            apiKey: 'test',
+            backend: _AddressBackend(),
+          ),
+          onSelection: (selection) => city.text = selection.place?.city ?? '',
+          onClearField: city.clear,
+        ),
+      );
+      await type(tester, _Surface.inline, 'cof');
+      await tester.tap(find.text('Coffee Lab'));
+      await tester.pumpAndSettle();
+      expect(city.text, 'Springfield');
+
+      await type(tester, _Surface.inline, 'tea');
+
+      expect(city.text, isEmpty);
+    });
+
+    for (final mode in PlacesAutocompleteOverlayMode.values) {
+      testWidgets('show() in ${mode.name} mode: searchOnQuerySelection', (
+        tester,
+      ) async {
+        final backend = _FakeBackend();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => PlacesAutocompleteOverlay.show(
+                  context,
+                  client: PlacesClient.testing(
+                    apiKey: 'test',
+                    backend: backend,
+                  ),
+                  mode: mode,
+                  includeQueryPredictions: true,
+                  searchOnQuerySelection: true,
+                ),
+                child: const Text('Search'),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('Search'));
+        await tester.pumpAndSettle();
+        await type(tester, _Surface.dialog, 'cof');
+
+        await tester.tap(find.text('coffee near me'));
+        await tester.pumpAndSettle();
+
+        expect(backend.lastAutocompleteRequest!.input, 'coffee near me');
+        expect(find.text('Coffee Lab'), findsOneWidget);
+      });
     }
   });
 }

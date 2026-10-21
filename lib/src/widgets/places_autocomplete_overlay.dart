@@ -134,6 +134,7 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     this.suggestionBuilder,
     this.onSelection,
     this.onQuerySelection,
+    this.searchOnQuerySelection = false,
     this.onClearField,
     this.onError,
   }) : assert(
@@ -354,6 +355,9 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   /// Called when the user selects a query suggestion.
   final ValueChanged<QuerySuggestion>? onQuerySelection;
 
+  /// See [PlacesAutocompleteField.searchOnQuerySelection].
+  final bool searchOnQuerySelection;
+
   /// Called after the overlay field's clear action is pressed.
   final VoidCallback? onClearField;
 
@@ -483,6 +487,7 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     suggestionBuilder,
     ValueChanged<PlaceSelection>? onSelection,
     ValueChanged<QuerySuggestion>? onQuerySelection,
+    bool searchOnQuerySelection = false,
     VoidCallback? onClearField,
     ValueChanged<Object>? onError,
   }) async {
@@ -594,6 +599,7 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
         onSelection?.call(selection);
       },
       onQuerySelection: onQuerySelection,
+      searchOnQuerySelection: searchOnQuerySelection,
       onClearField: onClearField,
       onError: onError,
     );
@@ -753,6 +759,7 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       suggestionBuilder: suggestionBuilder,
       onSelection: onSelection,
       onQuerySelection: onQuerySelection,
+      searchOnQuerySelection: searchOnQuerySelection,
       onClearField: onClearField,
       onError: onError,
       autofocus: true,

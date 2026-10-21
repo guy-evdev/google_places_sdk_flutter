@@ -19,6 +19,7 @@ on pub.dev.
 - [Place Response Accessors](#place-response-accessors)
 - [Version 0.6 release notes](#version-06-release-notes)
 - [Place Field Presets](#place-field-presets)
+- [Place Type Presets](#place-type-presets)
 
 ## Widget Defaults
 
@@ -46,7 +47,7 @@ unchanged; only the library it is imported from moved. See
 | `origin` | `PlaceCoordinates?` | `null` | Makes Google return a straight-line distance for each suggestion, which the widget then renders. Does not bias or restrict results. For device location, see the [recipe](recipes.md#using-the-devices-location-as-the-origin) — the package never requests location permission. |
 | `locationBias` | `LocationBias?` | `null` | Soft geographic preference. Cannot be combined with `locationRestriction`. |
 | `locationRestriction` | `LocationRestriction?` | `null` | Hard geographic restriction. Cannot be combined with `locationBias`. |
-| `includedPrimaryTypes` | `List<String>` | `const <String>[]` | Google primary type filters, such as `restaurant`, `cafe`, or `(cities)`. |
+| `includedPrimaryTypes` | `List<String>` | `const <String>[]` | Google primary type filters, such as `restaurant`, `cafe`, or `(cities)`. [`PlaceTypePresets`](#place-type-presets) has common ones. |
 | `includedRegionCodes` | `List<String>` | `const <String>[]` | CLDR region-code filters. |
 | `includePureServiceAreaBusinesses` | `bool` | `false` | Includes pure service-area businesses in autocomplete. |
 | `includeFutureOpeningBusinesses` | `bool` | `false` | Includes businesses that have not opened yet in autocomplete. |
@@ -59,7 +60,7 @@ unchanged; only the library it is imported from moved. See
 | `selectionTimeZoneLanguageCode` | `String?` | `null` | Time-zone language; falls back to selection language, then autocomplete language. |
 | `fieldMode` | `PlacesAutocompleteFieldMode` | `PlacesAutocompleteFieldMode.inline` | `inline`, `dialog`, or `fullscreen`. |
 | `onSelection` | `ValueChanged<PlaceSelection>?` | `null` | Called for selected place suggestions. |
-| `onClearField` | `VoidCallback?` | `null` | Called after the clear action. |
+| `onClearField` | `VoidCallback?` | `null` | Called when the user presses the clear button — inside the dialog or fullscreen search too, which clears the field as well — or types over a picked place. Not called by `FormState.reset()`. |
 | `onError` | `ValueChanged<Object>?` | `null` | Called for autocomplete/details/time-zone errors. |
 | `maxSuggestions` | `int` | `5` | Clamped to Google Autocomplete's five-suggestion response limit. |
 | `minInputLength` | `int` | `1` | The fewest characters, as the user sees them and after trimming spaces, before the field searches. Shorter input sends no billed request. |
@@ -71,6 +72,7 @@ unchanged; only the library it is imported from moved. See
 | `showPoweredByGoogle` | `bool` | `true` | Shows required Google attribution for suggestion UI. |
 | `includeQueryPredictions` | `bool` | `false` | Adds query suggestions alongside place suggestions. |
 | `onQuerySelection` | `ValueChanged<QuerySuggestion>?` | `null` | Called when a query suggestion is selected. |
+| `searchOnQuerySelection` | `bool` | `false` | Whether picking a query suggestion searches for its text at once, in a new billing session. Every field mode. |
 | `fieldBuilder` | `PlacesFieldBuilder?` | `null` | Builds the text field instead of the default one; see [Builders](#builders). Only `decoration`'s `errorText` is then used. |
 | `suggestionItemBuilder` | `PlacesSuggestionItemBuilder?` | `null` | Builds each suggestion row, place or query. |
 | `suggestionsViewBuilder` | `PlacesSuggestionsViewBuilder?` | `null` | Builds the suggestion area in each state: loading, results, empty, error. |
@@ -138,7 +140,8 @@ overlay, it forwards every option except `controller` and `autofocus` — the
 overlay has its own controller, seeded with the field's text and
 `debounceDuration`, and always takes focus — and the inline-only
 `unfocusOnSelection` and `suggestionsViewOpenDirection`. The field calls its
-own `onSelection` once the overlay returns a place. Before `0.6.1` it
+own `onSelection` once the overlay returns a place, and clears itself when the
+user clears the overlay's field. Before `0.6.1` it
 dropped `decoration`, `suggestionBuilder`, `showPoweredByGoogle`,
 `onClearField`, and `enabled`.
 
@@ -539,3 +542,21 @@ Atmosphere regardless of its fields; see
 | `PlaceField.movedPlaceId` | `movedPlaceId` | Essentials (IDs Only) | No | No | No | No |
 | `PlaceField.entrances` | `entrances` | Pro | No | No | No | No |
 | `PlaceField.navigationPoints` | `navigationPoints` | Pro | No | No | No | No |
+
+## Place Type Presets
+
+`PlaceTypePresets` holds ready-made `includedPrimaryTypes` values for
+autocomplete, from Google's
+[place types](https://developers.google.com/maps/documentation/places/web-service/place-types)
+(checked 2026-10-21).
+
+| Preset | Sends | Returns |
+| --- | --- | --- |
+| `cities` | `(cities)` | Places Google identifies as cities. Use on its own. |
+| `regions` | `(regions)` | Areas and divisions, such as neighborhoods and postal codes. Use on its own. |
+| `postalCode` | `postal_code` | Postal codes. |
+| `address` | `street_address`, `premise`, `subpremise` | Precise addresses: a street address, a building, or a unit in one. |
+| `establishment` | `establishment` | Businesses and other establishments. |
+
+All but `cities` and `regions` combine with each other and with your own
+types, up to Google's limit of five.

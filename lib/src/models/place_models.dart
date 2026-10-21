@@ -615,6 +615,44 @@ abstract final class PlaceFieldPresets {
   );
 }
 
+/// Ready-made `includedPrimaryTypes` values for autocomplete, from Google's
+/// place-type tables.
+///
+/// ```dart
+/// PlacesAutocompleteField(
+///   apiKey: apiKey,
+///   includedPrimaryTypes: PlaceTypePresets.address,
+/// )
+/// ```
+///
+/// [cities] and [regions] are Google's type collections, which must be used
+/// on their own. The others are ordinary types, so they can be combined with
+/// each other or with your own, up to five in all:
+/// `[...PlaceTypePresets.address, ...PlaceTypePresets.postalCode]`. See
+/// https://developers.google.com/maps/documentation/places/web-service/place-types
+abstract final class PlaceTypePresets {
+  /// Places Google identifies as cities: `(cities)`.
+  static const List<String> cities = <String>['(cities)'];
+
+  /// Areas and divisions, such as neighborhoods and postal codes:
+  /// `(regions)`.
+  static const List<String> regions = <String>['(regions)'];
+
+  /// Postal codes: `postal_code`.
+  static const List<String> postalCode = <String>['postal_code'];
+
+  /// Precise addresses — a street address, a building, or a unit in one:
+  /// `street_address`, `premise`, and `subpremise`.
+  static const List<String> address = <String>[
+    'street_address',
+    'premise',
+    'subpremise',
+  ];
+
+  /// Businesses and other establishments: `establishment`.
+  static const List<String> establishment = <String>['establishment'];
+}
+
 /// Ranking preference for text search.
 enum SearchByTextRankPreference {
   relevance('RELEVANCE'),

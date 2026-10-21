@@ -59,17 +59,18 @@ for `PlacesClient.proxy(...)`, or for an Android/iOS app-restricted key, which n
 
 Common options (same names on all surfaces): `languageCode`, `regionCode`, `origin`
 (`PlaceCoordinates`, makes Google return straight-line distances), `locationBias` /
-`locationRestriction` (mutually exclusive), `includedPrimaryTypes` (e.g. `['restaurant']`,
-`['(cities)']`), `includedRegionCodes`, `includeQueryPredictions` + `onQuerySelection`,
-`fetchPlaceDetailsOnSelection` (default `true`), `selectionFields` (default
-`PlaceFieldPresets.address`), `fetchTimeZoneOnSelection` (default `false`), `maxSuggestions`
-(max 5), `decoration` (`material_ui`'s `InputDecoration`), `strings` (`PlacesStrings`),
-`fieldBuilder` / `suggestionItemBuilder` / `suggestionsViewBuilder` (below), `onError`,
-`onClearField`, `enabled`, `showPoweredByGoogle`, `includeFutureOpeningBusinesses`,
-`minInputLength` (default 1; no billed request below it), `debounceDuration` (`null` uses the
-controller's, 300 ms), `autofocus` (field widgets only), `controller`
-(`PlacesAutocompleteController`: text, focus, session, selection, `debounceDuration`; a widget's
-parameters and client apply while it uses one).
+`locationRestriction` (mutually exclusive), `includedPrimaryTypes` (e.g. `['restaurant']`, or
+`PlaceTypePresets.cities` / `.regions` / `.postalCode` / `.address` / `.establishment`),
+`includedRegionCodes`, `includeQueryPredictions` + `onQuerySelection` / `searchOnQuerySelection`
+(default `false`; `true` searches again for a picked query), `fetchPlaceDetailsOnSelection` (default
+`true`), `selectionFields` (default `PlaceFieldPresets.address`), `fetchTimeZoneOnSelection`
+(default `false`), `maxSuggestions` (max 5), `decoration` (`material_ui`'s `InputDecoration`),
+`strings` (`PlacesStrings`), `fieldBuilder` / `suggestionItemBuilder` / `suggestionsViewBuilder`
+(below), `onError`, `onClearField` (clear button, or typing over a pick), `enabled`,
+`showPoweredByGoogle`, `includeFutureOpeningBusinesses`, `minInputLength` (default 1; no billed
+request below it), `debounceDuration` (`null` uses the controller's, 300 ms), `autofocus` (field
+widgets only), `controller` (`PlacesAutocompleteController`: text, focus, session, selection,
+`debounceDuration`; a widget's parameters and client apply while it uses one).
 Inline field widgets only: `unfocusOnSelection` (default `true`), `suggestionsViewOpenDirection`
 (`OptionsViewOpenDirection.mostSpace` / `.down` / `.up`).
 
@@ -160,6 +161,17 @@ ListenableBuilder(
 `formattedAddress`, `shortFormattedAddress`, `addressComponents` (`List<PlaceAddressComponent>`:
 `longText`, `shortText`, `types` — read it for formats the getters do not fit). `postalAddress`
 (`PlacePostalAddress`) needs `PlaceField.postalAddress`, which is not in the default.
+
+Fill an address form: set your other fields in `onSelection` and empty them in `onClearField`:
+
+```dart
+PlacesAutocompleteFormField(
+  apiKey: apiKey,
+  includedPrimaryTypes: PlaceTypePresets.address,
+  onSelection: (selection) => city.text = selection.place?.city ?? '',
+  onClearField: city.clear,
+)
+```
 
 Time zone, two ways: `PlaceField.timeZone` → `place.timeZone?.id` (`PlaceTimeZone`, IANA id) and
 `PlaceField.utcOffsetMinutes` → `place.utcOffsetMinutes` (current offset), both Pro; or

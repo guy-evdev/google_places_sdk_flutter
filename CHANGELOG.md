@@ -21,6 +21,8 @@
 * `minInputLength` and `debounceDuration` on the widgets, to send fewer billed autocomplete requests.
 * Every `TextField` option that fits an autocomplete field, on the widgets — `keyboardType`, `inputFormatters`, `onSubmitted`, the cursor and spell-check options, and more.
 * `suggestionsViewOpenDirection` and `unfocusOnSelection` for inline fields, and `includeFutureOpeningBusinesses` on the widgets.
+* `searchOnQuerySelection` searches again for a picked query suggestion, in every field mode.
+* `PlaceTypePresets` — `cities`, `regions`, `postalCode`, `address`, `establishment` — for `includedPrimaryTypes`.
 * `PlacesAutocompleteController` runs the search for your own UI — `search()`, `select()`, `retry()`, and its `suggestions`, `status`, and `error`, notifying its listeners as they change — and takes your own `TextEditingController` and `FocusNode`.
 * `PlaceSelection.fromPlace` starts a form field from a saved place.
 * `PlaceField.entrances` and `PlaceField.navigationPoints`, and `PlaceFieldPresets.all` with every field — for exploration, as it always bills at the highest tier.
@@ -32,6 +34,8 @@
 * A `Theme` around the field now reaches the fullscreen search, as it already reached the dialog.
 * On web, a circle `locationRestriction` for autocomplete through Maps JavaScript now fails with a `validation` error instead of being sent to an API that does not accept it.
 * In `PlacesAutocompleteFormField`, typing after picking a place no longer clears the field.
+* `FormState.reset()` now also clears text typed without picking a place, and ends that search.
+* In dialog and fullscreen field modes, clearing inside the search now clears the field too, as `onClearField` already reported.
 * Rebuilding a widget with an equal `LocationBias` or `LocationRestriction`, or with new selection settings, no longer ends the user's search and billing session.
 
 **Deprecated:**
