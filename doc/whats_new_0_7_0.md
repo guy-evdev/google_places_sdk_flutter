@@ -15,6 +15,8 @@ and why.
 - [More address getters](#more-address-getters)
 - [Search layouts](#search-layouts)
 - [Your own field, rows, and suggestion area](#your-own-field-rows-and-suggestion-area)
+- [Fewer billed requests](#fewer-billed-requests)
+- [`TextField` options and inline placement](#textfield-options-and-inline-placement)
 - [Why the `material_ui` migration exists](#why-this-release-exists)
 
 ## Apps on either design library
@@ -215,6 +217,71 @@ Fixed on the way:
 - Matched text in a subtitle was drawn at the title's size.
 - A `Theme` around the field reached the dialog but not the fullscreen search. It now reaches both.
 - Rows for the previous text could be picked with the keyboard while the next search was loading.
+
+## Fewer billed requests
+
+Every search the field sends is an autocomplete request Google bills. Two options on the widgets now
+send fewer of them:
+
+```dart
+PlacesAutocompleteField(
+  apiKey: apiKey,
+  minInputLength: 3,
+  debounceDuration: const Duration(milliseconds: 500),
+)
+```
+
+- **`minInputLength`** holds the search back until the user has typed that many characters,
+  counted as the user sees them, so a letter with an accent counts once. It defaults to `1`: some
+  place names are short — `北京` is two characters. Going back below the minimum closes the
+  suggestions but keeps the session, so the user's next search is still part of it.
+- **`debounceDuration`** is how long the field waits after the last keystroke. It used to be
+  reachable only through a `PlacesAutocompleteController`; when you leave it unset, the
+  controller's value, 300 ms by default, still applies.
+
+## `TextField` options and inline placement
+
+The widgets take the `TextField` options a search field uses, under `TextField`'s own names:
+`keyboardType`, `textInputAction`, `textCapitalization`, `style`, `textAlign`, `textDirection`,
+`autocorrect`, `enableSuggestions`, `enableIMEPersonalizedLearning`, `inputFormatters`,
+`maxLength`, `maxLengthEnforcement`, `autofillHints`, `keyboardAppearance`, `scrollPadding`,
+`onSubmitted`, and `onEditingComplete`. They reach the dialog and fullscreen search too:
+
+```dart
+PlacesAutocompleteField(
+  apiKey: apiKey,
+  textCapitalization: TextCapitalization.words,
+  autocorrect: false,
+)
+```
+
+`keyboardType` now defaults to `TextInputType.streetAddress`, which shows a keyboard suited to
+addresses on Android and asks Linux input methods to capitalize words; iOS, the web, macOS, and
+Windows keep the usual text keyboard. See
+[MIGRATION.md](../MIGRATION.md#10-the-keyboard-is-for-street-addresses) to keep the old one. The
+options configure the package's own field; with a `fieldBuilder`, set them on yours. Cursor and
+selection colours come from the theme, as for any `TextField`. The keyboard's action button, as in
+any `TextField`, gives up focus by default, which closes the suggestions; pass `onEditingComplete`
+to keep them open.
+
+Two options place an inline field's suggestions:
+
+- **`suggestionsViewOpenDirection`** takes Flutter's own `OptionsViewOpenDirection`. The default,
+  `mostSpace`, opens on the side with more room; `down` and `up` always use that side.
+- **`unfocusOnSelection: false`** keeps focus in the field after a pick, so a keyboard user stays
+  where they were.
+
+To cap the suggestion area's height or put dividers between rows, wrap or rebuild the default view
+in `suggestionsViewBuilder`; the
+[recipes](recipes.md#customize-the-field-and-the-suggestions) show both.
+`includeFutureOpeningBusinesses`, which includes places that have not opened yet, joins the widgets'
+search options. And `PlaceSelection.fromPlace` turns a place fetched by its saved ID into a form
+field's `initialValue`; see [Start from a saved place](recipes.md#start-from-a-saved-place).
+
+Fixed on the way: on the web, a circle `locationRestriction` for autocomplete through the Maps
+JavaScript API — which accepts only a rectangle there — was sent anyway, where Google could reject
+it with an unclear error or leave the search unrestricted. It now fails with a `validation` error
+that says so.
 
 ## Why this release exists
 

@@ -103,6 +103,16 @@ class PlacesWebBackend implements PlacesBackend {
         cancellationToken: cancellationToken,
       );
     }
+    // REST accepts a circle; the Maps JavaScript API takes only bounds. Fail
+    // rather than send a restriction it would reject or ignore.
+    if (request.locationRestriction?.area is CircleArea) {
+      throw const PlacesException.validation(
+        'Through the Maps JavaScript API, an autocomplete '
+        'locationRestriction must be a rectangle.',
+        operation: PlacesOperation.autocomplete,
+        code: 'invalid_location_restriction_shape',
+      );
+    }
     return _runJavaScript(
       PlacesOperation.autocomplete,
       () => _autocompleteSuggestions(request),

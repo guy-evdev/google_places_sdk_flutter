@@ -45,7 +45,9 @@ Run with `flutter run --dart-define=GOOGLE_MAPS_API_KEY=...`.
 
 - `PlacesAutocompleteField` — inline field; `fieldMode:` `inline` (default), `dialog`, `fullscreen`.
 - `PlacesAutocompleteFormField` — the same inside a `Form`; standard `validator`, `onSaved`,
-  `initialValue`, `autovalidateMode`, `forceErrorText`, `errorBuilder`, `restorationId`.
+  `initialValue`, `autovalidateMode`, `forceErrorText`, `errorBuilder`, `restorationId`. To start
+  from a saved place: store its place ID, then
+  `initialValue: PlaceSelection.fromPlace(await client.fetchPlaceById(savedId))`.
 - `PlacesAutocompleteOverlay.show(context, ...)` → `Future<PlaceSelection?>`; `null` if dismissed.
 - `PlacesPhotoAttribution(photo: photo)` — required author attribution next to a photo.
 
@@ -63,10 +65,18 @@ Common options (same names on all surfaces): `languageCode`, `regionCode`, `orig
 `PlaceFieldPresets.address`), `fetchTimeZoneOnSelection` (default `false`), `maxSuggestions`
 (max 5), `decoration` (`material_ui`'s `InputDecoration`), `strings` (`PlacesStrings`),
 `fieldBuilder` / `suggestionItemBuilder` / `suggestionsViewBuilder` (below), `onError`,
-`onClearField`, `enabled`, `showPoweredByGoogle`, `autofocus`
-(field widgets only),
-`controller` (`PlacesAutocompleteController`: text, focus, session, selection, `debounceDuration`
-default 300 ms).
+`onClearField`, `enabled`, `showPoweredByGoogle`, `includeFutureOpeningBusinesses`,
+`minInputLength` (default 1; no billed request below it), `debounceDuration` (`null` uses the
+controller's, 300 ms), `autofocus` (field widgets only), `controller`
+(`PlacesAutocompleteController`: text, focus, session, selection, `debounceDuration`).
+Inline field widgets only: `unfocusOnSelection` (default `true`), `suggestionsViewOpenDirection`
+(`OptionsViewOpenDirection.mostSpace` / `.down` / `.up`).
+
+`TextField` options, passed to the default field on every surface: `keyboardType` (default
+`TextInputType.streetAddress`), `textInputAction`, `textCapitalization`, `style`, `textAlign`,
+`textDirection`, `autocorrect`, `enableSuggestions`, `enableIMEPersonalizedLearning`,
+`inputFormatters`, `maxLength`, `maxLengthEnforcement`, `autofillHints`, `keyboardAppearance`,
+`scrollPadding`, `onSubmitted`, `onEditingComplete`.
 
 Widget text: `strings: const PlacesStrings(searchHint: ..., loadingText: ..., noResultsText: ...,
 errorText: ..., retryText: ..., poweredByGoogleLabel: ..., overlayTitle: ..., closeLabel: ...,
@@ -189,11 +199,13 @@ default theme there. A `decoration:` must still be `material_ui`'s `InputDecorat
 - Building `decoration:` from `package:flutter/material.dart`'s `InputDecoration` — it must be
   `material_ui`'s.
 - A `fieldBuilder` field that never calls `field.onChanged` — nothing is searched.
+- Expecting `keyboardType`, `inputFormatters` or the other `TextField` options to reach a
+  `fieldBuilder` field — they configure the default field only; set them on your own.
 - Building rows inside `suggestionsViewBuilder` instead of using `view.items` — keyboard
   highlighting then cannot keep the highlighted row in view.
 - Passing `LocationRestriction.circle(...)` to autocomplete through Maps JavaScript (web), or to
-  `TextSearchRequest` — use
-  `.rectangle(...)`. Setting both `locationBias` and `locationRestriction` fails validation.
+  `TextSearchRequest` — it fails with a `validation` error; use `.rectangle(...)`. Setting both
+  `locationBias` and `locationRestriction` fails validation.
 - Enabling the legacy "Places API" instead of "Places API (New)" — requests fail with
   `PERMISSION_DENIED`.
 

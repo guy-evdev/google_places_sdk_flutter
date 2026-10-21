@@ -8,6 +8,7 @@
 * `PlacesAutocompleteField.client` and `PlacesAutocompleteOverlay.client` are now nullable.
 * `PlacesClient` requests fewer fields by default: `PlaceFieldPresets.address` for details, `PlaceFieldPresets.minimal` for Text Search and Nearby Search.
 * Inline suggestions float over the page instead of pushing the content below the field down, opening above the field when the keyboard leaves more room there.
+* The field's keyboard defaults to `TextInputType.streetAddress`: an address keyboard on Android, word capitalization on Linux.
 
 **New:**
 
@@ -16,12 +17,17 @@
 * Address getters: `city`, `streetAddress`, `county`, `neighborhood`, `unit`, `postalCodeSuffix`.
 * Dialog and fullscreen search keep the field in place and scroll only the results; fullscreen puts the field in the top bar.
 * `fieldBuilder`, `suggestionItemBuilder`, and `suggestionsViewBuilder` build the field, each row, and the suggestion area; the view gets the typed `PlacesException` when a search fails.
+* `minInputLength` and `debounceDuration` on the widgets, to send fewer billed autocomplete requests.
+* `TextField` options on the widgets: `keyboardType`, `textInputAction`, `inputFormatters`, `onSubmitted`, and more.
+* `suggestionsViewOpenDirection` and `unfocusOnSelection` for inline fields, and `includeFutureOpeningBusinesses` on the widgets.
+* `PlaceSelection.fromPlace` starts a form field from a saved place.
 
 **Fixed:**
 
 * The first keystrokes no longer flash "No matching places found." before any response.
 * The keyboard-highlighted row has a background, keeps its text colours, and scrolls into view.
 * A `Theme` around the field now reaches the fullscreen search, as it already reached the dialog.
+* On web, a circle `locationRestriction` for autocomplete through Maps JavaScript now fails with a `validation` error instead of being sent to an API that does not accept it.
 
 **Deprecated:**
 

@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../models/place_models.dart';
@@ -48,6 +49,7 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     this.includedPrimaryTypes = const <String>[],
     this.includedRegionCodes = const <String>[],
     this.includePureServiceAreaBusinesses = false,
+    this.includeFutureOpeningBusinesses = false,
     this.fetchPlaceDetailsOnSelection = true,
     this.fetchTimeZoneOnSelection = false,
     this.selectionFields = PlaceFieldPresets.address,
@@ -56,9 +58,28 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     this.selectionTimeZoneAt,
     this.selectionTimeZoneLanguageCode,
     this.maxSuggestions = 5,
+    this.minInputLength = 1,
+    this.debounceDuration,
     this.enabled = true,
     this.showPoweredByGoogle = true,
     this.includeQueryPredictions = false,
+    this.keyboardType = TextInputType.streetAddress,
+    this.textInputAction,
+    this.textCapitalization = TextCapitalization.none,
+    this.style,
+    this.textAlign = TextAlign.start,
+    this.textDirection,
+    this.autocorrect,
+    this.enableSuggestions = true,
+    this.enableIMEPersonalizedLearning = true,
+    this.inputFormatters,
+    this.maxLength,
+    this.maxLengthEnforcement,
+    this.autofillHints = const <String>[],
+    this.keyboardAppearance,
+    this.scrollPadding = const EdgeInsets.all(20),
+    this.onSubmitted,
+    this.onEditingComplete,
     this.fieldBuilder,
     this.suggestionItemBuilder,
     this.suggestionsViewBuilder,
@@ -79,7 +100,8 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
          suggestionBuilder == null || suggestionItemBuilder == null,
          'Pass suggestionItemBuilder or the deprecated suggestionBuilder, '
          'not both.',
-       );
+       ),
+       assert(minInputLength >= 1, 'minInputLength must be at least 1.');
 
   /// Client used to issue autocomplete and optional place-details requests.
   ///
@@ -132,7 +154,8 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   ///
   /// A circle or a rectangle, except through the Maps JavaScript backend — the
   /// web default — which accepts only a rectangle
-  /// ([LocationRestriction.rectangle]) for autocomplete.
+  /// ([LocationRestriction.rectangle]) for autocomplete; a circle there fails
+  /// the search with a [PlacesErrorKind.validation] error.
   final LocationRestriction? locationRestriction;
 
   /// Restricts autocomplete results to Google primary place types.
@@ -140,7 +163,14 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
 
   /// Restricts autocomplete results to the supplied CLDR region codes.
   final List<String> includedRegionCodes;
+
+  /// Whether pure service-area businesses should be included in autocomplete
+  /// results.
   final bool includePureServiceAreaBusinesses;
+
+  /// Whether businesses that have not opened yet should be included in
+  /// autocomplete results.
+  final bool includeFutureOpeningBusinesses;
 
   /// Whether the selected suggestion should be resolved into [PlaceData]
   /// before [onSelection] fires and before [show] completes.
@@ -173,6 +203,17 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   /// above `5` are clamped to the upstream response limit.
   final int maxSuggestions;
 
+  /// The fewest characters the user must type before the overlay searches.
+  ///
+  /// See [PlacesAutocompleteField.minInputLength].
+  final int minInputLength;
+
+  /// How long the overlay waits after the user stops typing before it
+  /// searches; the [controller]'s when `null`.
+  ///
+  /// See [PlacesAutocompleteField.debounceDuration].
+  final Duration? debounceDuration;
+
   /// Whether the overlay's field can be interacted with.
   final bool enabled;
 
@@ -181,6 +222,57 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
 
   /// Whether autocomplete should include query suggestions as well as places.
   final bool includeQueryPredictions;
+
+  /// See [PlacesAutocompleteField.keyboardType].
+  final TextInputType keyboardType;
+
+  /// See [PlacesAutocompleteField.textInputAction].
+  final TextInputAction? textInputAction;
+
+  /// See [PlacesAutocompleteField.textCapitalization].
+  final TextCapitalization textCapitalization;
+
+  /// See [PlacesAutocompleteField.style].
+  final TextStyle? style;
+
+  /// See [PlacesAutocompleteField.textAlign].
+  final TextAlign textAlign;
+
+  /// See [PlacesAutocompleteField.textDirection].
+  final TextDirection? textDirection;
+
+  /// See [PlacesAutocompleteField.autocorrect].
+  final bool? autocorrect;
+
+  /// See [PlacesAutocompleteField.enableSuggestions].
+  final bool enableSuggestions;
+
+  /// See [PlacesAutocompleteField.enableIMEPersonalizedLearning].
+  final bool enableIMEPersonalizedLearning;
+
+  /// See [PlacesAutocompleteField.inputFormatters].
+  final List<TextInputFormatter>? inputFormatters;
+
+  /// See [PlacesAutocompleteField.maxLength].
+  final int? maxLength;
+
+  /// See [PlacesAutocompleteField.maxLengthEnforcement].
+  final MaxLengthEnforcement? maxLengthEnforcement;
+
+  /// See [PlacesAutocompleteField.autofillHints].
+  final Iterable<String>? autofillHints;
+
+  /// See [PlacesAutocompleteField.keyboardAppearance].
+  final Brightness? keyboardAppearance;
+
+  /// See [PlacesAutocompleteField.scrollPadding].
+  final EdgeInsets scrollPadding;
+
+  /// See [PlacesAutocompleteField.onSubmitted].
+  final ValueChanged<String>? onSubmitted;
+
+  /// See [PlacesAutocompleteField.onEditingComplete].
+  final VoidCallback? onEditingComplete;
 
   /// Builds the search field. See [PlacesAutocompleteField.fieldBuilder].
   final PlacesFieldBuilder? fieldBuilder;
@@ -253,6 +345,7 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     List<String> includedPrimaryTypes = const <String>[],
     List<String> includedRegionCodes = const <String>[],
     bool includePureServiceAreaBusinesses = false,
+    bool includeFutureOpeningBusinesses = false,
     bool fetchPlaceDetailsOnSelection = true,
     bool fetchTimeZoneOnSelection = false,
     Set<PlaceField> selectionFields = PlaceFieldPresets.address,
@@ -261,9 +354,28 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     DateTime? selectionTimeZoneAt,
     String? selectionTimeZoneLanguageCode,
     int maxSuggestions = 5,
+    int minInputLength = 1,
+    Duration? debounceDuration,
     bool enabled = true,
     bool showPoweredByGoogle = true,
     bool includeQueryPredictions = false,
+    TextInputType keyboardType = TextInputType.streetAddress,
+    TextInputAction? textInputAction,
+    TextCapitalization textCapitalization = TextCapitalization.none,
+    TextStyle? style,
+    TextAlign textAlign = TextAlign.start,
+    TextDirection? textDirection,
+    bool? autocorrect,
+    bool enableSuggestions = true,
+    bool enableIMEPersonalizedLearning = true,
+    List<TextInputFormatter>? inputFormatters,
+    int? maxLength,
+    MaxLengthEnforcement? maxLengthEnforcement,
+    Iterable<String>? autofillHints = const <String>[],
+    Brightness? keyboardAppearance,
+    EdgeInsets scrollPadding = const EdgeInsets.all(20),
+    ValueChanged<String>? onSubmitted,
+    VoidCallback? onEditingComplete,
     PlacesFieldBuilder? fieldBuilder,
     PlacesSuggestionItemBuilder? suggestionItemBuilder,
     PlacesSuggestionsViewBuilder? suggestionsViewBuilder,
@@ -282,6 +394,7 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       (client == null) != (apiKey == null),
       'Pass exactly one of client or apiKey.',
     );
+    assert(minInputLength >= 1, 'minInputLength must be at least 1.');
     final ownedController = controller == null
         ? PlacesAutocompleteController(initialText: initialText)
         : null;
@@ -306,6 +419,7 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       includedPrimaryTypes: includedPrimaryTypes,
       includedRegionCodes: includedRegionCodes,
       includePureServiceAreaBusinesses: includePureServiceAreaBusinesses,
+      includeFutureOpeningBusinesses: includeFutureOpeningBusinesses,
       fetchPlaceDetailsOnSelection: fetchPlaceDetailsOnSelection,
       fetchTimeZoneOnSelection: fetchTimeZoneOnSelection,
       selectionFields: selectionFields,
@@ -314,9 +428,28 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       selectionTimeZoneAt: selectionTimeZoneAt,
       selectionTimeZoneLanguageCode: selectionTimeZoneLanguageCode,
       maxSuggestions: maxSuggestions,
+      minInputLength: minInputLength,
+      debounceDuration: debounceDuration,
       enabled: enabled,
       showPoweredByGoogle: showPoweredByGoogle,
       includeQueryPredictions: includeQueryPredictions,
+      keyboardType: keyboardType,
+      textInputAction: textInputAction,
+      textCapitalization: textCapitalization,
+      style: style,
+      textAlign: textAlign,
+      textDirection: textDirection,
+      autocorrect: autocorrect,
+      enableSuggestions: enableSuggestions,
+      enableIMEPersonalizedLearning: enableIMEPersonalizedLearning,
+      inputFormatters: inputFormatters,
+      maxLength: maxLength,
+      maxLengthEnforcement: maxLengthEnforcement,
+      autofillHints: autofillHints,
+      keyboardAppearance: keyboardAppearance,
+      scrollPadding: scrollPadding,
+      onSubmitted: onSubmitted,
+      onEditingComplete: onEditingComplete,
       fieldBuilder: fieldBuilder,
       suggestionItemBuilder: suggestionItemBuilder,
       suggestionsViewBuilder: suggestionsViewBuilder,
@@ -409,6 +542,7 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       includedPrimaryTypes: includedPrimaryTypes,
       includedRegionCodes: includedRegionCodes,
       includePureServiceAreaBusinesses: includePureServiceAreaBusinesses,
+      includeFutureOpeningBusinesses: includeFutureOpeningBusinesses,
       fetchPlaceDetailsOnSelection: fetchPlaceDetailsOnSelection,
       fetchTimeZoneOnSelection: fetchTimeZoneOnSelection,
       selectionFields: selectionFields,
@@ -417,9 +551,28 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       selectionTimeZoneAt: selectionTimeZoneAt,
       selectionTimeZoneLanguageCode: selectionTimeZoneLanguageCode,
       maxSuggestions: maxSuggestions,
+      minInputLength: minInputLength,
+      debounceDuration: debounceDuration,
       enabled: enabled,
       showPoweredByGoogle: showPoweredByGoogle,
       includeQueryPredictions: includeQueryPredictions,
+      keyboardType: keyboardType,
+      textInputAction: textInputAction,
+      textCapitalization: textCapitalization,
+      style: style,
+      textAlign: textAlign,
+      textDirection: textDirection,
+      autocorrect: autocorrect,
+      enableSuggestions: enableSuggestions,
+      enableIMEPersonalizedLearning: enableIMEPersonalizedLearning,
+      inputFormatters: inputFormatters,
+      maxLength: maxLength,
+      maxLengthEnforcement: maxLengthEnforcement,
+      autofillHints: autofillHints,
+      keyboardAppearance: keyboardAppearance,
+      scrollPadding: scrollPadding,
+      onSubmitted: onSubmitted,
+      onEditingComplete: onEditingComplete,
       fieldBuilder: fieldBuilder,
       suggestionItemBuilder: suggestionItemBuilder,
       suggestionsViewBuilder: suggestionsViewBuilder,

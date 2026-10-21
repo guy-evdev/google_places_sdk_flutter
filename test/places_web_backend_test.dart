@@ -86,6 +86,66 @@ void main() {
     },
   );
 
+  group('autocomplete circle restriction', () {
+    final circle = LocationRestriction.circle(
+      center: const PlaceCoordinates(latitude: 32.08, longitude: 34.78),
+      radiusMeters: 1000,
+    );
+
+    test('fails before the Maps JavaScript API is called', () async {
+      var httpCalls = 0;
+      final backend = PlacesWebBackend(
+        apiKey: 'browser-key',
+        httpClient: MockClient((request) async {
+          httpCalls++;
+          return http.Response('{}', 200);
+        }),
+      );
+
+      await expectLater(
+        () => backend.autocompleteSuggestions(
+          AutocompleteRequest(input: 'coffee', locationRestriction: circle),
+        ),
+        throwsA(
+          isA<PlacesException>()
+              .having((error) => error.kind, 'kind', PlacesErrorKind.validation)
+              .having(
+                (error) => error.code,
+                'code',
+                'invalid_location_restriction_shape',
+              ),
+        ),
+      );
+      expect(httpCalls, 0);
+      await backend.close();
+    });
+
+    test('is sent over REST, where it is valid', () async {
+      late http.Request sentRequest;
+      final backend = PlacesWebBackend(
+        apiKey: '',
+        proxyConfiguration: PlacesProxyConfiguration(
+          placesEndpoint: Uri.parse('https://proxy.example.test/places/v1'),
+        ),
+        httpClient: MockClient((request) async {
+          sentRequest = request;
+          return http.Response('{"suggestions":[]}', 200);
+        }),
+      );
+
+      await backend.autocompleteSuggestions(
+        AutocompleteRequest(input: 'coffee', locationRestriction: circle),
+      );
+
+      final body = jsonDecode(sentRequest.body) as Map<String, Object?>;
+      expect(
+        (body['locationRestriction']! as Map<String, Object?>)['circle'],
+        isNotNull,
+      );
+      await backend.close();
+    });
+  });
+
   test('proxy-only web policy rejects direct HTTP operations', () async {
     final backend = PlacesWebBackend(
       apiKey: 'browser-key',

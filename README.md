@@ -257,11 +257,12 @@ address. One Pro or Enterprise field in `selectionFields` — `displayName`, `ti
 anything in `PlaceFieldPresets.recommended` — changes that: Google then bills the details request at
 Enterprise + Atmosphere, and the session's autocomplete requests are free.
 
-Typing is debounced (300 ms by default, set on `PlacesAutocompleteController`).
-`fetchPlaceDetailsOnSelection: false` skips the details request, but Google then bills each
-autocomplete request on its own, so it is not automatically cheaper. `PlacesClient`'s own calls
-bill the fields they request: Place Details defaults to `PlaceFieldPresets.address`, Text Search
-and Nearby Search to `PlaceFieldPresets.minimal`. The
+Two options send fewer autocomplete requests: `debounceDuration`, how long the field waits after
+the last keystroke (300 ms by default), and `minInputLength`, the characters needed before it
+searches at all (1 by default). `fetchPlaceDetailsOnSelection: false` skips the details request,
+but Google then bills each autocomplete request on its own, so it is not automatically cheaper.
+`PlacesClient`'s own calls bill the fields they request: Place Details defaults to
+`PlaceFieldPresets.address`, Text Search and Nearby Search to `PlaceFieldPresets.minimal`. The
 [field table](doc/api_reference.md#place-field-presets) gives each field's tier.
 
 ## Security
@@ -302,6 +303,8 @@ not migrated. The widgets take an `apiKey:`, return coordinates and an address b
 `PlaceData` gains `city`, `streetAddress`, and other address getters. Inline suggestions float
 over the page instead of pushing it down, and the fullscreen search puts the field in the top bar.
 Three builders let you supply the field, each row, or the whole suggestion area.
+`minInputLength` and `debounceDuration` send fewer billed requests, and the widgets take
+`TextField`'s own options, such as `keyboardType` and `inputFormatters`.
 `PlacesClient` requests fewer fields by default. The supported floor rises to Flutter `>=3.44.0` and Dart `>=3.12.0`. See
 [MIGRATION.md](MIGRATION.md#070) for the defaults that changed.
 

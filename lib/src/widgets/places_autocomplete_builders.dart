@@ -67,7 +67,8 @@ class PlacesFieldData {
 
   /// Whether the text should be read-only: in dialog and fullscreen field
   /// modes, where tapping opens the search instead, and while a selection
-  /// loads.
+  /// loads — unless `unfocusOnSelection` is `false`, where read-only would
+  /// close the keyboard.
   ///
   /// A field that cannot be made read-only still behaves: edits in those
   /// field modes are ignored, and typing while a selection loads abandons that

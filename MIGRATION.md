@@ -17,6 +17,7 @@ and an address, and `PlacesClient` requests fewer fields when you pass none.
 | Reads `PlacesAutocompleteField.client` or `PlacesAutocompleteOverlay.client` | Step 7 |
 | Calls `PlacesClient` for details or search without passing `fields:` | Step 8 |
 | Has an inline field with a control just below it | Step 9 |
+| Wants the plain text keyboard on Android | Step 10 |
 
 ### 1. Raise your SDK floor
 
@@ -254,5 +255,25 @@ Column(
     ),
     FilledButton(onPressed: submit, child: const Text('Continue')),
   ],
+)
+```
+
+To keep inline suggestions below the field even when there is more room above it, pass
+`suggestionsViewOpenDirection: OptionsViewOpenDirection.down`.
+
+### 10. The keyboard is for street addresses
+
+The widgets now ask for `TextInputType.streetAddress`. On Android that shows a keyboard suited to
+addresses, and on Linux it asks the input method to capitalize words; on iOS, the web, macOS, and
+Windows the keyboard is unchanged. To keep the plain text keyboard:
+
+```dart
+// Before — the plain text keyboard was the default
+PlacesAutocompleteField(apiKey: apiKey)
+
+// After
+PlacesAutocompleteField(
+  apiKey: apiKey,
+  keyboardType: TextInputType.text,
 )
 ```

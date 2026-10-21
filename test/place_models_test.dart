@@ -980,4 +980,37 @@ void main() {
       );
     });
   });
+
+  group('PlaceSelection.fromPlace', () {
+    test('shows the formatted address, then the name, then the ID', () {
+      const id = 'ChIJ-saved';
+      final full = PlaceSelection.fromPlace(
+        const PlaceData(
+          id: id,
+          resourceName: 'places/ChIJ-saved',
+          displayName: LocalizedText(text: 'Coffee Lab'),
+          formattedAddress: '1 Main Street, Springfield',
+        ),
+      );
+      expect(full.displayText, '1 Main Street, Springfield');
+      expect(full.suggestion.primaryText.text, 'Coffee Lab');
+      expect(full.placeId, id);
+      expect(full.suggestion.placeResourceName, 'places/ChIJ-saved');
+      expect(full.sessionToken, isNull);
+      expect(full.hasResolvedPlace, isTrue);
+
+      final named = PlaceSelection.fromPlace(
+        const PlaceData(
+          id: id,
+          displayName: LocalizedText(text: 'Coffee Lab'),
+        ),
+      );
+      expect(named.displayText, 'Coffee Lab');
+      expect(named.suggestion.placeResourceName, 'places/ChIJ-saved');
+
+      final bare = PlaceSelection.fromPlace(const PlaceData(id: id));
+      expect(bare.displayText, id);
+      expect(bare.suggestion.primaryText.text, id);
+    });
+  });
 }

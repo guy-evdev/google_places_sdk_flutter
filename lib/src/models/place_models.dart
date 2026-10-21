@@ -348,7 +348,9 @@ class LocationBias {
 /// Use this when results must fall inside the specified area. Which shapes
 /// an operation accepts differs: autocomplete takes either over HTTP but only
 /// a rectangle through the Maps JavaScript backend (the web default), Text
-/// Search takes only a rectangle, and Nearby Search takes only a circle.
+/// Search takes only a rectangle, and Nearby Search takes only a circle. A
+/// shape the operation does not accept fails with a
+/// [PlacesErrorKind.validation] error.
 ///
 /// Official reference:
 /// https://developers.google.com/maps/documentation/places/web-service/place-autocomplete#locationRestriction
@@ -857,6 +859,27 @@ class PlaceSelection {
     this.place,
     this.timeZone,
   });
+
+  /// A selection for a place the app already has — typically one it saved
+  /// by [PlaceData.id] and fetched again with `PlacesClient.fetchPlaceById`.
+  ///
+  /// Pass it as `PlacesAutocompleteFormField`'s `initialValue`, or to
+  /// `PlacesAutocompleteController.restoreSelection`. The field shows the
+  /// place's [PlaceData.formattedAddress], else its display name, else its
+  /// ID. It belongs to no autocomplete session, so [sessionToken] is `null`.
+  factory PlaceSelection.fromPlace(PlaceData place) {
+    final name = place.displayName?.text;
+    final text = place.formattedAddress ?? name ?? place.id;
+    return PlaceSelection(
+      suggestion: PlaceSuggestion(
+        placeId: place.id,
+        placeResourceName: place.resourceName ?? 'places/${place.id}',
+        fullText: StructuredText(text: text),
+        primaryText: StructuredText(text: name ?? text),
+      ),
+      place: place,
+    );
+  }
 
   /// The lightweight autocomplete suggestion the user selected.
   final PlaceSuggestion suggestion;
@@ -2404,7 +2427,8 @@ class AutocompleteRequest {
   /// Hard geographic restriction for suggestions.
   ///
   /// A circle or a rectangle over HTTP. Through the Maps JavaScript backend —
-  /// the web default — only a rectangle ([LocationRestriction.rectangle]).
+  /// the web default — only a rectangle ([LocationRestriction.rectangle]); a
+  /// circle there fails with a [PlacesErrorKind.validation] error.
   final LocationRestriction? locationRestriction;
 
   /// Restricts autocomplete results to places whose primary type matches one

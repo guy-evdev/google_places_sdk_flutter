@@ -42,6 +42,32 @@ formKey.currentState!.reset();
 It also takes `onSaved`, `initialValue`, `autovalidateMode`, `forceErrorText`,
 `errorBuilder`, and `restorationId`, as other form fields do.
 
+### Start from a saved place
+
+To show a place the user picked earlier, in an edit form for example, keep its
+place ID, which
+[Google lets you store](https://developers.google.com/maps/documentation/places/web-service/place-id),
+and fetch the place again when the form opens:
+
+```dart
+final place = await client.fetchPlaceById(savedPlaceId);
+
+PlacesAutocompleteFormField(
+  client: client,
+  initialValue: PlaceSelection.fromPlace(place),
+);
+```
+
+The field shows the place's formatted address. `fetchPlaceById` asks for
+`PlaceFieldPresets.address` by default: one Place Details Essentials request,
+outside any autocomplete session. Outside a form, give the selection to the
+controller instead:
+
+```dart
+final controller = PlacesAutocompleteController()
+  ..restoreSelection(PlaceSelection.fromPlace(place));
+```
+
 ## Search in a dialog or on a full screen
 
 `PlacesAutocompleteOverlay.show()` opens the search and returns the pick, or
@@ -141,7 +167,7 @@ Some calls accept only one shape:
 | Call | `locationBias` | `locationRestriction` |
 | --- | --- | --- |
 | Autocomplete (the widgets, `autocomplete()`) | circle or rectangle | circle or rectangle |
-| Autocomplete through Maps JavaScript — the web default | circle or rectangle | rectangle only — Maps JavaScript accepts no circle here |
+| Autocomplete through Maps JavaScript — the web default | circle or rectangle | rectangle only; a circle fails with a `validation` error |
 | `searchText()` | circle or rectangle | rectangle only |
 | `searchNearby()` | — | circle only, and required |
 
@@ -275,6 +301,40 @@ PlacesAutocompleteField(
       ),
     _ => view.defaultView,
   },
+)
+```
+
+The same builder caps the area's height, or adds dividers between rows:
+
+```dart
+PlacesAutocompleteField(
+  apiKey: apiKey,
+  suggestionsViewBuilder: (context, view) => ConstrainedBox(
+    constraints: const BoxConstraints(maxHeight: 240),
+    child: view.status == PlacesSuggestionsStatus.results
+        ? Card(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: view.items.length,
+                    itemBuilder: (context, index) => view.items[index],
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 1),
+                  ),
+                ),
+                if (view.attribution case final attribution?)
+                  Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: attribution,
+                  ),
+              ],
+            ),
+          )
+        : view.defaultView,
+  ),
 )
 ```
 
@@ -738,8 +798,10 @@ HTTP client injection is unsupported on web.
 ## Common widget options
 
 The same names work on `PlacesAutocompleteField`, `PlacesAutocompleteFormField`,
-and `PlacesAutocompleteOverlay.show()`. The
-[API reference](api_reference.md#widget-defaults) lists every option.
+and `PlacesAutocompleteOverlay.show()`, except the two marked inline only. The
+[API reference](api_reference.md#widget-defaults) lists every option, including
+the `TextField` options — `keyboardType`, `textInputAction`, `inputFormatters`,
+`onSubmitted`, and more — which are passed to the default field.
 
 | Option | Default | Use when |
 | --- | --- | --- |
@@ -757,6 +819,12 @@ and `PlacesAutocompleteOverlay.show()`. The
 | `fetchTimeZoneOnSelection` | `false` | The selection needs Time Zone API data. |
 | `includeQueryPredictions` | `false` | You also accept suggested search phrases. |
 | `maxSuggestions` | `5` | You want fewer than Google's five suggestions. |
+| `minInputLength` | `1` | You want fewer billed requests: no search until this many characters. |
+| `debounceDuration` | 300 ms | You want fewer billed requests: a longer pause before each search. |
+| `keyboardType` | `streetAddress` | You want another keyboard. The default changes it on Android and Linux only. |
+| `includeFutureOpeningBusinesses` | `false` | You also want places that have not opened yet. |
+| `unfocusOnSelection` | `true` | Inline only. Set `false` to keep focus in the field after a pick. |
+| `suggestionsViewOpenDirection` | `mostSpace` | Inline only. The suggestions should always open `down` or `up`. |
 | `showPoweredByGoogle` | `true` | The package should render Google attribution. |
 
 `locationBias` and `locationRestriction` cannot be used together; see

@@ -49,6 +49,7 @@ unchanged; only the library it is imported from moved. See
 | `includedPrimaryTypes` | `List<String>` | `const <String>[]` | Google primary type filters, such as `restaurant`, `cafe`, or `(cities)`. |
 | `includedRegionCodes` | `List<String>` | `const <String>[]` | CLDR region-code filters. |
 | `includePureServiceAreaBusinesses` | `bool` | `false` | Includes pure service-area businesses in autocomplete. |
+| `includeFutureOpeningBusinesses` | `bool` | `false` | Includes businesses that have not opened yet in autocomplete. |
 | `fetchPlaceDetailsOnSelection` | `bool` | `true` | Resolves the selected place before `onSelection`, ending the autocomplete session with one Place Details request. `false` skips it. |
 | `fetchTimeZoneOnSelection` | `bool` | `false` | Resolves details and then Google Time Zone data. |
 | `selectionFields` | `Set<PlaceField>` | `PlaceFieldPresets.address` | Details fields used when selection details are fetched. The default is all Essentials. Because this request ends the autocomplete session, one Pro or Enterprise field bills it at Enterprise + Atmosphere. |
@@ -61,8 +62,12 @@ unchanged; only the library it is imported from moved. See
 | `onClearField` | `VoidCallback?` | `null` | Called after the clear action. |
 | `onError` | `ValueChanged<Object>?` | `null` | Called for autocomplete/details/time-zone errors. |
 | `maxSuggestions` | `int` | `5` | Clamped to Google Autocomplete's five-suggestion response limit. |
+| `minInputLength` | `int` | `1` | The fewest characters, as the user sees them and after trimming spaces, before the field searches. Shorter input sends no billed request. |
+| `debounceDuration` | `Duration?` | `null` | How long typing must pause before a search. `null` uses the controller's `debounceDuration`, 300 milliseconds by default. |
 | `enabled` | `bool` | `true` | Enables text field interaction. |
 | `autofocus` | `bool` | `false` | Requests focus when built. |
+| `unfocusOnSelection` | `bool` | `true` | Whether picking a place takes focus from the field, which on a phone hides the keyboard. Inline mode only; the dialog and fullscreen search close on a pick. |
+| `suggestionsViewOpenDirection` | `OptionsViewOpenDirection` | `OptionsViewOpenDirection.mostSpace` | Which side of the field the suggestions open on: the one with more room, or always `down` or `up`. Inline mode only; the dialog and fullscreen search show them below the field. |
 | `showPoweredByGoogle` | `bool` | `true` | Shows required Google attribution for suggestion UI. |
 | `includeQueryPredictions` | `bool` | `false` | Adds query suggestions alongside place suggestions. |
 | `onQuerySelection` | `ValueChanged<QuerySuggestion>?` | `null` | Called when a query suggestion is selected. |
@@ -70,6 +75,29 @@ unchanged; only the library it is imported from moved. See
 | `suggestionItemBuilder` | `PlacesSuggestionItemBuilder?` | `null` | Builds each suggestion row, place or query. |
 | `suggestionsViewBuilder` | `PlacesSuggestionsViewBuilder?` | `null` | Builds the suggestion area in each state: loading, results, empty, error. |
 | `suggestionBuilder` | `Widget Function(BuildContext, PlaceSuggestion)?` | `null` | **Deprecated in `0.7.0`, removed in `1.0.0`** — use `suggestionItemBuilder`. Builds only the title of a place row. Cannot be combined with `suggestionItemBuilder`. |
+
+Options passed to the default field's `TextField` of the same name. They reach the dialog and
+fullscreen search too. With a `fieldBuilder`, set them on your own field instead.
+
+| Field | Type | Default |
+| --- | --- | --- |
+| `keyboardType` | `TextInputType` | `TextInputType.streetAddress` — a keyboard suited to addresses on Android, and a capitalize-words hint to Linux input methods; the usual text keyboard on iOS, the web, macOS, and Windows |
+| `textInputAction` | `TextInputAction?` | `null` |
+| `textCapitalization` | `TextCapitalization` | `TextCapitalization.none` |
+| `style` | `TextStyle?` | `null` |
+| `textAlign` | `TextAlign` | `TextAlign.start` |
+| `textDirection` | `TextDirection?` | `null` |
+| `autocorrect` | `bool?` | `null` |
+| `enableSuggestions` | `bool` | `true` |
+| `enableIMEPersonalizedLearning` | `bool` | `true` |
+| `inputFormatters` | `List<TextInputFormatter>?` | `null` |
+| `maxLength` | `int?` | `null` |
+| `maxLengthEnforcement` | `MaxLengthEnforcement?` | `null` |
+| `autofillHints` | `Iterable<String>?` | `const <String>[]` — autofill stays on with no hints; `null` turns it off |
+| `keyboardAppearance` | `Brightness?` | `null` — honoured on iOS only |
+| `scrollPadding` | `EdgeInsets` | `EdgeInsets.all(20)` |
+| `onSubmitted` | `ValueChanged<String>?` | `null` |
+| `onEditingComplete` | `VoidCallback?` | `null` |
 
 Additional `PlacesAutocompleteFormField` defaults:
 
@@ -81,7 +109,7 @@ Additional `PlacesAutocompleteFormField` defaults:
 | `forceErrorText` | `String?` | `null` | Forces the standard FormField error state. |
 | `errorBuilder` | `FormFieldErrorBuilder?` | `null` | Builds custom error presentation for the default field. With `fieldBuilder`, the message reaches your field as `PlacesFieldData.errorText` instead. |
 | `restorationId` | `String?` | `null` | Enables FormField state restoration. |
-| `initialValue` | `PlaceSelection?` | `null` | Initial form value. |
+| `initialValue` | `PlaceSelection?` | `null` | Initial form value. `PlaceSelection.fromPlace(place)` builds one from a place fetched by its saved ID; see the [recipe](recipes.md#start-from-a-saved-place). |
 | `autovalidateMode` | `AutovalidateMode` | `AutovalidateMode.disabled` | Standard form autovalidation mode. |
 
 `PlacesAutocompleteController` options, for a controller passed as `controller:`:
@@ -89,12 +117,13 @@ Additional `PlacesAutocompleteFormField` defaults:
 | Field | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `initialText` | `String` | `''` | Text the field starts with. |
-| `debounceDuration` | `Duration` | 300 milliseconds | How long typing must pause before an autocomplete request is sent. A longer pause sends fewer billed requests. |
+| `debounceDuration` | `Duration` | 300 milliseconds | How long typing must pause before an autocomplete request is sent. A longer pause sends fewer billed requests. The widget's own `debounceDuration`, when set, takes precedence. |
 
 `PlacesAutocompleteOverlay.show()` accepts the same autocomplete options as the
 field widgets, including `decoration`, `origin`, `enabled`,
-`showPoweredByGoogle`, the three builders, and `onClearField`, plus these
-overlay-specific fields:
+`showPoweredByGoogle`, `minInputLength`, `debounceDuration`, the `TextField`
+options, the three builders, and `onClearField`, plus these overlay-specific
+fields:
 
 | Field | Type | Default | Notes |
 | --- | --- | --- | --- |
@@ -107,9 +136,13 @@ overlay-specific fields:
 | `title` | `String?` | `null` | Falls back to `strings.overlayTitle`. Shown above the field in `dialog` mode; in `fullscreen` mode the field takes the top bar, so screen readers announce the title as the screen's name instead. |
 
 When a `PlacesAutocompleteField` in `dialog` or `fullscreen` mode opens an
-overlay, it forwards all of these automatically. Before `0.6.1` it dropped
-`decoration`, `suggestionBuilder`, `showPoweredByGoogle`, `onClearField`, and
-`enabled`.
+overlay, it forwards every option except `controller` and `autofocus` — the
+overlay has its own controller, seeded with the field's text and
+`debounceDuration`, and always takes focus — and the inline-only
+`unfocusOnSelection` and `suggestionsViewOpenDirection`. The field calls its
+own `onSelection` once the overlay returns a place. Before `0.6.1` it
+dropped `decoration`, `suggestionBuilder`, `showPoweredByGoogle`,
+`onClearField`, and `enabled`.
 
 ## Display Strings
 

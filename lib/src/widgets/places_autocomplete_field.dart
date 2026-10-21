@@ -69,6 +69,7 @@ class PlacesAutocompleteField extends StatefulWidget {
     this.includedPrimaryTypes = const <String>[],
     this.includedRegionCodes = const <String>[],
     this.includePureServiceAreaBusinesses = false,
+    this.includeFutureOpeningBusinesses = false,
     this.fetchPlaceDetailsOnSelection = true,
     this.fetchTimeZoneOnSelection = false,
     this.selectionFields = PlaceFieldPresets.address,
@@ -81,11 +82,32 @@ class PlacesAutocompleteField extends StatefulWidget {
     this.onClearField,
     this.onError,
     this.maxSuggestions = 5,
+    this.minInputLength = 1,
+    this.debounceDuration,
     this.enabled = true,
     this.autofocus = false,
+    this.unfocusOnSelection = true,
+    this.suggestionsViewOpenDirection = OptionsViewOpenDirection.mostSpace,
     this.showPoweredByGoogle = true,
     this.includeQueryPredictions = false,
     this.onQuerySelection,
+    this.keyboardType = TextInputType.streetAddress,
+    this.textInputAction,
+    this.textCapitalization = TextCapitalization.none,
+    this.style,
+    this.textAlign = TextAlign.start,
+    this.textDirection,
+    this.autocorrect,
+    this.enableSuggestions = true,
+    this.enableIMEPersonalizedLearning = true,
+    this.inputFormatters,
+    this.maxLength,
+    this.maxLengthEnforcement,
+    this.autofillHints = const <String>[],
+    this.keyboardAppearance,
+    this.scrollPadding = const EdgeInsets.all(20),
+    this.onSubmitted,
+    this.onEditingComplete,
     this.fieldBuilder,
     this.suggestionItemBuilder,
     this.suggestionsViewBuilder,
@@ -102,7 +124,8 @@ class PlacesAutocompleteField extends StatefulWidget {
          suggestionBuilder == null || suggestionItemBuilder == null,
          'Pass suggestionItemBuilder or the deprecated suggestionBuilder, '
          'not both.',
-       );
+       ),
+       assert(minInputLength >= 1, 'minInputLength must be at least 1.');
 
   /// Client used for autocomplete, place-details, and optional time-zone calls.
   ///
@@ -164,7 +187,8 @@ class PlacesAutocompleteField extends StatefulWidget {
   ///
   /// A circle or a rectangle, except through the Maps JavaScript backend — the
   /// web default — which accepts only a rectangle
-  /// ([LocationRestriction.rectangle]) for autocomplete.
+  /// ([LocationRestriction.rectangle]) for autocomplete; a circle there fails
+  /// the search with a [PlacesErrorKind.validation] error.
   final LocationRestriction? locationRestriction;
 
   /// Restricts autocomplete results to places whose primary type matches one
@@ -187,6 +211,10 @@ class PlacesAutocompleteField extends StatefulWidget {
   /// Whether pure service-area businesses should be included in autocomplete
   /// results.
   final bool includePureServiceAreaBusinesses;
+
+  /// Whether businesses that have not opened yet should be included in
+  /// autocomplete results.
+  final bool includeFutureOpeningBusinesses;
 
   /// Whether a selected suggestion should be resolved into [PlaceData] before
   /// [onSelection] is called.
@@ -256,11 +284,47 @@ class PlacesAutocompleteField extends StatefulWidget {
   /// https://developers.google.com/maps/documentation/places/web-service/place-autocomplete
   final int maxSuggestions;
 
+  /// The fewest characters the user must type before the field searches.
+  ///
+  /// Shorter input sends no request and shows no suggestions. Every search is
+  /// a billed autocomplete request, so a higher minimum sends fewer of them.
+  /// Characters are counted as the user sees them, after trimming spaces.
+  /// Defaults to `1`, the least it can be. Some place names are short: `北京`
+  /// is two characters.
+  final int minInputLength;
+
+  /// How long the field waits after the user stops typing before it searches.
+  ///
+  /// Every search is a billed autocomplete request, so a longer wait sends
+  /// fewer of them. When `null`, the [controller]'s
+  /// [PlacesAutocompleteController.debounceDuration] applies: 300 ms unless
+  /// set there.
+  final Duration? debounceDuration;
+
   /// Whether the field can be interacted with.
   final bool enabled;
 
   /// Whether the field should request focus automatically.
   final bool autofocus;
+
+  /// Whether the field gives up focus when the user picks a place, which on a
+  /// phone also hides the keyboard.
+  ///
+  /// Set it to `false` to keep focus in the field, for example so a keyboard
+  /// user stays where they were. The field then stays editable while the
+  /// place's details load, and typing abandons that pick. Inline mode only:
+  /// the dialog and fullscreen search close when a place is picked.
+  final bool unfocusOnSelection;
+
+  /// Which side of the field the suggestions open on.
+  ///
+  /// [OptionsViewOpenDirection.mostSpace], the default, picks the side with
+  /// more room between the field and the screen edge or the keyboard;
+  /// [OptionsViewOpenDirection.down] and [OptionsViewOpenDirection.up] always
+  /// use that side — with less than a row of room there, the suggestions
+  /// overlap the field. Inline mode only: in the dialog and fullscreen search
+  /// the suggestions always sit below the field.
+  final OptionsViewOpenDirection suggestionsViewOpenDirection;
 
   /// Whether the Powered by Google attribution should be shown.
   final bool showPoweredByGoogle;
@@ -270,6 +334,71 @@ class PlacesAutocompleteField extends StatefulWidget {
 
   /// Called when the user selects a query suggestion.
   final ValueChanged<QuerySuggestion>? onQuerySelection;
+
+  /// The keyboard to show. See [TextField.keyboardType].
+  ///
+  /// Defaults to [TextInputType.streetAddress], which shows a keyboard suited
+  /// to addresses on Android and asks Linux input methods to capitalize
+  /// words. On iOS, the web, macOS, and Windows it is the usual text keyboard.
+  final TextInputType keyboardType;
+
+  /// The keyboard's action button, such as search or done. See
+  /// [TextField.textInputAction].
+  final TextInputAction? textInputAction;
+
+  /// How the keyboard capitalizes what is typed. See
+  /// [TextField.textCapitalization].
+  final TextCapitalization textCapitalization;
+
+  /// The style of the typed text. See [TextField.style].
+  final TextStyle? style;
+
+  /// How the typed text is aligned. See [TextField.textAlign].
+  final TextAlign textAlign;
+
+  /// The direction of the typed text. See [TextField.textDirection].
+  final TextDirection? textDirection;
+
+  /// Whether the keyboard autocorrects. See [TextField.autocorrect].
+  final bool? autocorrect;
+
+  /// Whether the keyboard suggests words. See [TextField.enableSuggestions].
+  final bool enableSuggestions;
+
+  /// Whether the keyboard may learn from what is typed; `false` asks for
+  /// incognito typing. See [TextField.enableIMEPersonalizedLearning].
+  final bool enableIMEPersonalizedLearning;
+
+  /// Formatters applied to the text as it is typed, before it is searched.
+  /// See [TextField.inputFormatters].
+  final List<TextInputFormatter>? inputFormatters;
+
+  /// The most characters the field accepts. See [TextField.maxLength].
+  final int? maxLength;
+
+  /// How [maxLength] is enforced. See [TextField.maxLengthEnforcement].
+  final MaxLengthEnforcement? maxLengthEnforcement;
+
+  /// Hints for the platform's autofill; `null` turns autofill off for the
+  /// field. See [TextField.autofillHints].
+  final Iterable<String>? autofillHints;
+
+  /// The keyboard's brightness. Honoured on iOS only. See
+  /// [TextField.keyboardAppearance].
+  final Brightness? keyboardAppearance;
+
+  /// The room kept around the field when it scrolls into view. See
+  /// [TextField.scrollPadding].
+  final EdgeInsets scrollPadding;
+
+  /// Called when the user submits the text, for example with the keyboard's
+  /// action button. See [TextField.onSubmitted].
+  final ValueChanged<String>? onSubmitted;
+
+  /// Called when the user submits the text, in place of the default, which
+  /// gives up focus and so closes the suggestions. See
+  /// [TextField.onEditingComplete].
+  final VoidCallback? onEditingComplete;
 
   /// Builds the text field in place of the default `material_ui` one.
   ///
@@ -281,7 +410,9 @@ class PlacesAutocompleteField extends StatefulWidget {
   /// the validation message reaches your field, and that form field's
   /// `errorBuilder` is not used. The progress bar the default field shows
   /// while a selection loads is not drawn: render
-  /// [PlacesFieldData.selectionLoading] yourself.
+  /// [PlacesFieldData.selectionLoading] yourself. The options taken from
+  /// `TextField`, from [keyboardType] to [onEditingComplete], configure the
+  /// default field only; set them on your own.
   ///
   /// Every type it receives comes from `package:flutter/widgets.dart`, so an
   /// app still on `package:flutter/material.dart` can return its own
@@ -350,6 +481,9 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   PlacesCancellationToken? _searchCancellationToken;
   PlacesCancellationToken? _selectionCancellationToken;
   AutocompleteSessionToken? _observedSessionToken;
+  // The session the last request went out in. Compared by value with the
+  // controller's, so it needs no clearing when the session resets.
+  AutocompleteSessionToken? _searchedSessionToken;
   // Inline suggestions float in the nearest Overlay. Always shown: the overlay
   // child is empty while the search UI is closed, so visibility follows
   // _searchUiVisible without a second flag to keep in sync. The portal must
@@ -381,6 +515,17 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       : widget.selectionFields;
 
   int get _effectiveMaxSuggestions => widget.maxSuggestions.clamp(1, 5);
+
+  // Shown, pending, or already billed: input below minInputLength closes the
+  // results but not the session its earlier requests went out in.
+  bool get _hasActiveSession =>
+      _searchUiVisible ||
+      _loading ||
+      _suggestions.isNotEmpty ||
+      _searchedSessionToken?.value == _controller.sessionToken.value;
+
+  Duration get _debounceDuration =>
+      widget.debounceDuration ?? _controller.debounceDuration;
 
   @override
   void initState() {
@@ -437,6 +582,8 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
         ) ||
         oldWidget.includePureServiceAreaBusinesses !=
             widget.includePureServiceAreaBusinesses ||
+        oldWidget.includeFutureOpeningBusinesses !=
+            widget.includeFutureOpeningBusinesses ||
         oldWidget.fetchPlaceDetailsOnSelection !=
             widget.fetchPlaceDetailsOnSelection ||
         oldWidget.fetchTimeZoneOnSelection != widget.fetchTimeZoneOnSelection ||
@@ -549,8 +696,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     if (_suggestionPointerDown || _selectionInProgress) {
       return;
     }
-    final hadActiveSession =
-        _searchUiVisible || _loading || _suggestions.isNotEmpty;
+    final hadActiveSession = _hasActiveSession;
     _closeSearchUi();
     if (hadActiveSession) {
       _controller.resetSession();
@@ -586,12 +732,16 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     _debounce?.cancel();
     final input = value.trim();
     if (input.isEmpty) {
-      final hadActiveSession =
-          _searchUiVisible || _loading || _suggestions.isNotEmpty;
+      final hadActiveSession = _hasActiveSession;
       _closeSearchUi();
       if (hadActiveSession) {
         _controller.resetSession();
       }
+      return;
+    }
+    if (input.characters.length < widget.minInputLength) {
+      // Still the same search, so the session carries on.
+      _closeSearchUi();
       return;
     }
     setState(() {
@@ -603,7 +753,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       _highlightedSuggestionIndex = -1;
     });
     final generation = ++_searchGeneration;
-    _debounce = Timer(_controller.debounceDuration, () {
+    _debounce = Timer(_debounceDuration, () {
       unawaited(_search(input, generation));
     });
   }
@@ -677,8 +827,10 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
         includedRegionCodes: widget.includedRegionCodes,
         includePureServiceAreaBusinesses:
             widget.includePureServiceAreaBusinesses,
+        includeFutureOpeningBusinesses: widget.includeFutureOpeningBusinesses,
         includeQueryPredictions: widget.includeQueryPredictions,
       );
+      _searchedSessionToken = request.sessionToken;
       final suggestions = widget.includeQueryPredictions
           ? await _client.autocompleteSuggestions(
               request,
@@ -809,7 +961,9 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       sessionToken: sessionToken,
     );
     controller.setSelection(initialSelection);
-    controller.focusNode.unfocus();
+    if (widget.unfocusOnSelection) {
+      controller.focusNode.unfocus();
+    }
     try {
       if (!_shouldResolvePlaceOnSelection) {
         if (_isActiveSelection(generation, client, controller)) {
@@ -963,6 +1117,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       includedPrimaryTypes: widget.includedPrimaryTypes,
       includedRegionCodes: widget.includedRegionCodes,
       includePureServiceAreaBusinesses: widget.includePureServiceAreaBusinesses,
+      includeFutureOpeningBusinesses: widget.includeFutureOpeningBusinesses,
       fetchPlaceDetailsOnSelection: widget.fetchPlaceDetailsOnSelection,
       fetchTimeZoneOnSelection: widget.fetchTimeZoneOnSelection,
       selectionFields: widget.selectionFields,
@@ -971,9 +1126,29 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       selectionTimeZoneAt: widget.selectionTimeZoneAt,
       selectionTimeZoneLanguageCode: widget.selectionTimeZoneLanguageCode,
       maxSuggestions: widget.maxSuggestions,
+      minInputLength: widget.minInputLength,
+      // The overlay gets its own controller, so pass the effective wait.
+      debounceDuration: _debounceDuration,
       enabled: widget.enabled,
       showPoweredByGoogle: widget.showPoweredByGoogle,
       includeQueryPredictions: widget.includeQueryPredictions,
+      keyboardType: widget.keyboardType,
+      textInputAction: widget.textInputAction,
+      textCapitalization: widget.textCapitalization,
+      style: widget.style,
+      textAlign: widget.textAlign,
+      textDirection: widget.textDirection,
+      autocorrect: widget.autocorrect,
+      enableSuggestions: widget.enableSuggestions,
+      enableIMEPersonalizedLearning: widget.enableIMEPersonalizedLearning,
+      inputFormatters: widget.inputFormatters,
+      maxLength: widget.maxLength,
+      maxLengthEnforcement: widget.maxLengthEnforcement,
+      autofillHints: widget.autofillHints,
+      keyboardAppearance: widget.keyboardAppearance,
+      scrollPadding: widget.scrollPadding,
+      onSubmitted: widget.onSubmitted,
+      onEditingComplete: widget.onEditingComplete,
       fieldBuilder: widget.fieldBuilder,
       suggestionItemBuilder: widget.suggestionItemBuilder,
       suggestionsViewBuilder: widget.suggestionsViewBuilder,
@@ -1015,8 +1190,10 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       enabled: widget.enabled,
       // Selection loading keeps the field enabled so focus and the
       // decoration survive. The progress indicator below and the
-      // disabled clear button carry the loading affordance instead.
-      readOnly: _isLauncherMode || _selectionLoading,
+      // disabled clear button carry the loading affordance instead. Not
+      // read-only when focus stays: that would close the keyboard.
+      readOnly:
+          _isLauncherMode || (_selectionLoading && widget.unfocusOnSelection),
       autofocus: widget.autofocus && !_isLauncherMode,
       selectionLoading: _selectionLoading,
       errorText: widget.decoration?.errorText,
@@ -1036,6 +1213,23 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
           onTap: field.onTap,
           decoration: _buildDecoration(inTopBar: fullscreen),
           contextMenuBuilder: PlacesDesignScope.contextMenuBuilder,
+          keyboardType: widget.keyboardType,
+          textInputAction: widget.textInputAction,
+          textCapitalization: widget.textCapitalization,
+          style: widget.style,
+          textAlign: widget.textAlign,
+          textDirection: widget.textDirection,
+          autocorrect: widget.autocorrect,
+          enableSuggestions: widget.enableSuggestions,
+          enableIMEPersonalizedLearning: widget.enableIMEPersonalizedLearning,
+          inputFormatters: widget.inputFormatters,
+          maxLength: widget.maxLength,
+          maxLengthEnforcement: widget.maxLengthEnforcement,
+          autofillHints: widget.autofillHints,
+          keyboardAppearance: widget.keyboardAppearance,
+          scrollPadding: widget.scrollPadding,
+          onSubmitted: widget.onSubmitted,
+          onEditingComplete: widget.onEditingComplete,
         );
     // A custom field shows selection loading itself.
     final progress = _selectionLoading && customField == null
@@ -1118,7 +1312,8 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
 
   // Positions the inline suggestions the way RawAutocomplete positions its
   // options: inside the part of the overlay that the keyboard and system UI
-  // leave visible, on whichever side of the field has more room.
+  // leave visible, on the requested side of the field or the one with more
+  // room.
   Widget _buildAnchoredSurface(
     BuildContext context,
     OverlayChildLayoutInfo info,
@@ -1139,7 +1334,11 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     );
     final spaceAbove = -visibleInField.top - _anchoredGap;
     final spaceBelow = visibleInField.bottom - fieldSize.height - _anchoredGap;
-    final opensUp = spaceAbove > spaceBelow;
+    final opensUp = switch (widget.suggestionsViewOpenDirection) {
+      OptionsViewOpenDirection.up => true,
+      OptionsViewOpenDirection.down => false,
+      OptionsViewOpenDirection.mostSpace => spaceAbove > spaceBelow,
+    };
     // Never smaller than one row; if the field is that cramped, the
     // suggestions overlap it rather than leave the screen.
     final height = math.max(
