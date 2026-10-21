@@ -33,20 +33,18 @@ class PlacesDesignScope extends StatelessWidget {
       Localizations.of<MaterialLocalizations>(context, MaterialLocalizations) !=
       null;
 
-  /// The scope's [TextField.contextMenuBuilder]: the long-press menu is built
-  /// in the root overlay, outside the field's scope, so it needs its own.
-  static Widget contextMenuBuilder(
+  /// The default long-press menu, the one [TextField] builds by default. The
+  /// field wraps whichever menu it builds in its own scope, since the menu is
+  /// built in the root overlay, outside the field's.
+  static Widget defaultContextMenuBuilder(
     BuildContext context,
     EditableTextState editableTextState,
   ) {
-    // Same choice TextField makes by default.
-    return PlacesDesignScope(
-      child: SystemContextMenu.isSupportedByField(editableTextState)
-          ? SystemContextMenu.editableText(editableTextState: editableTextState)
-          : AdaptiveTextSelectionToolbar.editableText(
-              editableTextState: editableTextState,
-            ),
-    );
+    return SystemContextMenu.isSupportedByField(editableTextState)
+        ? SystemContextMenu.editableText(editableTextState: editableTextState)
+        : AdaptiveTextSelectionToolbar.editableText(
+            editableTextState: editableTextState,
+          );
   }
 
   @override

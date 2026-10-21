@@ -1,12 +1,13 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../models/place_models.dart';
 import '../places_client.dart';
 import 'places_autocomplete_builders.dart';
-import 'places_autocomplete_controller.dart';
 import 'places_autocomplete_field.dart';
 import 'places_design_scope.dart';
 import 'places_strings.dart';
@@ -32,6 +33,9 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   /// Creates a standalone autocomplete overlay.
   ///
   /// Exactly one of [client] and [apiKey] must be supplied.
+  ///
+  /// It takes the same `TextField` options as the field, passed to its search
+  /// field; see [PlacesAutocompleteField.new].
   const PlacesAutocompleteOverlay({
     super.key,
     this.client,
@@ -63,23 +67,63 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     this.enabled = true,
     this.showPoweredByGoogle = true,
     this.includeQueryPredictions = false,
-    this.keyboardType = TextInputType.streetAddress,
-    this.textInputAction,
-    this.textCapitalization = TextCapitalization.none,
-    this.style,
-    this.textAlign = TextAlign.start,
-    this.textDirection,
-    this.autocorrect,
-    this.enableSuggestions = true,
-    this.enableIMEPersonalizedLearning = true,
-    this.inputFormatters,
-    this.maxLength,
-    this.maxLengthEnforcement,
-    this.autofillHints = const <String>[],
-    this.keyboardAppearance,
-    this.scrollPadding = const EdgeInsets.all(20),
-    this.onSubmitted,
-    this.onEditingComplete,
+    this._keyboardType = TextInputType.streetAddress,
+    this._textInputAction,
+    this._textCapitalization = TextCapitalization.none,
+    this._style,
+    this._strutStyle,
+    this._textAlign = TextAlign.start,
+    this._textAlignVertical,
+    this._textDirection,
+    this._showCursor,
+    this._autocorrect,
+    this._smartDashesType,
+    this._smartQuotesType,
+    this._enableSuggestions = true,
+    this._maxLength,
+    this._maxLengthEnforcement,
+    this._onChanged,
+    this._onEditingComplete,
+    this._onSubmitted,
+    this._onAppPrivateCommand,
+    this._inputFormatters,
+    this._ignorePointers,
+    this._cursorWidth = 2.0,
+    this._cursorHeight,
+    this._cursorRadius,
+    this._cursorOpacityAnimates,
+    this._cursorColor,
+    this._cursorErrorColor,
+    this._selectionHeightStyle,
+    this._selectionWidthStyle,
+    this._keyboardAppearance,
+    this._scrollPadding = const EdgeInsets.all(20),
+    this._dragStartBehavior = DragStartBehavior.start,
+    this._enableInteractiveSelection,
+    this._selectAllOnFocus,
+    this._selectionControls,
+    this._onTap,
+    this._onTapAlwaysCalled = false,
+    this._onTapOutside,
+    this._onTapUpOutside,
+    this._mouseCursor,
+    this._buildCounter,
+    this._scrollController,
+    this._scrollPhysics,
+    this._autofillHints = const <String>[],
+    this._contentInsertionConfiguration,
+    this._clipBehavior = Clip.hardEdge,
+    this._stylusHandwritingEnabled =
+        EditableText.defaultStylusHandwritingEnabled,
+    this._enableIMEPersonalizedLearning = true,
+    this._enableInlinePrediction,
+    this._contextMenuBuilder = PlacesDesignScope.defaultContextMenuBuilder,
+    this._spellCheckConfiguration,
+    this._magnifierConfiguration,
+    this._hintLocales,
+    this._groupId = EditableText,
+    this._undoController,
+    this._statesController,
     this.fieldBuilder,
     this.suggestionItemBuilder,
     this.suggestionsViewBuilder,
@@ -113,7 +157,8 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   /// See [PlacesAutocompleteField.apiKey].
   final String? apiKey;
 
-  /// Controller used by the overlay field.
+  /// The search's controller. The overlay's own parameters and client apply
+  /// while it uses it; see [PlacesAutocompleteField.controller].
   final PlacesAutocompleteController controller;
 
   /// Whether the overlay should be presented as a dialog or fullscreen route.
@@ -223,56 +268,63 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   /// Whether autocomplete should include query suggestions as well as places.
   final bool includeQueryPredictions;
 
-  /// See [PlacesAutocompleteField.keyboardType].
-  final TextInputType keyboardType;
-
-  /// See [PlacesAutocompleteField.textInputAction].
-  final TextInputAction? textInputAction;
-
-  /// See [PlacesAutocompleteField.textCapitalization].
-  final TextCapitalization textCapitalization;
-
-  /// See [PlacesAutocompleteField.style].
-  final TextStyle? style;
-
-  /// See [PlacesAutocompleteField.textAlign].
-  final TextAlign textAlign;
-
-  /// See [PlacesAutocompleteField.textDirection].
-  final TextDirection? textDirection;
-
-  /// See [PlacesAutocompleteField.autocorrect].
-  final bool? autocorrect;
-
-  /// See [PlacesAutocompleteField.enableSuggestions].
-  final bool enableSuggestions;
-
-  /// See [PlacesAutocompleteField.enableIMEPersonalizedLearning].
-  final bool enableIMEPersonalizedLearning;
-
-  /// See [PlacesAutocompleteField.inputFormatters].
-  final List<TextInputFormatter>? inputFormatters;
-
-  /// See [PlacesAutocompleteField.maxLength].
-  final int? maxLength;
-
-  /// See [PlacesAutocompleteField.maxLengthEnforcement].
-  final MaxLengthEnforcement? maxLengthEnforcement;
-
-  /// See [PlacesAutocompleteField.autofillHints].
-  final Iterable<String>? autofillHints;
-
-  /// See [PlacesAutocompleteField.keyboardAppearance].
-  final Brightness? keyboardAppearance;
-
-  /// See [PlacesAutocompleteField.scrollPadding].
-  final EdgeInsets scrollPadding;
-
-  /// See [PlacesAutocompleteField.onSubmitted].
-  final ValueChanged<String>? onSubmitted;
-
-  /// See [PlacesAutocompleteField.onEditingComplete].
-  final VoidCallback? onEditingComplete;
+  // The TextField options; see the constructor.
+  final TextInputType _keyboardType;
+  final TextInputAction? _textInputAction;
+  final TextCapitalization _textCapitalization;
+  final TextStyle? _style;
+  final StrutStyle? _strutStyle;
+  final TextAlign _textAlign;
+  final TextAlignVertical? _textAlignVertical;
+  final TextDirection? _textDirection;
+  final bool? _showCursor;
+  final bool? _autocorrect;
+  final SmartDashesType? _smartDashesType;
+  final SmartQuotesType? _smartQuotesType;
+  final bool _enableSuggestions;
+  final int? _maxLength;
+  final MaxLengthEnforcement? _maxLengthEnforcement;
+  final ValueChanged<String>? _onChanged;
+  final VoidCallback? _onEditingComplete;
+  final ValueChanged<String>? _onSubmitted;
+  final AppPrivateCommandCallback? _onAppPrivateCommand;
+  final List<TextInputFormatter>? _inputFormatters;
+  final bool? _ignorePointers;
+  final double _cursorWidth;
+  final double? _cursorHeight;
+  final Radius? _cursorRadius;
+  final bool? _cursorOpacityAnimates;
+  final Color? _cursorColor;
+  final Color? _cursorErrorColor;
+  final ui.BoxHeightStyle? _selectionHeightStyle;
+  final ui.BoxWidthStyle? _selectionWidthStyle;
+  final Brightness? _keyboardAppearance;
+  final EdgeInsets _scrollPadding;
+  final DragStartBehavior _dragStartBehavior;
+  final bool? _enableInteractiveSelection;
+  final bool? _selectAllOnFocus;
+  final TextSelectionControls? _selectionControls;
+  final GestureTapCallback? _onTap;
+  final bool _onTapAlwaysCalled;
+  final TapRegionCallback? _onTapOutside;
+  final TapRegionUpCallback? _onTapUpOutside;
+  final MouseCursor? _mouseCursor;
+  final InputCounterWidgetBuilder? _buildCounter;
+  final ScrollController? _scrollController;
+  final ScrollPhysics? _scrollPhysics;
+  final Iterable<String>? _autofillHints;
+  final ContentInsertionConfiguration? _contentInsertionConfiguration;
+  final Clip _clipBehavior;
+  final bool _stylusHandwritingEnabled;
+  final bool _enableIMEPersonalizedLearning;
+  final bool? _enableInlinePrediction;
+  final EditableTextContextMenuBuilder? _contextMenuBuilder;
+  final SpellCheckConfiguration? _spellCheckConfiguration;
+  final TextMagnifierConfiguration? _magnifierConfiguration;
+  final List<Locale>? _hintLocales;
+  final Object _groupId;
+  final UndoHistoryController? _undoController;
+  final WidgetStatesController? _statesController;
 
   /// Builds the search field. See [PlacesAutocompleteField.fieldBuilder].
   final PlacesFieldBuilder? fieldBuilder;
@@ -320,6 +372,9 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   /// Pass exactly one of [client] and [apiKey]. Given a key, the overlay
   /// creates its own client and closes it once the overlay has closed.
   ///
+  /// It takes the same `TextField` options as the field, passed to the search
+  /// field; see [PlacesAutocompleteField.new].
+  ///
   /// If [controller] is omitted, the overlay creates and disposes an internal
   /// controller. Use [initialText] to seed the overlay input when launching
   /// from an existing field value.
@@ -363,19 +418,60 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     TextInputAction? textInputAction,
     TextCapitalization textCapitalization = TextCapitalization.none,
     TextStyle? style,
+    StrutStyle? strutStyle,
     TextAlign textAlign = TextAlign.start,
+    TextAlignVertical? textAlignVertical,
     TextDirection? textDirection,
+    bool? showCursor,
     bool? autocorrect,
+    SmartDashesType? smartDashesType,
+    SmartQuotesType? smartQuotesType,
     bool enableSuggestions = true,
-    bool enableIMEPersonalizedLearning = true,
-    List<TextInputFormatter>? inputFormatters,
     int? maxLength,
     MaxLengthEnforcement? maxLengthEnforcement,
-    Iterable<String>? autofillHints = const <String>[],
+    ValueChanged<String>? onChanged,
+    VoidCallback? onEditingComplete,
+    ValueChanged<String>? onSubmitted,
+    AppPrivateCommandCallback? onAppPrivateCommand,
+    List<TextInputFormatter>? inputFormatters,
+    bool? ignorePointers,
+    double cursorWidth = 2.0,
+    double? cursorHeight,
+    Radius? cursorRadius,
+    bool? cursorOpacityAnimates,
+    Color? cursorColor,
+    Color? cursorErrorColor,
+    ui.BoxHeightStyle? selectionHeightStyle,
+    ui.BoxWidthStyle? selectionWidthStyle,
     Brightness? keyboardAppearance,
     EdgeInsets scrollPadding = const EdgeInsets.all(20),
-    ValueChanged<String>? onSubmitted,
-    VoidCallback? onEditingComplete,
+    DragStartBehavior dragStartBehavior = DragStartBehavior.start,
+    bool? enableInteractiveSelection,
+    bool? selectAllOnFocus,
+    TextSelectionControls? selectionControls,
+    GestureTapCallback? onTap,
+    bool onTapAlwaysCalled = false,
+    TapRegionCallback? onTapOutside,
+    TapRegionUpCallback? onTapUpOutside,
+    MouseCursor? mouseCursor,
+    InputCounterWidgetBuilder? buildCounter,
+    ScrollController? scrollController,
+    ScrollPhysics? scrollPhysics,
+    Iterable<String>? autofillHints = const <String>[],
+    ContentInsertionConfiguration? contentInsertionConfiguration,
+    Clip clipBehavior = Clip.hardEdge,
+    bool stylusHandwritingEnabled =
+        EditableText.defaultStylusHandwritingEnabled,
+    bool enableIMEPersonalizedLearning = true,
+    bool? enableInlinePrediction,
+    EditableTextContextMenuBuilder? contextMenuBuilder =
+        PlacesDesignScope.defaultContextMenuBuilder,
+    SpellCheckConfiguration? spellCheckConfiguration,
+    TextMagnifierConfiguration? magnifierConfiguration,
+    List<Locale>? hintLocales,
+    Object groupId = EditableText,
+    UndoHistoryController? undoController,
+    WidgetStatesController? statesController,
     PlacesFieldBuilder? fieldBuilder,
     PlacesSuggestionItemBuilder? suggestionItemBuilder,
     PlacesSuggestionsViewBuilder? suggestionsViewBuilder,
@@ -437,19 +533,58 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       textInputAction: textInputAction,
       textCapitalization: textCapitalization,
       style: style,
+      strutStyle: strutStyle,
       textAlign: textAlign,
+      textAlignVertical: textAlignVertical,
       textDirection: textDirection,
+      showCursor: showCursor,
       autocorrect: autocorrect,
+      smartDashesType: smartDashesType,
+      smartQuotesType: smartQuotesType,
       enableSuggestions: enableSuggestions,
-      enableIMEPersonalizedLearning: enableIMEPersonalizedLearning,
-      inputFormatters: inputFormatters,
       maxLength: maxLength,
       maxLengthEnforcement: maxLengthEnforcement,
-      autofillHints: autofillHints,
+      onChanged: onChanged,
+      onEditingComplete: onEditingComplete,
+      onSubmitted: onSubmitted,
+      onAppPrivateCommand: onAppPrivateCommand,
+      inputFormatters: inputFormatters,
+      ignorePointers: ignorePointers,
+      cursorWidth: cursorWidth,
+      cursorHeight: cursorHeight,
+      cursorRadius: cursorRadius,
+      cursorOpacityAnimates: cursorOpacityAnimates,
+      cursorColor: cursorColor,
+      cursorErrorColor: cursorErrorColor,
+      selectionHeightStyle: selectionHeightStyle,
+      selectionWidthStyle: selectionWidthStyle,
       keyboardAppearance: keyboardAppearance,
       scrollPadding: scrollPadding,
-      onSubmitted: onSubmitted,
-      onEditingComplete: onEditingComplete,
+      dragStartBehavior: dragStartBehavior,
+      enableInteractiveSelection: enableInteractiveSelection,
+      selectAllOnFocus: selectAllOnFocus,
+      selectionControls: selectionControls,
+      onTap: onTap,
+      onTapAlwaysCalled: onTapAlwaysCalled,
+      onTapOutside: onTapOutside,
+      onTapUpOutside: onTapUpOutside,
+      mouseCursor: mouseCursor,
+      buildCounter: buildCounter,
+      scrollController: scrollController,
+      scrollPhysics: scrollPhysics,
+      autofillHints: autofillHints,
+      contentInsertionConfiguration: contentInsertionConfiguration,
+      clipBehavior: clipBehavior,
+      stylusHandwritingEnabled: stylusHandwritingEnabled,
+      enableIMEPersonalizedLearning: enableIMEPersonalizedLearning,
+      enableInlinePrediction: enableInlinePrediction,
+      contextMenuBuilder: contextMenuBuilder,
+      spellCheckConfiguration: spellCheckConfiguration,
+      magnifierConfiguration: magnifierConfiguration,
+      hintLocales: hintLocales,
+      groupId: groupId,
+      undoController: undoController,
+      statesController: statesController,
       fieldBuilder: fieldBuilder,
       suggestionItemBuilder: suggestionItemBuilder,
       suggestionsViewBuilder: suggestionsViewBuilder,
@@ -556,23 +691,62 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       enabled: enabled,
       showPoweredByGoogle: showPoweredByGoogle,
       includeQueryPredictions: includeQueryPredictions,
-      keyboardType: keyboardType,
-      textInputAction: textInputAction,
-      textCapitalization: textCapitalization,
-      style: style,
-      textAlign: textAlign,
-      textDirection: textDirection,
-      autocorrect: autocorrect,
-      enableSuggestions: enableSuggestions,
-      enableIMEPersonalizedLearning: enableIMEPersonalizedLearning,
-      inputFormatters: inputFormatters,
-      maxLength: maxLength,
-      maxLengthEnforcement: maxLengthEnforcement,
-      autofillHints: autofillHints,
-      keyboardAppearance: keyboardAppearance,
-      scrollPadding: scrollPadding,
-      onSubmitted: onSubmitted,
-      onEditingComplete: onEditingComplete,
+      keyboardType: _keyboardType,
+      textInputAction: _textInputAction,
+      textCapitalization: _textCapitalization,
+      style: _style,
+      strutStyle: _strutStyle,
+      textAlign: _textAlign,
+      textAlignVertical: _textAlignVertical,
+      textDirection: _textDirection,
+      showCursor: _showCursor,
+      autocorrect: _autocorrect,
+      smartDashesType: _smartDashesType,
+      smartQuotesType: _smartQuotesType,
+      enableSuggestions: _enableSuggestions,
+      maxLength: _maxLength,
+      maxLengthEnforcement: _maxLengthEnforcement,
+      onChanged: _onChanged,
+      onEditingComplete: _onEditingComplete,
+      onSubmitted: _onSubmitted,
+      onAppPrivateCommand: _onAppPrivateCommand,
+      inputFormatters: _inputFormatters,
+      ignorePointers: _ignorePointers,
+      cursorWidth: _cursorWidth,
+      cursorHeight: _cursorHeight,
+      cursorRadius: _cursorRadius,
+      cursorOpacityAnimates: _cursorOpacityAnimates,
+      cursorColor: _cursorColor,
+      cursorErrorColor: _cursorErrorColor,
+      selectionHeightStyle: _selectionHeightStyle,
+      selectionWidthStyle: _selectionWidthStyle,
+      keyboardAppearance: _keyboardAppearance,
+      scrollPadding: _scrollPadding,
+      dragStartBehavior: _dragStartBehavior,
+      enableInteractiveSelection: _enableInteractiveSelection,
+      selectAllOnFocus: _selectAllOnFocus,
+      selectionControls: _selectionControls,
+      onTap: _onTap,
+      onTapAlwaysCalled: _onTapAlwaysCalled,
+      onTapOutside: _onTapOutside,
+      onTapUpOutside: _onTapUpOutside,
+      mouseCursor: _mouseCursor,
+      buildCounter: _buildCounter,
+      scrollController: _scrollController,
+      scrollPhysics: _scrollPhysics,
+      autofillHints: _autofillHints,
+      contentInsertionConfiguration: _contentInsertionConfiguration,
+      clipBehavior: _clipBehavior,
+      stylusHandwritingEnabled: _stylusHandwritingEnabled,
+      enableIMEPersonalizedLearning: _enableIMEPersonalizedLearning,
+      enableInlinePrediction: _enableInlinePrediction,
+      contextMenuBuilder: _contextMenuBuilder,
+      spellCheckConfiguration: _spellCheckConfiguration,
+      magnifierConfiguration: _magnifierConfiguration,
+      hintLocales: _hintLocales,
+      groupId: _groupId,
+      undoController: _undoController,
+      statesController: _statesController,
       fieldBuilder: fieldBuilder,
       suggestionItemBuilder: suggestionItemBuilder,
       suggestionsViewBuilder: suggestionsViewBuilder,

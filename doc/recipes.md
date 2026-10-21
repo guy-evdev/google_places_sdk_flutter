@@ -542,9 +542,111 @@ final cafes = await client.searchNearby(
 
 ## Build your own autocomplete UI
 
-To render suggestions yourself and still be billed per session, reuse one
-session token for the whole search and pass it to Place Details. End an
-abandoned session explicitly:
+`PlacesAutocompleteController` runs the search for your own UI: you draw the field and the
+suggestions, and it sends the requests, waits between keystrokes, and keeps every search and the
+pick in one billing session.
+
+```dart
+class PlaceSearch extends StatefulWidget {
+  const PlaceSearch({super.key});
+
+  @override
+  State<PlaceSearch> createState() => _PlaceSearchState();
+}
+
+class _PlaceSearchState extends State<PlaceSearch> {
+  final controller = PlacesAutocompleteController(apiKey: 'YOUR_API_KEY');
+
+  @override
+  void dispose() {
+    controller.dispose(); // Ends the session and closes the client.
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        TextField(
+          controller: controller.textController,
+          focusNode: controller.focusNode,
+          onChanged: (_) => controller.search(),
+        ),
+        ListenableBuilder(
+          listenable: controller,
+          builder: (context, _) => switch (controller.status) {
+            PlacesSuggestionsStatus.loading => const LinearProgressIndicator(),
+            PlacesSuggestionsStatus.error => TextButton(
+              onPressed: controller.retry,
+              child: const Text('Try again'),
+            ),
+            _ => Column(
+              children: [
+                for (final suggestion in controller.suggestions)
+                  ListTile(
+                    title: Text(suggestion.displayText),
+                    onTap: () async {
+                      final selection = await controller.select(suggestion);
+                      debugPrint('${selection?.place?.location}');
+                    },
+                  ),
+              ],
+            ),
+          },
+        ),
+      ],
+    );
+  }
+}
+```
+
+- `search()` follows the widget's rules: it waits `debounceDuration` (300 ms), sends nothing for
+  text shorter than `minInputLength`, and replaces an earlier search.
+- `select()` loads the place's coordinates and address — `PlaceFieldPresets.address`, as the
+  widgets do — and ends the session with that request. It completes with the error if a request
+  fails.
+- When the user leaves your search without picking, call `controller.resetSession()` to end the
+  session; `dispose()` does it too.
+- Search and selection settings go in `options`, under the widgets' names:
+  `PlacesAutocompleteController(apiKey: key, options: PlacesAutocompleteOptions(regionCode: 'us'))`.
+- Google's policies require its attribution where you show its suggestions without a Google map;
+  see [Places policies](https://developers.google.com/maps/documentation/places/web-service/policies).
+
+Pass `client:` instead of `apiKey:` to share a client; the controller never closes one it was
+given. Pass your own `textController` or `focusNode` to share them with the rest of your UI.
+
+### Search again with a picked query suggestion
+
+With `includeQueryPredictions: true` the suggestions include phrases such as "coffee near me".
+Picking one fills the field and ends the session. To search for it straight away, pass a
+controller and call `search()`:
+
+```dart
+final controller = PlacesAutocompleteController();
+
+PlacesAutocompleteField(
+  apiKey: apiKey,
+  controller: controller,
+  includeQueryPredictions: true,
+  onQuerySelection: (_) => controller.search(),
+)
+```
+
+It works the same with `PlacesAutocompleteFormField`, and with `PlacesAutocompleteOverlay.show()`
+given `controller:`. A field in dialog or fullscreen mode opens its search with a controller of
+its own, so for those, open the search with `show()` instead.
+
+### A controller passed to a widget
+
+While a widget uses a controller, the widget's own search parameters and client apply, not the
+controller's `options` and client, and the widget's `debounceDuration`, when set, replaces the
+controller's. The controller's own apply again once no widget uses it. One widget uses a
+controller at a time.
+
+### Without the controller
+
+`PlacesClient` takes the session token directly. Reuse one token for the whole search, pass it to
+Place Details, and end an abandoned session explicitly:
 
 ```dart
 final sessionToken = AutocompleteSessionToken.generate();
@@ -800,8 +902,9 @@ HTTP client injection is unsupported on web.
 The same names work on `PlacesAutocompleteField`, `PlacesAutocompleteFormField`,
 and `PlacesAutocompleteOverlay.show()`, except the two marked inline only. The
 [API reference](api_reference.md#widget-defaults) lists every option, including
-the `TextField` options — `keyboardType`, `textInputAction`, `inputFormatters`,
-`onSubmitted`, and more — which are passed to the default field.
+`TextField`'s own options — every one a one-line search field can use, from `keyboardType`
+and `inputFormatters` to the cursor and spell-check options — which are passed to the default
+field.
 
 | Option | Default | Use when |
 | --- | --- | --- |

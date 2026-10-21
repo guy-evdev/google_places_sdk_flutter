@@ -1,11 +1,14 @@
+import 'dart:ui' as ui;
+
+import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../models/place_models.dart';
 import '../places_client.dart';
 import 'places_autocomplete_builders.dart';
-import 'places_autocomplete_controller.dart';
 import 'places_autocomplete_field.dart';
+import 'places_design_scope.dart';
 import 'places_strings.dart';
 
 /// FormField wrapper around [PlacesAutocompleteField].
@@ -18,6 +21,10 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
   ///
   /// Exactly one of `client` and `apiKey` must be supplied; see
   /// [PlacesAutocompleteField.client] and [PlacesAutocompleteField.apiKey].
+  ///
+  /// It takes the same `TextField` options as the field; see
+  /// [PlacesAutocompleteField.new]. `restorationId` is the form field's own,
+  /// as for any [FormField].
   PlacesAutocompleteFormField({
     super.key,
     PlacesClient? client,
@@ -60,19 +67,60 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
     TextInputAction? textInputAction,
     TextCapitalization textCapitalization = TextCapitalization.none,
     TextStyle? style,
+    StrutStyle? strutStyle,
     TextAlign textAlign = TextAlign.start,
+    TextAlignVertical? textAlignVertical,
     TextDirection? textDirection,
+    bool? showCursor,
     bool? autocorrect,
+    SmartDashesType? smartDashesType,
+    SmartQuotesType? smartQuotesType,
     bool enableSuggestions = true,
-    bool enableIMEPersonalizedLearning = true,
-    List<TextInputFormatter>? inputFormatters,
     int? maxLength,
     MaxLengthEnforcement? maxLengthEnforcement,
-    Iterable<String>? autofillHints = const <String>[],
+    ValueChanged<String>? onChanged,
+    VoidCallback? onEditingComplete,
+    ValueChanged<String>? onSubmitted,
+    AppPrivateCommandCallback? onAppPrivateCommand,
+    List<TextInputFormatter>? inputFormatters,
+    bool? ignorePointers,
+    double cursorWidth = 2.0,
+    double? cursorHeight,
+    Radius? cursorRadius,
+    bool? cursorOpacityAnimates,
+    Color? cursorColor,
+    Color? cursorErrorColor,
+    ui.BoxHeightStyle? selectionHeightStyle,
+    ui.BoxWidthStyle? selectionWidthStyle,
     Brightness? keyboardAppearance,
     EdgeInsets scrollPadding = const EdgeInsets.all(20),
-    ValueChanged<String>? onSubmitted,
-    VoidCallback? onEditingComplete,
+    DragStartBehavior dragStartBehavior = DragStartBehavior.start,
+    bool? enableInteractiveSelection,
+    bool? selectAllOnFocus,
+    TextSelectionControls? selectionControls,
+    GestureTapCallback? onTap,
+    bool onTapAlwaysCalled = false,
+    TapRegionCallback? onTapOutside,
+    TapRegionUpCallback? onTapUpOutside,
+    MouseCursor? mouseCursor,
+    InputCounterWidgetBuilder? buildCounter,
+    ScrollController? scrollController,
+    ScrollPhysics? scrollPhysics,
+    Iterable<String>? autofillHints = const <String>[],
+    ContentInsertionConfiguration? contentInsertionConfiguration,
+    Clip clipBehavior = Clip.hardEdge,
+    bool stylusHandwritingEnabled =
+        EditableText.defaultStylusHandwritingEnabled,
+    bool enableIMEPersonalizedLearning = true,
+    bool? enableInlinePrediction,
+    EditableTextContextMenuBuilder? contextMenuBuilder =
+        PlacesDesignScope.defaultContextMenuBuilder,
+    SpellCheckConfiguration? spellCheckConfiguration,
+    TextMagnifierConfiguration? magnifierConfiguration,
+    List<Locale>? hintLocales,
+    Object groupId = EditableText,
+    UndoHistoryController? undoController,
+    WidgetStatesController? statesController,
     PlacesFieldBuilder? fieldBuilder,
     PlacesSuggestionItemBuilder? suggestionItemBuilder,
     PlacesSuggestionsViewBuilder? suggestionsViewBuilder,
@@ -163,19 +211,58 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
                textInputAction: textInputAction,
                textCapitalization: textCapitalization,
                style: style,
+               strutStyle: strutStyle,
                textAlign: textAlign,
+               textAlignVertical: textAlignVertical,
                textDirection: textDirection,
+               showCursor: showCursor,
                autocorrect: autocorrect,
+               smartDashesType: smartDashesType,
+               smartQuotesType: smartQuotesType,
                enableSuggestions: enableSuggestions,
-               enableIMEPersonalizedLearning: enableIMEPersonalizedLearning,
-               inputFormatters: inputFormatters,
                maxLength: maxLength,
                maxLengthEnforcement: maxLengthEnforcement,
-               autofillHints: autofillHints,
+               onChanged: onChanged,
+               onEditingComplete: onEditingComplete,
+               onSubmitted: onSubmitted,
+               onAppPrivateCommand: onAppPrivateCommand,
+               inputFormatters: inputFormatters,
+               ignorePointers: ignorePointers,
+               cursorWidth: cursorWidth,
+               cursorHeight: cursorHeight,
+               cursorRadius: cursorRadius,
+               cursorOpacityAnimates: cursorOpacityAnimates,
+               cursorColor: cursorColor,
+               cursorErrorColor: cursorErrorColor,
+               selectionHeightStyle: selectionHeightStyle,
+               selectionWidthStyle: selectionWidthStyle,
                keyboardAppearance: keyboardAppearance,
                scrollPadding: scrollPadding,
-               onSubmitted: onSubmitted,
-               onEditingComplete: onEditingComplete,
+               dragStartBehavior: dragStartBehavior,
+               enableInteractiveSelection: enableInteractiveSelection,
+               selectAllOnFocus: selectAllOnFocus,
+               selectionControls: selectionControls,
+               onTap: onTap,
+               onTapAlwaysCalled: onTapAlwaysCalled,
+               onTapOutside: onTapOutside,
+               onTapUpOutside: onTapUpOutside,
+               mouseCursor: mouseCursor,
+               buildCounter: buildCounter,
+               scrollController: scrollController,
+               scrollPhysics: scrollPhysics,
+               autofillHints: autofillHints,
+               contentInsertionConfiguration: contentInsertionConfiguration,
+               clipBehavior: clipBehavior,
+               stylusHandwritingEnabled: stylusHandwritingEnabled,
+               enableIMEPersonalizedLearning: enableIMEPersonalizedLearning,
+               enableInlinePrediction: enableInlinePrediction,
+               contextMenuBuilder: contextMenuBuilder,
+               spellCheckConfiguration: spellCheckConfiguration,
+               magnifierConfiguration: magnifierConfiguration,
+               hintLocales: hintLocales,
+               groupId: groupId,
+               undoController: undoController,
+               statesController: statesController,
                fieldBuilder: fieldBuilder,
                suggestionItemBuilder: suggestionItemBuilder,
                suggestionsViewBuilder: suggestionsViewBuilder,
@@ -229,8 +316,10 @@ class _ControllerBindingState extends State<_ControllerBinding> {
       _scheduleRestoreSelection(_controller, widget.value);
       return;
     }
-    if (!identical(oldWidget.value, widget.value) ||
-        !identical(_controller.selectedSelection, widget.value)) {
+    // Only a value the controller does not already hold: when the user types
+    // over a pick, the controller clears its selection and the form follows,
+    // and restoring that null would wipe what they typed.
+    if (!identical(_controller.selectedSelection, widget.value)) {
       _scheduleRestoreSelection(_controller, widget.value);
     }
   }

@@ -76,28 +76,13 @@ unchanged; only the library it is imported from moved. See
 | `suggestionsViewBuilder` | `PlacesSuggestionsViewBuilder?` | `null` | Builds the suggestion area in each state: loading, results, empty, error. |
 | `suggestionBuilder` | `Widget Function(BuildContext, PlaceSuggestion)?` | `null` | **Deprecated in `0.7.0`, removed in `1.0.0`** — use `suggestionItemBuilder`. Builds only the title of a place row. Cannot be combined with `suggestionItemBuilder`. |
 
-Options passed to the default field's `TextField` of the same name. They reach the dialog and
-fullscreen search too. With a `fieldBuilder`, set them on your own field instead.
+The widgets also take `TextField`'s own options, under the same names and with the same
+defaults, and pass them to the default field — in the dialog and fullscreen search too. With a
+`fieldBuilder`, set them on your own field instead.
 
-| Field | Type | Default |
+| Field | Default | Notes |
 | --- | --- | --- |
-| `keyboardType` | `TextInputType` | `TextInputType.streetAddress` — a keyboard suited to addresses on Android, and a capitalize-words hint to Linux input methods; the usual text keyboard on iOS, the web, macOS, and Windows |
-| `textInputAction` | `TextInputAction?` | `null` |
-| `textCapitalization` | `TextCapitalization` | `TextCapitalization.none` |
-| `style` | `TextStyle?` | `null` |
-| `textAlign` | `TextAlign` | `TextAlign.start` |
-| `textDirection` | `TextDirection?` | `null` |
-| `autocorrect` | `bool?` | `null` |
-| `enableSuggestions` | `bool` | `true` |
-| `enableIMEPersonalizedLearning` | `bool` | `true` |
-| `inputFormatters` | `List<TextInputFormatter>?` | `null` |
-| `maxLength` | `int?` | `null` |
-| `maxLengthEnforcement` | `MaxLengthEnforcement?` | `null` |
-| `autofillHints` | `Iterable<String>?` | `const <String>[]` — autofill stays on with no hints; `null` turns it off |
-| `keyboardAppearance` | `Brightness?` | `null` — honoured on iOS only |
-| `scrollPadding` | `EdgeInsets` | `EdgeInsets.all(20)` |
-| `onSubmitted` | `ValueChanged<String>?` | `null` |
-| `onEditingComplete` | `VoidCallback?` | `null` |
+| Every `TextField` option except `controller`, `focusNode`, `decoration`, `enabled`, `autofocus` (the widget's own), `readOnly`, `canRequestFocus`, `obscureText`, `obscuringCharacter`, `maxLines`, `minLines`, `expands`, `restorationId`, and the deprecated `toolbarOptions` and `scribbleEnabled` (not possible in a one-line search field) | `TextField`'s, except `keyboardType`: `TextInputType.streetAddress` — a keyboard suited to addresses on Android, and a capitalize-words hint to Linux input methods; the usual text keyboard on iOS, the web, macOS, and Windows | `onChanged`, `onTap`, `onTapOutside`, and `onTapUpOutside` are called as well as the widget's own handling. `contextMenuBuilder`'s menu also works in apps on `package:flutter/material.dart`; `null` turns it off. `scrollController`, `undoController`, and `statesController` attach to the field the user types in — in dialog and fullscreen modes the search field, not the launcher. `groupId` also covers the suggestions. `autofillHints: null` turns autofill off. `PlacesAutocompleteFormField`'s `restorationId` is the form field's own. |
 
 Additional `PlacesAutocompleteFormField` defaults:
 
@@ -112,12 +97,25 @@ Additional `PlacesAutocompleteFormField` defaults:
 | `initialValue` | `PlaceSelection?` | `null` | Initial form value. `PlaceSelection.fromPlace(place)` builds one from a place fetched by its saved ID; see the [recipe](recipes.md#start-from-a-saved-place). |
 | `autovalidateMode` | `AutovalidateMode` | `AutovalidateMode.disabled` | Standard form autovalidation mode. |
 
-`PlacesAutocompleteController` options, for a controller passed as `controller:`:
+`PlacesAutocompleteController` — passed to a widget as `controller:`, or used on its own to run
+the search for your own UI (see [the recipe](recipes.md#build-your-own-autocomplete-ui)):
 
 | Field | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `initialText` | `String` | `''` | Text the field starts with. |
-| `debounceDuration` | `Duration` | 300 milliseconds | How long typing must pause before an autocomplete request is sent. A longer pause sends fewer billed requests. The widget's own `debounceDuration`, when set, takes precedence. |
+| `initialText` | `String` | `''` | Text the field starts with. Not with `textController`. |
+| `debounceDuration` | `Duration` | 300 milliseconds | How long typing must pause before an autocomplete request is sent. A longer pause sends fewer billed requests. A widget's own `debounceDuration`, when set, takes precedence. |
+| `textController` | `TextEditingController?` | `null` | Your own; the controller creates one when omitted, and disposes only that one. |
+| `focusNode` | `FocusNode?` | `null` | Your own; the controller creates one when omitted, and disposes only that one. |
+| `apiKey` | `String?` | `null` | For use without a widget: the controller creates a client and closes it in `dispose()`. |
+| `client` | `PlacesClient?` | `null` | For use without a widget: a client you own, never closed by the controller. Not with `apiKey`. |
+| `options` | `PlacesAutocompleteOptions` | `const PlacesAutocompleteOptions()` | What it searches for and what a pick returns, used without a widget. The fields have the widgets' names and defaults: `languageCode` through `selectionTimeZoneLanguageCode`, `maxSuggestions` 5, `minInputLength` 1, `fetchPlaceDetailsOnSelection` `true`, `selectionFields` `PlaceFieldPresets.address`. Changing what it searches for ends the session; `maxSuggestions`, `minInputLength`, and the selection settings apply from the next search or pick. |
+
+While a widget uses the controller, the widget's own parameters and client apply instead of
+`options` and `client`. The controller's state — `suggestions`, `status`, `error`,
+`highlightIndex`, `selectionLoading`, `selectedSelection`, `sessionToken` — is read-only, and it
+notifies its listeners when any of it changes. `search()`, `retry()`, `select()`,
+`moveHighlight()`, `clear()`, and `resetSession()` drive it; `select()`, `clear()`,
+`resetSession()`, and `dispose()` each end the billing session.
 
 `PlacesAutocompleteOverlay.show()` accepts the same autocomplete options as the
 field widgets, including `decoration`, `origin`, `enabled`,
@@ -442,6 +440,16 @@ bill as:
 | `minimal` | Pro | Pro | Pro | `TextSearchRequest`, `NearbySearchRequest` |
 | `recommended` | Enterprise | Enterprise | Enterprise | — |
 | `rich` | Enterprise + Atmosphere | Enterprise + Atmosphere | Enterprise + Atmosphere | — |
+| `all` | Enterprise + Atmosphere | Enterprise + Atmosphere | Enterprise + Atmosphere | — |
+
+`all` is every `PlaceField`, built from `PlaceField.values`: it is for exploring the data and for
+admin tools, not for production autocomplete. It always bills at the highest tier, returns the
+largest responses, and grows between package versions as fields are added, so a request that uses
+it can bill differently after an upgrade. Six of its fields — `name`, `googleMapsTypeLabel`,
+`movedPlace`, `movedPlaceId`, `entrances` and `navigationPoints` — are not on the Maps JavaScript
+`Place` class, so on web a request that uses `all` takes the HTTP path, which
+`PlacesWebFallbackPolicy` must allow; a Place Details request on that path is not part of the
+autocomplete session. The field table below omits an `All` column: every row is in it.
 
 Text Search and Nearby Search bill address and location fields as Pro, and
 Nearby Search has no tier below Pro. When a Place Details request above
@@ -529,3 +537,5 @@ Atmosphere regardless of its fields; see
 | `PlaceField.pureServiceAreaBusiness` | `pureServiceAreaBusiness` | Pro | No | No | No | No |
 | `PlaceField.movedPlace` | `movedPlace` | Essentials (IDs Only) | No | No | No | No |
 | `PlaceField.movedPlaceId` | `movedPlaceId` | Essentials (IDs Only) | No | No | No | No |
+| `PlaceField.entrances` | `entrances` | Pro | No | No | No | No |
+| `PlaceField.navigationPoints` | `navigationPoints` | Pro | No | No | No | No |

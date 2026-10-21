@@ -68,15 +68,18 @@ Common options (same names on all surfaces): `languageCode`, `regionCode`, `orig
 `onClearField`, `enabled`, `showPoweredByGoogle`, `includeFutureOpeningBusinesses`,
 `minInputLength` (default 1; no billed request below it), `debounceDuration` (`null` uses the
 controller's, 300 ms), `autofocus` (field widgets only), `controller`
-(`PlacesAutocompleteController`: text, focus, session, selection, `debounceDuration`).
+(`PlacesAutocompleteController`: text, focus, session, selection, `debounceDuration`; a widget's
+parameters and client apply while it uses one).
 Inline field widgets only: `unfocusOnSelection` (default `true`), `suggestionsViewOpenDirection`
 (`OptionsViewOpenDirection.mostSpace` / `.down` / `.up`).
 
-`TextField` options, passed to the default field on every surface: `keyboardType` (default
-`TextInputType.streetAddress`), `textInputAction`, `textCapitalization`, `style`, `textAlign`,
-`textDirection`, `autocorrect`, `enableSuggestions`, `enableIMEPersonalizedLearning`,
-`inputFormatters`, `maxLength`, `maxLengthEnforcement`, `autofillHints`, `keyboardAppearance`,
-`scrollPadding`, `onSubmitted`, `onEditingComplete`.
+`TextField` options, under `TextField`'s names and defaults, passed to the default field on
+every surface: every `TextField` parameter except `controller`, `focusNode`, `decoration`,
+`enabled`, `autofocus` (the widget's own) and `readOnly`, `canRequestFocus`, `obscureText`,
+`obscuringCharacter`, `maxLines`, `minLines`, `expands`, `restorationId`, `toolbarOptions`,
+`scribbleEnabled`. `keyboardType` defaults to `TextInputType.streetAddress`. `onChanged`, `onTap`,
+`onTapOutside`, `onTapUpOutside` run alongside the widget's own handling; `scrollController`,
+`undoController`, `statesController` attach to the search field, not a launcher.
 
 Widget text: `strings: const PlacesStrings(searchHint: ..., loadingText: ..., noResultsText: ...,
 errorText: ..., retryText: ..., poweredByGoogleLabel: ..., overlayTitle: ..., closeLabel: ...,
@@ -120,6 +123,31 @@ Radius at most 50000 m. Shapes accepted: autocomplete (widgets, `autocomplete()`
 through Maps JavaScript (the web default), where `locationRestriction` must be a rectangle; `TextSearchRequest.locationRestriction` —
 rectangle only; `NearbySearchRequest.locationRestriction` — circle only, required.
 
+## Your own search UI
+
+`PlacesAutocompleteController` runs the search without a widget; you draw the field and rows.
+
+```dart
+final controller = PlacesAutocompleteController(
+  apiKey: 'YOUR_API_KEY', // or client: (never closed by the controller)
+  options: const PlacesAutocompleteOptions(regionCode: 'us'), // the widgets' names and defaults
+);
+TextField(
+  controller: controller.textController,
+  focusNode: controller.focusNode,
+  onChanged: (_) => controller.search(), // debounced, minInputLength applies
+);
+ListenableBuilder(
+  listenable: controller, // status, suggestions, error, highlightIndex, selectionLoading
+  builder: (context, _) => Column(children: [
+    for (final s in controller.suggestions)
+      ListTile(title: Text(s.displayText), onTap: () => controller.select(s)),
+  ]),
+);
+// select() fetches PlaceFieldPresets.address and ends the session; returns the PlaceSelection.
+// User left without picking: controller.resetSession(). dispose() ends the session too.
+```
+
 ## What a selection carries
 
 `PlaceSelection`: `placeId`, `displayText`, `suggestion` (`PlaceSuggestion`: `primaryText`,
@@ -150,6 +178,12 @@ at `selectionTimeZoneAt` (default now).
   other parsed getters are `null`; `.rich` adds `reviews` (Enterprise + Atmosphere). To add fields,
   spread `address` into a larger set.
   Google bills a request at its highest-tier field. Passing `fields:` overrides any default.
+- `PlaceFieldPresets.all` is every `PlaceField`, for exploring the data and admin tools only: it
+  always bills Enterprise + Atmosphere, grows between package versions, and takes the HTTP path on
+  web. Never use it for production autocomplete.
+- `PlaceField.entrances` and `navigationPoints` (Pro) are JSON views on `PlaceData`; not available
+  through the Maps JavaScript backend, so on web they fall back to HTTP (the fallback policy must
+  allow it).
 - `PlaceField.timeZone` and `utcOffsetMinutes` are Pro. `fetchTimeZoneOnSelection: true` instead
   calls the separately billed Time Zone API.
 - A details request above Essentials that ends an autocomplete session (the widgets' does) is billed
@@ -208,6 +242,12 @@ default theme there. A `decoration:` must still be `material_ui`'s `InputDecorat
   `locationBias` and `locationRestriction` fails validation.
 - Enabling the legacy "Places API" instead of "Places API (New)" — requests fail with
   `PERMISSION_DENIED`.
+- Setting `options` or `client` on a `PlacesAutocompleteController` passed to a widget — the
+  widget's own parameters and client apply while it uses the controller.
+- A custom UI on `PlacesAutocompleteController` that never calls `resetSession()` when the user
+  leaves without picking — that session is not ended until `dispose()`.
+- Assigning `controller.selectedSelection` — it is read-only since `0.7.0`; use `setSelection`,
+  `restoreSelection`, or `clearSelection`.
 
 ## Links
 

@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -9,10 +11,11 @@ import '../models/place_models.dart';
 import '../places_client.dart';
 import '../places_cancellation_token.dart';
 import 'places_autocomplete_builders.dart';
-import 'places_autocomplete_controller.dart';
 import 'places_autocomplete_overlay.dart';
 import 'places_design_scope.dart';
 import 'places_strings.dart';
+
+part 'places_autocomplete_controller.dart';
 
 /// Controls how [PlacesAutocompleteField] behaves.
 ///
@@ -54,6 +57,43 @@ class PlacesAutocompleteField extends StatefulWidget {
   /// Creates a Places autocomplete field or launcher.
   ///
   /// Exactly one of [client] and [apiKey] must be supplied.
+  ///
+  /// ## `TextField` options
+  ///
+  /// It also takes [TextField]'s own options, under their names and with
+  /// their defaults, and passes them to its text field — in dialog and
+  /// fullscreen modes to the search field too. That is every option except
+  /// the ones the widget provides itself ([controller] — which also holds the
+  /// `focusNode` — [decoration], [enabled], [autofocus]) and the ones a
+  /// one-line search field cannot
+  /// honour: `readOnly`, `canRequestFocus`, `obscureText`,
+  /// `obscuringCharacter`, `maxLines`, `minLines`, `expands`,
+  /// `restorationId`, and the deprecated `toolbarOptions` and
+  /// `scribbleEnabled`. They configure the package's field only; a
+  /// [fieldBuilder] sets them on its own. Where they differ from `TextField`:
+  ///
+  /// * `keyboardType` defaults to [TextInputType.streetAddress]: a keyboard
+  ///   suited to addresses on Android, and a hint to capitalize words on
+  ///   Linux. iOS, the web, macOS, and Windows show the usual text keyboard.
+  /// * `onChanged`, `onTap`, `onTapOutside`, and `onTapUpOutside` are called
+  ///   as well as the field's own handling, not instead of it: typing still
+  ///   searches, a launcher tap still opens the search, and a tap outside
+  ///   still does what `TextField` does by default. To keep focus on a tap
+  ///   outside, override [EditableTextTapOutsideIntent] with an [Actions]
+  ///   widget above the field.
+  /// * `contextMenuBuilder`'s menu also works in apps still on
+  ///   `package:flutter/material.dart`; `null` turns the menu off, as for
+  ///   `TextField`. Flutter's default menu is
+  ///   [AdaptiveTextSelectionToolbar.editableText].
+  /// * `scrollController`, `undoController`, and `statesController` attach to
+  ///   the field the user types in. In dialog and fullscreen modes that is
+  ///   the search field, never the read-only launcher.
+  /// * `groupId` also covers the suggestions, so tapping one does not count
+  ///   as a tap outside the field.
+  ///
+  /// As in any `TextField`, the keyboard's action button gives up focus by
+  /// default, which closes the suggestions; pass `onEditingComplete` to keep
+  /// them open. `autofillHints` of `null` turns autofill off for the field.
   const PlacesAutocompleteField({
     super.key,
     this.client,
@@ -91,23 +131,63 @@ class PlacesAutocompleteField extends StatefulWidget {
     this.showPoweredByGoogle = true,
     this.includeQueryPredictions = false,
     this.onQuerySelection,
-    this.keyboardType = TextInputType.streetAddress,
-    this.textInputAction,
-    this.textCapitalization = TextCapitalization.none,
-    this.style,
-    this.textAlign = TextAlign.start,
-    this.textDirection,
-    this.autocorrect,
-    this.enableSuggestions = true,
-    this.enableIMEPersonalizedLearning = true,
-    this.inputFormatters,
-    this.maxLength,
-    this.maxLengthEnforcement,
-    this.autofillHints = const <String>[],
-    this.keyboardAppearance,
-    this.scrollPadding = const EdgeInsets.all(20),
-    this.onSubmitted,
-    this.onEditingComplete,
+    this._keyboardType = TextInputType.streetAddress,
+    this._textInputAction,
+    this._textCapitalization = TextCapitalization.none,
+    this._style,
+    this._strutStyle,
+    this._textAlign = TextAlign.start,
+    this._textAlignVertical,
+    this._textDirection,
+    this._showCursor,
+    this._autocorrect,
+    this._smartDashesType,
+    this._smartQuotesType,
+    this._enableSuggestions = true,
+    this._maxLength,
+    this._maxLengthEnforcement,
+    this._onChanged,
+    this._onEditingComplete,
+    this._onSubmitted,
+    this._onAppPrivateCommand,
+    this._inputFormatters,
+    this._ignorePointers,
+    this._cursorWidth = 2.0,
+    this._cursorHeight,
+    this._cursorRadius,
+    this._cursorOpacityAnimates,
+    this._cursorColor,
+    this._cursorErrorColor,
+    this._selectionHeightStyle,
+    this._selectionWidthStyle,
+    this._keyboardAppearance,
+    this._scrollPadding = const EdgeInsets.all(20),
+    this._dragStartBehavior = DragStartBehavior.start,
+    this._enableInteractiveSelection,
+    this._selectAllOnFocus,
+    this._selectionControls,
+    this._onTap,
+    this._onTapAlwaysCalled = false,
+    this._onTapOutside,
+    this._onTapUpOutside,
+    this._mouseCursor,
+    this._buildCounter,
+    this._scrollController,
+    this._scrollPhysics,
+    this._autofillHints = const <String>[],
+    this._contentInsertionConfiguration,
+    this._clipBehavior = Clip.hardEdge,
+    this._stylusHandwritingEnabled =
+        EditableText.defaultStylusHandwritingEnabled,
+    this._enableIMEPersonalizedLearning = true,
+    this._enableInlinePrediction,
+    this._contextMenuBuilder = PlacesDesignScope.defaultContextMenuBuilder,
+    this._spellCheckConfiguration,
+    this._magnifierConfiguration,
+    this._hintLocales,
+    this._groupId = EditableText,
+    this._undoController,
+    this._statesController,
     this.fieldBuilder,
     this.suggestionItemBuilder,
     this.suggestionsViewBuilder,
@@ -150,7 +230,13 @@ class PlacesAutocompleteField extends StatefulWidget {
   /// from the same key.
   final String? apiKey;
 
-  /// Optional external controller for coordinating text, focus, and selection.
+  /// A controller to read or drive the search from outside the field: its
+  /// text, focus, session, suggestions, and selection.
+  ///
+  /// When omitted, the field creates its own. While the field uses one, the
+  /// field's own parameters and client apply, not the controller's `options`
+  /// and client. In dialog and fullscreen modes it holds the launcher's text
+  /// and selection; the search opens with a controller of its own.
   final PlacesAutocompleteController? controller;
 
   /// Optional base decoration for the text field UI.
@@ -335,71 +421,6 @@ class PlacesAutocompleteField extends StatefulWidget {
   /// Called when the user selects a query suggestion.
   final ValueChanged<QuerySuggestion>? onQuerySelection;
 
-  /// The keyboard to show. See [TextField.keyboardType].
-  ///
-  /// Defaults to [TextInputType.streetAddress], which shows a keyboard suited
-  /// to addresses on Android and asks Linux input methods to capitalize
-  /// words. On iOS, the web, macOS, and Windows it is the usual text keyboard.
-  final TextInputType keyboardType;
-
-  /// The keyboard's action button, such as search or done. See
-  /// [TextField.textInputAction].
-  final TextInputAction? textInputAction;
-
-  /// How the keyboard capitalizes what is typed. See
-  /// [TextField.textCapitalization].
-  final TextCapitalization textCapitalization;
-
-  /// The style of the typed text. See [TextField.style].
-  final TextStyle? style;
-
-  /// How the typed text is aligned. See [TextField.textAlign].
-  final TextAlign textAlign;
-
-  /// The direction of the typed text. See [TextField.textDirection].
-  final TextDirection? textDirection;
-
-  /// Whether the keyboard autocorrects. See [TextField.autocorrect].
-  final bool? autocorrect;
-
-  /// Whether the keyboard suggests words. See [TextField.enableSuggestions].
-  final bool enableSuggestions;
-
-  /// Whether the keyboard may learn from what is typed; `false` asks for
-  /// incognito typing. See [TextField.enableIMEPersonalizedLearning].
-  final bool enableIMEPersonalizedLearning;
-
-  /// Formatters applied to the text as it is typed, before it is searched.
-  /// See [TextField.inputFormatters].
-  final List<TextInputFormatter>? inputFormatters;
-
-  /// The most characters the field accepts. See [TextField.maxLength].
-  final int? maxLength;
-
-  /// How [maxLength] is enforced. See [TextField.maxLengthEnforcement].
-  final MaxLengthEnforcement? maxLengthEnforcement;
-
-  /// Hints for the platform's autofill; `null` turns autofill off for the
-  /// field. See [TextField.autofillHints].
-  final Iterable<String>? autofillHints;
-
-  /// The keyboard's brightness. Honoured on iOS only. See
-  /// [TextField.keyboardAppearance].
-  final Brightness? keyboardAppearance;
-
-  /// The room kept around the field when it scrolls into view. See
-  /// [TextField.scrollPadding].
-  final EdgeInsets scrollPadding;
-
-  /// Called when the user submits the text, for example with the keyboard's
-  /// action button. See [TextField.onSubmitted].
-  final ValueChanged<String>? onSubmitted;
-
-  /// Called when the user submits the text, in place of the default, which
-  /// gives up focus and so closes the suggestions. See
-  /// [TextField.onEditingComplete].
-  final VoidCallback? onEditingComplete;
-
   /// Builds the text field in place of the default `material_ui` one.
   ///
   /// The builder receives the controller, focus node, and callbacks the field
@@ -410,9 +431,9 @@ class PlacesAutocompleteField extends StatefulWidget {
   /// the validation message reaches your field, and that form field's
   /// `errorBuilder` is not used. The progress bar the default field shows
   /// while a selection loads is not drawn: render
-  /// [PlacesFieldData.selectionLoading] yourself. The options taken from
-  /// `TextField`, from [keyboardType] to [onEditingComplete], configure the
-  /// default field only; set them on your own.
+  /// [PlacesFieldData.selectionLoading] yourself. The `TextField` options
+  /// the constructor takes configure the default field only; set them on
+  /// your own.
   ///
   /// Every type it receives comes from `package:flutter/widgets.dart`, so an
   /// app still on `package:flutter/material.dart` can return its own
@@ -458,6 +479,64 @@ class PlacesAutocompleteField extends StatefulWidget {
   final Widget Function(BuildContext context, PlaceSuggestion suggestion)?
   suggestionBuilder;
 
+  // The TextField options; see the constructor.
+  final TextInputType _keyboardType;
+  final TextInputAction? _textInputAction;
+  final TextCapitalization _textCapitalization;
+  final TextStyle? _style;
+  final StrutStyle? _strutStyle;
+  final TextAlign _textAlign;
+  final TextAlignVertical? _textAlignVertical;
+  final TextDirection? _textDirection;
+  final bool? _showCursor;
+  final bool? _autocorrect;
+  final SmartDashesType? _smartDashesType;
+  final SmartQuotesType? _smartQuotesType;
+  final bool _enableSuggestions;
+  final int? _maxLength;
+  final MaxLengthEnforcement? _maxLengthEnforcement;
+  final ValueChanged<String>? _onChanged;
+  final VoidCallback? _onEditingComplete;
+  final ValueChanged<String>? _onSubmitted;
+  final AppPrivateCommandCallback? _onAppPrivateCommand;
+  final List<TextInputFormatter>? _inputFormatters;
+  final bool? _ignorePointers;
+  final double _cursorWidth;
+  final double? _cursorHeight;
+  final Radius? _cursorRadius;
+  final bool? _cursorOpacityAnimates;
+  final Color? _cursorColor;
+  final Color? _cursorErrorColor;
+  final ui.BoxHeightStyle? _selectionHeightStyle;
+  final ui.BoxWidthStyle? _selectionWidthStyle;
+  final Brightness? _keyboardAppearance;
+  final EdgeInsets _scrollPadding;
+  final DragStartBehavior _dragStartBehavior;
+  final bool? _enableInteractiveSelection;
+  final bool? _selectAllOnFocus;
+  final TextSelectionControls? _selectionControls;
+  final GestureTapCallback? _onTap;
+  final bool _onTapAlwaysCalled;
+  final TapRegionCallback? _onTapOutside;
+  final TapRegionUpCallback? _onTapUpOutside;
+  final MouseCursor? _mouseCursor;
+  final InputCounterWidgetBuilder? _buildCounter;
+  final ScrollController? _scrollController;
+  final ScrollPhysics? _scrollPhysics;
+  final Iterable<String>? _autofillHints;
+  final ContentInsertionConfiguration? _contentInsertionConfiguration;
+  final Clip _clipBehavior;
+  final bool _stylusHandwritingEnabled;
+  final bool _enableIMEPersonalizedLearning;
+  final bool? _enableInlinePrediction;
+  final EditableTextContextMenuBuilder? _contextMenuBuilder;
+  final SpellCheckConfiguration? _spellCheckConfiguration;
+  final TextMagnifierConfiguration? _magnifierConfiguration;
+  final List<Locale>? _hintLocales;
+  final Object _groupId;
+  final UndoHistoryController? _undoController;
+  final WidgetStatesController? _statesController;
+
   @override
   State<PlacesAutocompleteField> createState() =>
       _PlacesAutocompleteFieldState();
@@ -466,32 +545,18 @@ class PlacesAutocompleteField extends StatefulWidget {
 class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   PlacesAutocompleteController? _ownedController;
   PlacesClient? _ownedClient;
-  Timer? _debounce;
-  List<AutocompleteSuggestion> _suggestions = const <AutocompleteSuggestion>[];
-  PlacesException? _error;
-  bool _loading = false;
-  bool _selectionLoading = false;
-  bool _searchUiVisible = false;
   bool _suggestionPointerDown = false;
   bool _hasText = false;
-  int _highlightedSuggestionIndex = -1;
-  int _searchGeneration = 0;
-  int _selectionGeneration = 0;
-  bool _selectionInProgress = false;
-  PlacesCancellationToken? _searchCancellationToken;
-  PlacesCancellationToken? _selectionCancellationToken;
-  AutocompleteSessionToken? _observedSessionToken;
-  // The session the last request went out in. Compared by value with the
-  // controller's, so it needs no clearing when the session resets.
-  AutocompleteSessionToken? _searchedSessionToken;
   // Inline suggestions float in the nearest Overlay. Always shown: the overlay
-  // child is empty while the search UI is closed, so visibility follows
-  // _searchUiVisible without a second flag to keep in sync. The portal must
-  // stay mounted in every mode: one that unmounts loses its shown state.
+  // child is empty while the search UI is closed, so visibility follows the
+  // controller without a second flag to keep in sync. The portal must stay
+  // mounted in every mode: one that unmounts loses its shown state.
   final OverlayPortalController _suggestionsPortal = OverlayPortalController()
     ..show();
 
   PlacesClient get _client => widget.client ?? _ownedClient!;
+
+  late PlacesAutocompleteOptions _options = _optionsOf(widget);
 
   void _createOwnedClient() {
     _ownedClient = widget.client == null
@@ -506,26 +571,22 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   bool get _isLauncherMode =>
       widget.fieldMode != PlacesAutocompleteFieldMode.inline;
 
-  bool get _shouldResolvePlaceOnSelection =>
-      widget.fetchPlaceDetailsOnSelection || widget.fetchTimeZoneOnSelection;
-
-  Set<PlaceField> get _effectiveSelectionFields =>
-      widget.fetchTimeZoneOnSelection
-      ? <PlaceField>{...widget.selectionFields, PlaceField.location}
-      : widget.selectionFields;
-
-  int get _effectiveMaxSuggestions => widget.maxSuggestions.clamp(1, 5);
-
-  // Shown, pending, or already billed: input below minInputLength closes the
-  // results but not the session its earlier requests went out in.
-  bool get _hasActiveSession =>
-      _searchUiVisible ||
-      _loading ||
-      _suggestions.isNotEmpty ||
-      _searchedSessionToken?.value == _controller.sessionToken.value;
-
   Duration get _debounceDuration =>
       widget.debounceDuration ?? _controller.debounceDuration;
+
+  // Whether a search result may still be shown: the controller asks before
+  // drawing one, and rejects it otherwise.
+  bool get _canShowResults =>
+      mounted &&
+      widget.enabled &&
+      !_isLauncherMode &&
+      _controller.focusNode.hasFocus;
+
+  void _rebuild() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
 
   @override
   void initState() {
@@ -541,7 +602,12 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     final controllerChanged = oldWidget.controller != widget.controller;
     final clientChanged =
         oldWidget.client != widget.client || oldWidget.apiKey != widget.apiKey;
-    final requestChanged = _requestConfigurationChanged(oldWidget);
+    final previousOptions = _options;
+    _options = _optionsOf(widget);
+    final requestChanged =
+        !_options._sameSearch(previousOptions) ||
+        oldWidget.enabled != widget.enabled ||
+        oldWidget.fieldMode != widget.fieldMode;
     final previousClient = oldWidget.client ?? _ownedClient!;
     final retiredClient = clientChanged ? _ownedClient : null;
     if (clientChanged) {
@@ -550,67 +616,58 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
 
     if (controllerChanged) {
       final previousController = oldWidget.controller ?? _ownedController!;
-      _endObservedSession(previousClient);
-      _detachController(previousController);
-      _invalidateAsyncWork();
+      _detachController(previousController, previousClient);
       _attachController(_controller);
     } else if (clientChanged || requestChanged) {
-      _endObservedSession(previousClient);
-      _controller.resetSession(notify: false);
-      _observedSessionToken = _controller.sessionToken;
-      _invalidateAsyncWork();
+      _controller._configurationChanged(previousClient);
     }
-    // After _invalidateAsyncWork, so in-flight work is already cancelled and
-    // its late failure is discarded as stale rather than reported.
+    // After the controller has cancelled its in-flight work, so a late failure
+    // is discarded as stale rather than reported.
     unawaited(retiredClient?.close());
     _syncFocusMode();
   }
 
-  bool _requestConfigurationChanged(PlacesAutocompleteField oldWidget) {
-    return oldWidget.languageCode != widget.languageCode ||
-        oldWidget.regionCode != widget.regionCode ||
-        oldWidget.origin != widget.origin ||
-        oldWidget.locationBias != widget.locationBias ||
-        oldWidget.locationRestriction != widget.locationRestriction ||
-        !listEquals(
-          oldWidget.includedPrimaryTypes,
-          widget.includedPrimaryTypes,
-        ) ||
-        !listEquals(
-          oldWidget.includedRegionCodes,
-          widget.includedRegionCodes,
-        ) ||
-        oldWidget.includePureServiceAreaBusinesses !=
-            widget.includePureServiceAreaBusinesses ||
-        oldWidget.includeFutureOpeningBusinesses !=
-            widget.includeFutureOpeningBusinesses ||
-        oldWidget.fetchPlaceDetailsOnSelection !=
-            widget.fetchPlaceDetailsOnSelection ||
-        oldWidget.fetchTimeZoneOnSelection != widget.fetchTimeZoneOnSelection ||
-        !setEquals(oldWidget.selectionFields, widget.selectionFields) ||
-        oldWidget.selectionLanguageCode != widget.selectionLanguageCode ||
-        oldWidget.selectionRegionCode != widget.selectionRegionCode ||
-        oldWidget.selectionTimeZoneAt != widget.selectionTimeZoneAt ||
-        oldWidget.selectionTimeZoneLanguageCode !=
-            widget.selectionTimeZoneLanguageCode ||
-        oldWidget.includeQueryPredictions != widget.includeQueryPredictions ||
-        oldWidget.maxSuggestions != widget.maxSuggestions ||
-        oldWidget.enabled != widget.enabled ||
-        oldWidget.fieldMode != widget.fieldMode;
-  }
+  // The widget's search parameters, handed to the controller as one value.
+  static PlacesAutocompleteOptions _optionsOf(PlacesAutocompleteField widget) =>
+      PlacesAutocompleteOptions(
+        languageCode: widget.languageCode,
+        regionCode: widget.regionCode,
+        origin: widget.origin,
+        locationBias: widget.locationBias,
+        locationRestriction: widget.locationRestriction,
+        includedPrimaryTypes: widget.includedPrimaryTypes,
+        includedRegionCodes: widget.includedRegionCodes,
+        includePureServiceAreaBusinesses:
+            widget.includePureServiceAreaBusinesses,
+        includeFutureOpeningBusinesses: widget.includeFutureOpeningBusinesses,
+        includeQueryPredictions: widget.includeQueryPredictions,
+        maxSuggestions: widget.maxSuggestions,
+        minInputLength: widget.minInputLength,
+        fetchPlaceDetailsOnSelection: widget.fetchPlaceDetailsOnSelection,
+        fetchTimeZoneOnSelection: widget.fetchTimeZoneOnSelection,
+        selectionFields: widget.selectionFields,
+        selectionLanguageCode: widget.selectionLanguageCode,
+        selectionRegionCode: widget.selectionRegionCode,
+        selectionTimeZoneAt: widget.selectionTimeZoneAt,
+        selectionTimeZoneLanguageCode: widget.selectionTimeZoneLanguageCode,
+      );
 
   void _attachController(PlacesAutocompleteController controller) {
+    controller._attach(this);
     controller.focusNode.addListener(_onFocusChanged);
     controller.textController.addListener(_onTextControllerChanged);
-    controller.addListener(_onControllerChanged);
-    _observedSessionToken = controller.sessionToken;
+    controller.addListener(_rebuild);
     _hasText = controller.textController.text.isNotEmpty;
   }
 
-  void _detachController(PlacesAutocompleteController controller) {
+  void _detachController(
+    PlacesAutocompleteController controller,
+    PlacesClient client,
+  ) {
     controller.focusNode.removeListener(_onFocusChanged);
     controller.textController.removeListener(_onTextControllerChanged);
-    controller.removeListener(_onControllerChanged);
+    controller.removeListener(_rebuild);
+    controller._detach(this, client);
   }
 
   void _syncFocusMode() {
@@ -618,88 +675,39 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       _controller.focusNode.unfocus();
     }
     if (_isLauncherMode) {
-      _closeSearchUi();
+      _controller._closeSearchWhileBuilding();
     }
   }
 
   @override
   void dispose() {
-    _debounce?.cancel();
-    _searchCancellationToken?.cancel();
-    _selectionCancellationToken?.cancel();
-    _searchGeneration++;
-    _selectionGeneration++;
-    final controller = _controller;
-    _endObservedSession(_client);
-    _detachController(controller);
+    _detachController(_controller, _client);
     _ownedController?.dispose();
     unawaited(_ownedClient?.close());
     super.dispose();
   }
 
-  void _onControllerChanged() {
-    final currentToken = _controller.sessionToken;
-    final previousToken = _observedSessionToken;
-    if (previousToken?.value == currentToken.value) {
-      return;
-    }
-    _observedSessionToken = currentToken;
-    if (previousToken != null) {
-      unawaited(_client.endAutocompleteSession(previousToken));
-    }
-    _invalidateAsyncWork();
-  }
-
-  void _endObservedSession(PlacesClient client) {
-    final token = _observedSessionToken;
-    _observedSessionToken = null;
-    if (token != null) {
-      unawaited(client.endAutocompleteSession(token));
-    }
-  }
-
-  void _invalidateAsyncWork() {
-    _debounce?.cancel();
-    _searchCancellationToken?.cancel();
-    _searchCancellationToken = null;
-    _selectionCancellationToken?.cancel();
-    _selectionCancellationToken = null;
-    _searchGeneration++;
-    _selectionGeneration++;
-    _selectionInProgress = false;
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _searchUiVisible = false;
-      _loading = false;
-      _selectionLoading = false;
-      _error = null;
-      _suggestions = const <AutocompleteSuggestion>[];
-      _highlightedSuggestionIndex = -1;
-    });
-  }
-
   void _onFocusChanged() {
+    final controller = _controller;
     if (_isLauncherMode) {
       // The launcher only opens the search. A custom field can still take
       // focus — on a tap, or when the closing route restores it — so give it
       // straight back.
-      if (_controller.focusNode.hasFocus) {
-        _controller.focusNode.unfocus();
+      if (controller.focusNode.hasFocus) {
+        controller.focusNode.unfocus();
       }
       return;
     }
-    if (_controller.focusNode.hasFocus) {
+    if (controller.focusNode.hasFocus) {
       return;
     }
-    if (_suggestionPointerDown || _selectionInProgress) {
+    if (_suggestionPointerDown || controller._selectionInProgress) {
       return;
     }
-    final hadActiveSession = _hasActiveSession;
-    _closeSearchUi();
+    final hadActiveSession = controller._hasActiveSession;
+    controller._closeSearch();
     if (hadActiveSession) {
-      _controller.resetSession();
+      controller.resetSession();
     }
   }
 
@@ -719,371 +727,44 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     if (_isLauncherMode || !widget.enabled) {
       return;
     }
-    if (_selectionInProgress) {
-      // Typing over a pick whose details are still loading abandons it: they
-      // would arrive for text the user has replaced. A new session also
-      // cancels the details request.
-      _controller.resetSession();
-    }
-    if (_controller.selectedSelection != null) {
-      _controller.clearSelection();
-      widget.onClearField?.call();
-    }
-    _debounce?.cancel();
-    final input = value.trim();
-    if (input.isEmpty) {
-      final hadActiveSession = _hasActiveSession;
-      _closeSearchUi();
-      if (hadActiveSession) {
-        _controller.resetSession();
-      }
-      return;
-    }
-    if (input.characters.length < widget.minInputLength) {
-      // Still the same search, so the session carries on.
-      _closeSearchUi();
-      return;
-    }
-    setState(() {
-      _searchUiVisible = true;
-      // With nothing on screen yet, the pending search shows as loading —
-      // not as an empty result before any request has been sent.
-      _loading = _suggestions.isEmpty;
-      _error = null;
-      _highlightedSuggestionIndex = -1;
-    });
-    final generation = ++_searchGeneration;
-    _debounce = Timer(_debounceDuration, () {
-      unawaited(_search(input, generation));
-    });
-  }
-
-  void _invalidateSearches() {
-    _searchCancellationToken?.cancel();
-    _searchCancellationToken = null;
-    _searchGeneration++;
-  }
-
-  bool _isActiveSearch(String input, int generation) {
-    return mounted &&
-        generation == _searchGeneration &&
-        _searchUiVisible &&
-        widget.enabled &&
-        !_isLauncherMode &&
-        _controller.focusNode.hasFocus &&
-        _controller.textController.text.trim() == input;
-  }
-
-  void _closeSearchUi() {
-    _debounce?.cancel();
-    _invalidateSearches();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _searchUiVisible = false;
-      _loading = false;
-      _error = null;
-      _suggestions = const <AutocompleteSuggestion>[];
-      _highlightedSuggestionIndex = -1;
-    });
-  }
-
-  // A search that can no longer show its result. If it was the latest, nothing
-  // will replace its loading state, so close the search rather than spin.
-  void _dropSearch(int generation) {
-    if (generation == _searchGeneration) {
-      _closeSearchUi();
-    }
-  }
-
-  Future<void> _search(String input, int generation) async {
-    if (!_isActiveSearch(input, generation)) {
-      _dropSearch(generation);
-      return;
-    }
-    _searchCancellationToken?.cancel();
-    final cancellationToken = PlacesCancellationToken();
-    _searchCancellationToken = cancellationToken;
-    try {
-      setState(() {
-        _loading = true;
-        _error = null;
-        // The rows for the previous text: hidden behind the loading state, so
-        // the keyboard must not be able to pick them.
-        _suggestions = const <AutocompleteSuggestion>[];
-        _highlightedSuggestionIndex = -1;
-      });
-      final request = AutocompleteRequest(
-        input: input,
-        inputOffset: _unicodeInputOffset(input),
-        sessionToken: _controller.sessionToken,
-        languageCode: widget.languageCode,
-        regionCode: widget.regionCode,
-        origin: widget.origin,
-        locationBias: widget.locationBias,
-        locationRestriction: widget.locationRestriction,
-        includedPrimaryTypes: widget.includedPrimaryTypes,
-        includedRegionCodes: widget.includedRegionCodes,
-        includePureServiceAreaBusinesses:
-            widget.includePureServiceAreaBusinesses,
-        includeFutureOpeningBusinesses: widget.includeFutureOpeningBusinesses,
-        includeQueryPredictions: widget.includeQueryPredictions,
-      );
-      _searchedSessionToken = request.sessionToken;
-      final suggestions = widget.includeQueryPredictions
-          ? await _client.autocompleteSuggestions(
-              request,
-              cancellationToken: cancellationToken,
-            )
-          : await _client.autocomplete(
-              request,
-              cancellationToken: cancellationToken,
-            );
-      if (!_isActiveSearch(input, generation)) {
-        _dropSearch(generation);
-        return;
-      }
-      final limitedSuggestions = suggestions
-          .take(_effectiveMaxSuggestions)
-          .toList(growable: false);
-      setState(() {
-        _loading = false;
-        _suggestions = limitedSuggestions;
-        _highlightedSuggestionIndex = limitedSuggestions.isEmpty ? -1 : 0;
-      });
-    } catch (error) {
-      if (!_isActiveSearch(input, generation)) {
-        _dropSearch(generation);
-        return;
-      }
-      setState(() {
-        _loading = false;
-        // The client only throws PlacesException; anything else is wrapped
-        // so the view builder always gets the typed error.
-        _error = error is PlacesException
-            ? error
-            : PlacesException(
-                'The autocomplete request failed.',
-                operation: PlacesOperation.autocomplete,
-                metadata: <String, Object?>{
-                  'errorType': error.runtimeType.toString(),
-                },
-              );
-        _suggestions = const <AutocompleteSuggestion>[];
-        _highlightedSuggestionIndex = -1;
-      });
-      widget.onError?.call(error);
-    } finally {
-      if (identical(_searchCancellationToken, cancellationToken)) {
-        _searchCancellationToken = null;
-      }
-    }
-  }
-
-  void _retrySearch() {
-    final input = _controller.textController.text.trim();
-    if (input.isEmpty || !mounted) {
-      return;
-    }
-    _debounce?.cancel();
-    setState(() {
-      _searchUiVisible = true;
-      _loading = true;
-      _error = null;
-      _highlightedSuggestionIndex = -1;
-    });
-    final generation = ++_searchGeneration;
-    if (_controller.focusNode.hasFocus) {
-      unawaited(_search(input, generation));
-      return;
-    }
-    // The retry control itself takes focus on some platforms, notably web.
-    // _isActiveSearch requires the field to be focused — that check is what
-    // rejects stale results — so restore focus and search once it settles.
-    // Reusing _debounce keeps this cancellable by disposal and by every other
-    // path that invalidates pending work.
-    _controller.focusNode.requestFocus();
-    _debounce = Timer(Duration.zero, () {
-      unawaited(_search(input, generation));
-    });
-  }
-
-  int? _unicodeInputOffset(String input) {
-    final rawInput = _controller.textController.text;
-    final selectionOffset = _controller.textController.selection.extentOffset;
-    final inputStart = rawInput.indexOf(input);
-    if (selectionOffset < 0 || inputStart < 0) {
-      return null;
-    }
-    final localCodeUnitOffset = (selectionOffset - inputStart).clamp(
-      0,
-      input.length,
-    );
-    return input.substring(0, localCodeUnitOffset).runes.length;
+    _controller._userInputChanged(value);
   }
 
   void _clearField() {
     _controller.clear();
-    _closeSearchUi();
     widget.onClearField?.call();
   }
 
-  Future<void> _handleSuggestionTap(AutocompleteSuggestion suggestion) async {
-    if (_selectionInProgress) {
-      return;
-    }
-    if (suggestion is QuerySuggestion) {
-      _closeSearchUi();
-      _controller.textController
-        ..text = suggestion.displayText
-        ..selection = TextSelection.collapsed(
-          offset: suggestion.displayText.length,
-        );
-      widget.onQuerySelection?.call(suggestion);
-      _controller.resetSession();
-      return;
-    }
-    if (suggestion is! PlaceSuggestion) {
-      return;
-    }
-    final client = _client;
-    final controller = _controller;
-    final sessionToken = controller.sessionToken;
-    final generation = ++_selectionGeneration;
-    _selectionCancellationToken?.cancel();
-    final cancellationToken = PlacesCancellationToken();
-    _selectionCancellationToken = cancellationToken;
-    _selectionInProgress = true;
-    _closeSearchUi();
-    final initialSelection = PlaceSelection(
-      suggestion: suggestion,
-      sessionToken: sessionToken,
-    );
-    controller.setSelection(initialSelection);
-    if (widget.unfocusOnSelection) {
-      controller.focusNode.unfocus();
-    }
-    try {
-      if (!_shouldResolvePlaceOnSelection) {
-        if (_isActiveSelection(generation, client, controller)) {
-          widget.onSelection?.call(initialSelection);
-        }
-        return;
-      }
-      setState(() {
-        _selectionLoading = true;
-      });
-      final place = await client.fetchPlace(
-        PlaceDetailsRequest(
-          placeId: suggestion.placeId,
-          fields: _effectiveSelectionFields,
-          languageCode: widget.selectionLanguageCode ?? widget.languageCode,
-          regionCode: widget.selectionRegionCode ?? widget.regionCode,
-          sessionToken: sessionToken,
-        ),
-        cancellationToken: cancellationToken,
-      );
-      if (!_isActiveSelection(generation, client, controller)) {
-        return;
-      }
-      PlaceTimeZoneData? timeZone;
-      if (widget.fetchTimeZoneOnSelection) {
-        timeZone = await client.fetchTimeZoneForPlace(
-          place,
-          timestamp: widget.selectionTimeZoneAt,
-          languageCode:
-              widget.selectionTimeZoneLanguageCode ??
-              widget.selectionLanguageCode ??
-              widget.languageCode,
-          cancellationToken: cancellationToken,
-        );
-        if (!_isActiveSelection(generation, client, controller)) {
-          return;
-        }
-      }
-      final resolvedSelection = PlaceSelection(
-        suggestion: suggestion,
-        sessionToken: sessionToken,
-        place: place,
-        timeZone: timeZone,
-      );
-      controller.setSelection(resolvedSelection, updateText: false);
-      widget.onSelection?.call(resolvedSelection);
-    } catch (error) {
-      if (_isActiveSelection(generation, client, controller)) {
-        widget.onError?.call(error);
-      }
-    } finally {
-      if (identical(_selectionCancellationToken, cancellationToken)) {
-        _selectionCancellationToken = null;
-      }
-      if (_isActiveSelection(generation, client, controller)) {
-        _selectionInProgress = false;
-        setState(() {
-          _selectionLoading = false;
-        });
-      }
-      if (controller.sessionToken.value == sessionToken.value &&
-          mounted &&
-          identical(controller, _controller) &&
-          identical(client, _client)) {
-        controller.resetSession();
-      } else {
-        unawaited(client.endAutocompleteSession(sessionToken));
-      }
-    }
-  }
-
-  bool _isActiveSelection(
-    int generation,
-    PlacesClient client,
-    PlacesAutocompleteController controller,
-  ) {
-    return mounted &&
-        generation == _selectionGeneration &&
-        identical(client, _client) &&
-        identical(controller, _controller);
-  }
-
   KeyEventResult _handleSuggestionKeyEvent(FocusNode node, KeyEvent event) {
-    if (!_searchUiVisible || event is! KeyDownEvent) {
+    final controller = _controller;
+    if (!controller._open || event is! KeyDownEvent) {
       return KeyEventResult.ignored;
     }
     if (event.logicalKey == LogicalKeyboardKey.escape) {
-      _closeSearchUi();
-      _controller.resetSession();
+      controller._closeSearch();
+      controller.resetSession();
       return KeyEventResult.handled;
     }
-    if (_suggestions.isEmpty) {
+    final suggestions = controller._suggestions;
+    if (suggestions.isEmpty) {
       return KeyEventResult.ignored;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      _moveHighlightedSuggestion(1);
+      controller.moveHighlight(1);
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      _moveHighlightedSuggestion(-1);
+      controller.moveHighlight(-1);
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.enter) {
-      final index = _highlightedSuggestionIndex;
-      if (index >= 0 && index < _suggestions.length) {
-        unawaited(_handleSuggestionTap(_suggestions[index]));
+      final index = controller.highlightIndex;
+      if (index >= 0 && index < suggestions.length) {
+        unawaited(controller._select(suggestions[index]));
         return KeyEventResult.handled;
       }
     }
     return KeyEventResult.ignored;
-  }
-
-  void _moveHighlightedSuggestion(int delta) {
-    if (_suggestions.isEmpty) {
-      return;
-    }
-    setState(() {
-      _highlightedSuggestionIndex =
-          (_highlightedSuggestionIndex + delta) % _suggestions.length;
-    });
   }
 
   Future<void> _openOverlay() async {
@@ -1132,23 +813,62 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       enabled: widget.enabled,
       showPoweredByGoogle: widget.showPoweredByGoogle,
       includeQueryPredictions: widget.includeQueryPredictions,
-      keyboardType: widget.keyboardType,
-      textInputAction: widget.textInputAction,
-      textCapitalization: widget.textCapitalization,
-      style: widget.style,
-      textAlign: widget.textAlign,
-      textDirection: widget.textDirection,
-      autocorrect: widget.autocorrect,
-      enableSuggestions: widget.enableSuggestions,
-      enableIMEPersonalizedLearning: widget.enableIMEPersonalizedLearning,
-      inputFormatters: widget.inputFormatters,
-      maxLength: widget.maxLength,
-      maxLengthEnforcement: widget.maxLengthEnforcement,
-      autofillHints: widget.autofillHints,
-      keyboardAppearance: widget.keyboardAppearance,
-      scrollPadding: widget.scrollPadding,
-      onSubmitted: widget.onSubmitted,
-      onEditingComplete: widget.onEditingComplete,
+      keyboardType: widget._keyboardType,
+      textInputAction: widget._textInputAction,
+      textCapitalization: widget._textCapitalization,
+      style: widget._style,
+      strutStyle: widget._strutStyle,
+      textAlign: widget._textAlign,
+      textAlignVertical: widget._textAlignVertical,
+      textDirection: widget._textDirection,
+      showCursor: widget._showCursor,
+      autocorrect: widget._autocorrect,
+      smartDashesType: widget._smartDashesType,
+      smartQuotesType: widget._smartQuotesType,
+      enableSuggestions: widget._enableSuggestions,
+      maxLength: widget._maxLength,
+      maxLengthEnforcement: widget._maxLengthEnforcement,
+      onChanged: widget._onChanged,
+      onEditingComplete: widget._onEditingComplete,
+      onSubmitted: widget._onSubmitted,
+      onAppPrivateCommand: widget._onAppPrivateCommand,
+      inputFormatters: widget._inputFormatters,
+      ignorePointers: widget._ignorePointers,
+      cursorWidth: widget._cursorWidth,
+      cursorHeight: widget._cursorHeight,
+      cursorRadius: widget._cursorRadius,
+      cursorOpacityAnimates: widget._cursorOpacityAnimates,
+      cursorColor: widget._cursorColor,
+      cursorErrorColor: widget._cursorErrorColor,
+      selectionHeightStyle: widget._selectionHeightStyle,
+      selectionWidthStyle: widget._selectionWidthStyle,
+      keyboardAppearance: widget._keyboardAppearance,
+      scrollPadding: widget._scrollPadding,
+      dragStartBehavior: widget._dragStartBehavior,
+      enableInteractiveSelection: widget._enableInteractiveSelection,
+      selectAllOnFocus: widget._selectAllOnFocus,
+      selectionControls: widget._selectionControls,
+      onTap: widget._onTap,
+      onTapAlwaysCalled: widget._onTapAlwaysCalled,
+      onTapOutside: widget._onTapOutside,
+      onTapUpOutside: widget._onTapUpOutside,
+      mouseCursor: widget._mouseCursor,
+      buildCounter: widget._buildCounter,
+      scrollController: widget._scrollController,
+      scrollPhysics: widget._scrollPhysics,
+      autofillHints: widget._autofillHints,
+      contentInsertionConfiguration: widget._contentInsertionConfiguration,
+      clipBehavior: widget._clipBehavior,
+      stylusHandwritingEnabled: widget._stylusHandwritingEnabled,
+      enableIMEPersonalizedLearning: widget._enableIMEPersonalizedLearning,
+      enableInlinePrediction: widget._enableInlinePrediction,
+      contextMenuBuilder: widget._contextMenuBuilder,
+      spellCheckConfiguration: widget._spellCheckConfiguration,
+      magnifierConfiguration: widget._magnifierConfiguration,
+      hintLocales: widget._hintLocales,
+      groupId: widget._groupId,
+      undoController: widget._undoController,
+      statesController: widget._statesController,
       fieldBuilder: widget.fieldBuilder,
       suggestionItemBuilder: widget.suggestionItemBuilder,
       suggestionsViewBuilder: widget.suggestionsViewBuilder,
@@ -1180,7 +900,9 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
         .findAncestorWidgetOfExactType<PlacesAutocompleteOverlay>()
         ?.mode;
     final fullscreen = overlayMode == PlacesAutocompleteOverlayMode.fullscreen;
-    final interactive = widget.enabled && !_selectionLoading;
+    final controller = _controller;
+    final selectionLoading = controller.selectionLoading;
+    final interactive = widget.enabled && !selectionLoading;
     final field = PlacesFieldData(
       controller: _controller.textController,
       focusNode: _controller.focusNode,
@@ -1193,46 +915,16 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
       // disabled clear button carry the loading affordance instead. Not
       // read-only when focus stays: that would close the keyboard.
       readOnly:
-          _isLauncherMode || (_selectionLoading && widget.unfocusOnSelection),
+          _isLauncherMode || (selectionLoading && widget.unfocusOnSelection),
       autofocus: widget.autofocus && !_isLauncherMode,
-      selectionLoading: _selectionLoading,
+      selectionLoading: selectionLoading,
       errorText: widget.decoration?.errorText,
       strings: widget.strings,
     );
     final customField = widget.fieldBuilder?.call(context, field);
-    final textField =
-        customField ??
-        TextField(
-          controller: field.controller,
-          focusNode: field.focusNode,
-          canRequestFocus: !_isLauncherMode,
-          enabled: field.enabled,
-          readOnly: field.readOnly,
-          autofocus: field.autofocus,
-          onChanged: field.onChanged,
-          onTap: field.onTap,
-          decoration: _buildDecoration(inTopBar: fullscreen),
-          contextMenuBuilder: PlacesDesignScope.contextMenuBuilder,
-          keyboardType: widget.keyboardType,
-          textInputAction: widget.textInputAction,
-          textCapitalization: widget.textCapitalization,
-          style: widget.style,
-          textAlign: widget.textAlign,
-          textDirection: widget.textDirection,
-          autocorrect: widget.autocorrect,
-          enableSuggestions: widget.enableSuggestions,
-          enableIMEPersonalizedLearning: widget.enableIMEPersonalizedLearning,
-          inputFormatters: widget.inputFormatters,
-          maxLength: widget.maxLength,
-          maxLengthEnforcement: widget.maxLengthEnforcement,
-          autofillHints: widget.autofillHints,
-          keyboardAppearance: widget.keyboardAppearance,
-          scrollPadding: widget.scrollPadding,
-          onSubmitted: widget.onSubmitted,
-          onEditingComplete: widget.onEditingComplete,
-        );
+    final textField = customField ?? _buildTextField(field, fullscreen);
     // A custom field shows selection loading itself.
-    final progress = _selectionLoading && customField == null
+    final progress = selectionLoading && customField == null
         ? const LinearProgressIndicator()
         : null;
     // The pointer guard covers the whole search surface, not just the
@@ -1241,8 +933,9 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     // treats it as abandonment and closes the search UI before the retry can
     // run. The tap region keeps a click on the surface, on desktop, from
     // counting as a click outside the field.
-    final surface = _searchUiVisible
+    final surface = controller._open
         ? TextFieldTapRegion(
+            groupId: widget._groupId,
             child: Listener(
               onPointerDown: (_) {
                 _suggestionPointerDown = true;
@@ -1306,6 +999,128 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     };
 
     return Focus(onKeyEvent: _handleSuggestionKeyEvent, child: layout);
+  }
+
+  // The package's own field. Every TextField option is passed on under its
+  // own name; the five composed ones keep the package's handling as well.
+  Widget _buildTextField(PlacesFieldData field, bool inTopBar) {
+    final w = widget;
+    final focusNode = field.focusNode;
+    // These attach to one field. A launcher stays mounted under its search, so
+    // they go to the field the user types in.
+    final editing = !_isLauncherMode;
+    final onTapOutside = w._onTapOutside;
+    final onTapUpOutside = w._onTapUpOutside;
+    final contextMenuBuilder = w._contextMenuBuilder;
+    final onTap = field.onTap;
+    return TextField(
+      controller: field.controller,
+      focusNode: focusNode,
+      canRequestFocus: !_isLauncherMode,
+      enabled: field.enabled,
+      readOnly: field.readOnly,
+      autofocus: field.autofocus,
+      decoration: _buildDecoration(inTopBar: inTopBar),
+      onChanged: (value) {
+        field.onChanged(value);
+        w._onChanged?.call(value);
+      },
+      onTap: onTap == null && w._onTap == null
+          ? null
+          : () {
+              onTap?.call();
+              w._onTap?.call();
+            },
+      // TextField drops its own tap-outside handling when given a callback;
+      // run it too, from inside the field, where Flutter registers it.
+      onTapOutside: onTapOutside == null
+          ? null
+          : (event) {
+              onTapOutside(event);
+              _invokeInField(
+                focusNode,
+                EditableTextTapOutsideIntent(
+                  focusNode: focusNode,
+                  pointerDownEvent: event,
+                ),
+              );
+            },
+      onTapUpOutside: onTapUpOutside == null
+          ? null
+          : (event) {
+              onTapUpOutside(event);
+              _invokeInField(
+                focusNode,
+                EditableTextTapUpOutsideIntent(
+                  focusNode: focusNode,
+                  pointerUpEvent: event,
+                ),
+              );
+            },
+      // The menu is built in the root overlay, outside the field's scope.
+      contextMenuBuilder: contextMenuBuilder == null
+          ? null
+          : (context, state) =>
+                PlacesDesignScope(child: contextMenuBuilder(context, state)),
+      keyboardType: w._keyboardType,
+      textInputAction: w._textInputAction,
+      textCapitalization: w._textCapitalization,
+      style: w._style,
+      strutStyle: w._strutStyle,
+      textAlign: w._textAlign,
+      textAlignVertical: w._textAlignVertical,
+      textDirection: w._textDirection,
+      showCursor: w._showCursor,
+      autocorrect: w._autocorrect,
+      smartDashesType: w._smartDashesType,
+      smartQuotesType: w._smartQuotesType,
+      enableSuggestions: w._enableSuggestions,
+      maxLength: w._maxLength,
+      maxLengthEnforcement: w._maxLengthEnforcement,
+      onEditingComplete: w._onEditingComplete,
+      onSubmitted: w._onSubmitted,
+      onAppPrivateCommand: w._onAppPrivateCommand,
+      inputFormatters: w._inputFormatters,
+      ignorePointers: w._ignorePointers,
+      cursorWidth: w._cursorWidth,
+      cursorHeight: w._cursorHeight,
+      cursorRadius: w._cursorRadius,
+      cursorOpacityAnimates: w._cursorOpacityAnimates,
+      cursorColor: w._cursorColor,
+      cursorErrorColor: w._cursorErrorColor,
+      selectionHeightStyle: w._selectionHeightStyle,
+      selectionWidthStyle: w._selectionWidthStyle,
+      keyboardAppearance: w._keyboardAppearance,
+      scrollPadding: w._scrollPadding,
+      dragStartBehavior: w._dragStartBehavior,
+      enableInteractiveSelection: w._enableInteractiveSelection,
+      selectAllOnFocus: w._selectAllOnFocus,
+      selectionControls: w._selectionControls,
+      onTapAlwaysCalled: w._onTapAlwaysCalled,
+      mouseCursor: w._mouseCursor,
+      buildCounter: w._buildCounter,
+      scrollController: editing ? w._scrollController : null,
+      scrollPhysics: w._scrollPhysics,
+      autofillHints: w._autofillHints,
+      contentInsertionConfiguration: w._contentInsertionConfiguration,
+      clipBehavior: w._clipBehavior,
+      stylusHandwritingEnabled: w._stylusHandwritingEnabled,
+      enableIMEPersonalizedLearning: w._enableIMEPersonalizedLearning,
+      enableInlinePrediction: w._enableInlinePrediction,
+      spellCheckConfiguration: w._spellCheckConfiguration,
+      magnifierConfiguration: w._magnifierConfiguration,
+      hintLocales: w._hintLocales,
+      groupId: w._groupId,
+      undoController: editing ? w._undoController : null,
+      statesController: editing ? w._statesController : null,
+    );
+  }
+
+  static void _invokeInField(FocusNode focusNode, Intent intent) {
+    final context = focusNode.context;
+    if (context != null) {
+      Actions.maybeInvoke(context, intent);
+    }
   }
 
   static const double _anchoredGap = 8;
@@ -1427,15 +1242,9 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     BuildContext context,
     PlacesAutocompleteOverlayMode? overlayMode,
   ) {
-    final status = _loading
-        ? PlacesSuggestionsStatus.loading
-        : _error != null
-        ? PlacesSuggestionsStatus.error
-        : _suggestions.isNotEmpty
-        ? PlacesSuggestionsStatus.results
-        : _controller.textController.text.trim().isEmpty
-        ? null
-        : PlacesSuggestionsStatus.empty;
+    final controller = _controller;
+    final suggestions = controller.suggestions;
+    final status = controller.status;
     if (status == null) {
       return const SizedBox.shrink();
     }
@@ -1448,10 +1257,10 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
           )
         : null;
     final items = <Widget>[
-      for (var index = 0; index < _suggestions.length; index++)
+      for (var index = 0; index < suggestions.length; index++)
         _RevealWhenHighlighted(
-          highlighted: index == _highlightedSuggestionIndex,
-          child: _buildSuggestionItem(context, _suggestions[index], index),
+          highlighted: index == controller.highlightIndex,
+          child: _buildSuggestionItem(context, suggestions[index], index),
         ),
     ];
     final defaultView = switch (status) {
@@ -1474,7 +1283,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
           children: <Widget>[
             Expanded(child: Text(widget.strings.errorText)),
             TextButton(
-              onPressed: _retrySearch,
+              onPressed: controller._retrySearch,
               child: Text(widget.strings.retryText),
             ),
           ],
@@ -1495,10 +1304,10 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
           context,
           PlacesSuggestionsViewData(
             status: status,
-            suggestions: _suggestions,
+            suggestions: suggestions,
             items: items,
-            error: _error,
-            onRetry: _retrySearch,
+            error: controller.error,
+            onRetry: controller._retrySearch,
             attribution: attribution,
             defaultView: defaultView,
             strings: widget.strings,
@@ -1550,8 +1359,8 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   ) {
     final item = PlacesSuggestionItemData(
       suggestion: suggestion,
-      highlighted: index == _highlightedSuggestionIndex,
-      onSelected: () => _handleSuggestionTap(suggestion),
+      highlighted: index == _controller.highlightIndex,
+      onSelected: () => _controller._select(suggestion),
       strings: widget.strings,
     );
     return widget.suggestionItemBuilder?.call(context, item) ??
@@ -1653,7 +1462,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
     }
     final clearButton = _hasText
         ? IconButton(
-            onPressed: widget.enabled && !_selectionLoading
+            onPressed: widget.enabled && !_controller.selectionLoading
                 ? _clearField
                 : null,
             icon: const Icon(Icons.clear),

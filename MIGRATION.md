@@ -18,6 +18,7 @@ and an address, and `PlacesClient` requests fewer fields when you pass none.
 | Calls `PlacesClient` for details or search without passing `fields:` | Step 8 |
 | Has an inline field with a control just below it | Step 9 |
 | Wants the plain text keyboard on Android | Step 10 |
+| Assigns `PlacesAutocompleteController.selectedSelection` | Step 11 |
 
 ### 1. Raise your SDK floor
 
@@ -276,4 +277,21 @@ PlacesAutocompleteField(
   apiKey: apiKey,
   keyboardType: TextInputType.text,
 )
+```
+
+### 11. `selectedSelection` is read-only
+
+`PlacesAutocompleteController.selectedSelection` was a public field, and assigning it skipped
+notifying the controller's listeners. It is now a getter. Use the method for what you meant:
+
+```dart
+// Before
+controller.selectedSelection = selection;
+controller.selectedSelection = null;
+
+// After
+controller.setSelection(selection); // also puts its text in the field
+controller.setSelection(selection, updateText: false); // keeps the text
+controller.restoreSelection(selection); // a saved value, with its text
+controller.clearSelection();
 ```

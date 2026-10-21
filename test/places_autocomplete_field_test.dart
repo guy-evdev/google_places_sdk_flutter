@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
@@ -273,6 +275,238 @@ enum _Surface {
   };
 
   bool get launches => this == dialog || this == fullscreen;
+}
+
+/// One `TextField` option: the value passed to a Places widget, and how to read
+/// it back from the built `TextField`.
+class _TextFieldOption {
+  _TextFieldOption(this.name, this.value, this.read, [Matcher? matcher])
+    : matcher =
+          matcher ??
+          (value is num || value is bool || value is Enum
+              ? equals(value)
+              : same(value));
+
+  final Symbol name;
+  final Object? value;
+  final Object? Function(TextField field) read;
+  final Matcher matcher;
+}
+
+void _onEditingComplete() {}
+void _onSubmitted(String _) {}
+void _onAppPrivateCommand(String _, Map<String, dynamic> _) {}
+Widget? _buildCounter(
+  BuildContext _, {
+  required int currentLength,
+  required bool isFocused,
+  required int? maxLength,
+}) => null;
+
+/// Every `TextField` option forwarded unchanged, each with a value other than
+/// its default. The composed ones and the search-field-only controllers have
+/// their own tests.
+List<_TextFieldOption> _textFieldOptions() => <_TextFieldOption>[
+  _TextFieldOption(
+    #keyboardType,
+    TextInputType.url,
+    (f) => f.keyboardType,
+    equals(TextInputType.url),
+  ),
+  _TextFieldOption(
+    #textInputAction,
+    TextInputAction.search,
+    (f) => f.textInputAction,
+  ),
+  _TextFieldOption(
+    #textCapitalization,
+    TextCapitalization.words,
+    (f) => f.textCapitalization,
+  ),
+  _TextFieldOption(#style, const TextStyle(fontSize: 21), (f) => f.style),
+  _TextFieldOption(
+    #strutStyle,
+    const StrutStyle(height: 2),
+    (f) => f.strutStyle,
+  ),
+  _TextFieldOption(#textAlign, TextAlign.end, (f) => f.textAlign),
+  _TextFieldOption(
+    #textAlignVertical,
+    TextAlignVertical.center,
+    (f) => f.textAlignVertical,
+  ),
+  _TextFieldOption(#textDirection, TextDirection.rtl, (f) => f.textDirection),
+  _TextFieldOption(#showCursor, false, (f) => f.showCursor),
+  _TextFieldOption(#autocorrect, false, (f) => f.autocorrect),
+  _TextFieldOption(
+    #smartDashesType,
+    SmartDashesType.disabled,
+    (f) => f.smartDashesType,
+  ),
+  _TextFieldOption(
+    #smartQuotesType,
+    SmartQuotesType.disabled,
+    (f) => f.smartQuotesType,
+  ),
+  _TextFieldOption(#enableSuggestions, false, (f) => f.enableSuggestions),
+  _TextFieldOption(#maxLength, 40, (f) => f.maxLength),
+  _TextFieldOption(
+    #maxLengthEnforcement,
+    MaxLengthEnforcement.none,
+    (f) => f.maxLengthEnforcement,
+  ),
+  _TextFieldOption(
+    #onEditingComplete,
+    _onEditingComplete,
+    (f) => f.onEditingComplete,
+  ),
+  _TextFieldOption(#onSubmitted, _onSubmitted, (f) => f.onSubmitted),
+  _TextFieldOption(
+    #onAppPrivateCommand,
+    _onAppPrivateCommand,
+    (f) => f.onAppPrivateCommand,
+  ),
+  _TextFieldOption(#inputFormatters, <TextInputFormatter>[
+    FilteringTextInputFormatter.deny('#'),
+  ], (f) => f.inputFormatters),
+  // true would stop the launcher tap that opens the search.
+  _TextFieldOption(#ignorePointers, false, (f) => f.ignorePointers),
+  _TextFieldOption(#cursorWidth, 3.0, (f) => f.cursorWidth),
+  _TextFieldOption(#cursorHeight, 17.0, (f) => f.cursorHeight),
+  _TextFieldOption(
+    #cursorRadius,
+    const Radius.circular(2),
+    (f) => f.cursorRadius,
+    equals(const Radius.circular(2)),
+  ),
+  _TextFieldOption(
+    #cursorOpacityAnimates,
+    false,
+    (f) => f.cursorOpacityAnimates,
+  ),
+  _TextFieldOption(
+    #cursorColor,
+    const Color(0xFF123456),
+    (f) => f.cursorColor,
+    equals(const Color(0xFF123456)),
+  ),
+  _TextFieldOption(
+    #cursorErrorColor,
+    const Color(0xFF654321),
+    (f) => f.cursorErrorColor,
+    equals(const Color(0xFF654321)),
+  ),
+  _TextFieldOption(
+    #selectionHeightStyle,
+    ui.BoxHeightStyle.max,
+    (f) => f.selectionHeightStyle,
+  ),
+  _TextFieldOption(
+    #selectionWidthStyle,
+    ui.BoxWidthStyle.max,
+    (f) => f.selectionWidthStyle,
+  ),
+  _TextFieldOption(
+    #keyboardAppearance,
+    Brightness.dark,
+    (f) => f.keyboardAppearance,
+  ),
+  _TextFieldOption(
+    #scrollPadding,
+    const EdgeInsets.all(7),
+    (f) => f.scrollPadding,
+    equals(const EdgeInsets.all(7)),
+  ),
+  _TextFieldOption(
+    #dragStartBehavior,
+    DragStartBehavior.down,
+    (f) => f.dragStartBehavior,
+  ),
+  _TextFieldOption(
+    #enableInteractiveSelection,
+    false,
+    (f) => f.enableInteractiveSelection,
+  ),
+  _TextFieldOption(#selectAllOnFocus, true, (f) => f.selectAllOnFocus),
+  _TextFieldOption(
+    #selectionControls,
+    emptyTextSelectionControls,
+    (f) => f.selectionControls,
+  ),
+  _TextFieldOption(#onTapAlwaysCalled, true, (f) => f.onTapAlwaysCalled),
+  _TextFieldOption(
+    #mouseCursor,
+    SystemMouseCursors.help,
+    (f) => f.mouseCursor,
+    equals(SystemMouseCursors.help),
+  ),
+  _TextFieldOption(#buildCounter, _buildCounter, (f) => f.buildCounter),
+  _TextFieldOption(
+    #scrollPhysics,
+    const BouncingScrollPhysics(),
+    (f) => f.scrollPhysics,
+  ),
+  _TextFieldOption(#autofillHints, const <String>[
+    AutofillHints.fullStreetAddress,
+  ], (f) => f.autofillHints),
+  _TextFieldOption(
+    #contentInsertionConfiguration,
+    ContentInsertionConfiguration(onContentInserted: (_) {}),
+    (f) => f.contentInsertionConfiguration,
+  ),
+  _TextFieldOption(#clipBehavior, Clip.none, (f) => f.clipBehavior),
+  _TextFieldOption(
+    #stylusHandwritingEnabled,
+    false,
+    (f) => f.stylusHandwritingEnabled,
+  ),
+  _TextFieldOption(
+    #enableIMEPersonalizedLearning,
+    false,
+    (f) => f.enableIMEPersonalizedLearning,
+  ),
+  _TextFieldOption(
+    #enableInlinePrediction,
+    true,
+    (f) => f.enableInlinePrediction,
+  ),
+  _TextFieldOption(
+    #spellCheckConfiguration,
+    const SpellCheckConfiguration.disabled(),
+    (f) => f.spellCheckConfiguration,
+  ),
+  _TextFieldOption(
+    #magnifierConfiguration,
+    TextMagnifierConfiguration.disabled,
+    (f) => f.magnifierConfiguration,
+  ),
+  _TextFieldOption(#hintLocales, const <Locale>[
+    Locale('fr'),
+  ], (f) => f.hintLocales),
+];
+
+/// The widget for [surface], built with [options] and [extra] as named
+/// arguments, so one list of options drives every surface.
+Widget _build(
+  _Surface surface,
+  PlacesClient client,
+  List<_TextFieldOption> options, [
+  Map<Symbol, Object?> extra = const <Symbol, Object?>{},
+]) {
+  final arguments = <Symbol, Object?>{
+    #client: client,
+    if (surface != _Surface.form) #fieldMode: surface.fieldMode,
+    for (final option in options) option.name: option.value,
+    ...extra,
+  };
+  return Function.apply(
+        surface == _Surface.form
+            ? PlacesAutocompleteFormField.new
+            : PlacesAutocompleteField.new,
+        const <Object?>[],
+        arguments,
+      )
+      as Widget;
 }
 
 /// A text field built from the widgets layer only, wired the way
@@ -1158,6 +1392,51 @@ void main() {
       await client.close();
     },
   );
+
+  testWidgets('form: typing after a pick keeps the text and clears the value', (
+    tester,
+  ) async {
+    final client = PlacesClient.testing(
+      apiKey: 'test',
+      backend: _FakeBackend(),
+    );
+    final formKey = GlobalKey<FormState>();
+    PlaceSelection? saved;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Form(
+            key: formKey,
+            child: PlacesAutocompleteFormField(
+              client: client,
+              onSaved: (value) => saved = value,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.enterText(find.byType(TextField), 'cof');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Coffee Lab'));
+    await tester.pumpAndSettle();
+    final picked = tester
+        .widget<TextField>(find.byType(TextField))
+        .controller!
+        .text;
+
+    await tester.enterText(find.byType(TextField), '${picked}x');
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      '${picked}x',
+    );
+    formKey.currentState!.save();
+    expect(saved, isNull);
+    await tester.pumpAndSettle();
+  });
 
   testWidgets('form exposes forceErrorText, errorBuilder, and enabled', (
     tester,
@@ -2846,78 +3125,226 @@ void main() {
           apiKey: 'test',
           backend: _FakeBackend(),
         );
-        const style = TextStyle(fontSize: 21);
-        const hints = <String>[AutofillHints.fullStreetAddress];
-        final formatters = <TextInputFormatter>[
-          FilteringTextInputFormatter.deny('#'),
-        ];
-        void onSubmitted(String _) {}
-        void onEditingComplete() {}
+        final options = _textFieldOptions();
+        await open(tester, surface, _build(surface, client, options));
+
+        final field = tester.widget<TextField>(textField(surface));
+        for (final option in options) {
+          expect(
+            option.read(field),
+            option.matcher,
+            reason: '${surface.name}: ${option.name}',
+          );
+        }
+      });
+
+      testWidgets('${surface.name}: onChanged is called and still searches', (
+        tester,
+      ) async {
+        final backend = _FakeBackend();
+        final client = PlacesClient.testing(apiKey: 'test', backend: backend);
+        final changes = <String>[];
         await open(
           tester,
           surface,
-          surface == _Surface.form
-              ? PlacesAutocompleteFormField(
-                  client: client,
-                  keyboardType: TextInputType.url,
-                  textInputAction: TextInputAction.search,
-                  textCapitalization: TextCapitalization.words,
-                  style: style,
-                  textAlign: TextAlign.end,
-                  textDirection: TextDirection.rtl,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  enableIMEPersonalizedLearning: false,
-                  inputFormatters: formatters,
-                  maxLength: 40,
-                  maxLengthEnforcement: MaxLengthEnforcement.none,
-                  autofillHints: hints,
-                  keyboardAppearance: Brightness.dark,
-                  scrollPadding: const EdgeInsets.all(7),
-                  onSubmitted: onSubmitted,
-                  onEditingComplete: onEditingComplete,
-                )
-              : PlacesAutocompleteField(
-                  client: client,
-                  fieldMode: surface.fieldMode,
-                  keyboardType: TextInputType.url,
-                  textInputAction: TextInputAction.search,
-                  textCapitalization: TextCapitalization.words,
-                  style: style,
-                  textAlign: TextAlign.end,
-                  textDirection: TextDirection.rtl,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  enableIMEPersonalizedLearning: false,
-                  inputFormatters: formatters,
-                  maxLength: 40,
-                  maxLengthEnforcement: MaxLengthEnforcement.none,
-                  autofillHints: hints,
-                  keyboardAppearance: Brightness.dark,
-                  scrollPadding: const EdgeInsets.all(7),
-                  onSubmitted: onSubmitted,
-                  onEditingComplete: onEditingComplete,
-                ),
+          _build(surface, client, const <_TextFieldOption>[], <Symbol, Object?>{
+            #onChanged: changes.add,
+          }),
+        );
+
+        await type(tester, surface, 'cof');
+        expect(changes, <String>['cof']);
+        expect(backend.lastAutocompleteRequest?.input, 'cof');
+      });
+
+      testWidgets('${surface.name}: onTap is called and still opens search', (
+        tester,
+      ) async {
+        final client = PlacesClient.testing(
+          apiKey: 'test',
+          backend: _FakeBackend(),
+        );
+        var taps = 0;
+        await open(
+          tester,
+          surface,
+          _build(surface, client, const <_TextFieldOption>[], <Symbol, Object?>{
+            #onTap: () => taps++,
+          }),
+        );
+
+        if (surface.launches) {
+          // open() tapped the launcher.
+          expect(taps, 1);
+          expect(find.byType(PlacesAutocompleteOverlay), findsOneWidget);
+        }
+        await tester.tap(textField(surface));
+        await tester.pump();
+        expect(taps, surface.launches ? 2 : 1);
+      });
+
+      testWidgets('${surface.name}: the tap-outside callbacks are called', (
+        tester,
+      ) async {
+        final client = PlacesClient.testing(
+          apiKey: 'test',
+          backend: _FakeBackend(),
+        );
+        final downs = <PointerDownEvent>[];
+        final ups = <PointerUpEvent>[];
+        await open(
+          tester,
+          surface,
+          _build(surface, client, const <_TextFieldOption>[], <Symbol, Object?>{
+            #onTapOutside: downs.add,
+            #onTapUpOutside: ups.add,
+          }),
         );
 
         final field = tester.widget<TextField>(textField(surface));
-        expect(field.keyboardType, TextInputType.url);
-        expect(field.textInputAction, TextInputAction.search);
-        expect(field.textCapitalization, TextCapitalization.words);
-        expect(field.style, style);
-        expect(field.textAlign, TextAlign.end);
-        expect(field.textDirection, TextDirection.rtl);
-        expect(field.autocorrect, isFalse);
-        expect(field.enableSuggestions, isFalse);
-        expect(field.enableIMEPersonalizedLearning, isFalse);
-        expect(field.inputFormatters, same(formatters));
-        expect(field.maxLength, 40);
-        expect(field.maxLengthEnforcement, MaxLengthEnforcement.none);
-        expect(field.autofillHints, same(hints));
-        expect(field.keyboardAppearance, Brightness.dark);
-        expect(field.scrollPadding, const EdgeInsets.all(7));
-        expect(field.onSubmitted, same(onSubmitted));
-        expect(field.onEditingComplete, same(onEditingComplete));
+        const down = PointerDownEvent();
+        const up = PointerUpEvent();
+        field.onTapOutside!(down);
+        field.onTapUpOutside!(up);
+        expect(downs.single, same(down));
+        expect(ups.single, same(up));
+      });
+
+      testWidgets('${surface.name}: contextMenuBuilder builds the menu', (
+        tester,
+      ) async {
+        final client = PlacesClient.testing(
+          apiKey: 'test',
+          backend: _FakeBackend(),
+        );
+        EditableTextState? builtFor;
+        Widget menu(BuildContext context, EditableTextState state) {
+          builtFor = state;
+          return const SizedBox(key: ValueKey<String>('menu'));
+        }
+
+        await open(
+          tester,
+          surface,
+          _build(surface, client, const <_TextFieldOption>[], <Symbol, Object?>{
+            #contextMenuBuilder: menu,
+          }),
+        );
+
+        final field = tester.widget<TextField>(textField(surface));
+        final state = tester.state<EditableTextState>(
+          find.descendant(
+            of: textField(surface),
+            matching: find.byType(EditableText),
+          ),
+        );
+        // A new app, not the old one: its navigator still holds the search.
+        await tester.pumpWidget(
+          MaterialApp(
+            key: UniqueKey(),
+            home: Builder(
+              builder: (context) => field.contextMenuBuilder!(context, state),
+            ),
+          ),
+        );
+        expect(builtFor, same(state));
+        expect(find.byKey(const ValueKey<String>('menu')), findsOneWidget);
+      });
+
+      testWidgets('${surface.name}: a null contextMenuBuilder turns it off', (
+        tester,
+      ) async {
+        final client = PlacesClient.testing(
+          apiKey: 'test',
+          backend: _FakeBackend(),
+        );
+        await open(
+          tester,
+          surface,
+          _build(surface, client, const <_TextFieldOption>[], <Symbol, Object?>{
+            #contextMenuBuilder: null,
+          }),
+        );
+
+        expect(
+          tester.widget<TextField>(textField(surface)).contextMenuBuilder,
+          isNull,
+        );
+      });
+
+      testWidgets('${surface.name}: controllers attach to the search field', (
+        tester,
+      ) async {
+        final client = PlacesClient.testing(
+          apiKey: 'test',
+          backend: _FakeBackend(),
+        );
+        final scroll = ScrollController();
+        final undo = UndoHistoryController();
+        final states = WidgetStatesController();
+        addTearDown(scroll.dispose);
+        addTearDown(undo.dispose);
+        addTearDown(states.dispose);
+        await open(
+          tester,
+          surface,
+          _build(surface, client, const <_TextFieldOption>[], <Symbol, Object?>{
+            #scrollController: scroll,
+            #undoController: undo,
+            #statesController: states,
+          }),
+        );
+
+        final search = tester.widget<TextField>(textField(surface));
+        expect(search.scrollController, same(scroll));
+        expect(search.undoController, same(undo));
+        expect(search.statesController, same(states));
+        if (surface.launches) {
+          // The first field in the tree is the launcher, under the route.
+          final launcher = tester.widget<TextField>(
+            find
+                .descendant(
+                  of: find
+                      .byType(PlacesAutocompleteField, skipOffstage: false)
+                      .first,
+                  matching: find.byType(TextField, skipOffstage: false),
+                )
+                .first,
+          );
+          expect(launcher, isNot(same(search)));
+          expect(launcher.scrollController, isNull);
+          expect(launcher.undoController, isNull);
+          expect(launcher.statesController, isNull);
+        }
+      });
+
+      testWidgets('${surface.name}: groupId covers the suggestions', (
+        tester,
+      ) async {
+        final client = PlacesClient.testing(
+          apiKey: 'test',
+          backend: _FakeBackend(),
+        );
+        final group = Object();
+        await open(
+          tester,
+          surface,
+          _build(surface, client, const <_TextFieldOption>[], <Symbol, Object?>{
+            #groupId: group,
+          }),
+        );
+
+        await type(tester, surface, 'cof');
+        final region = tester.widget<TextFieldTapRegion>(
+          find
+              .ancestor(
+                of: find.text('Coffee Lab'),
+                matching: find.byType(TextFieldTapRegion),
+              )
+              .first,
+        );
+        expect(region.groupId, same(group));
+        expect(tester.widget<TextField>(textField(surface)).groupId, group);
       });
 
       testWidgets('${surface.name}: a view builder can cap the height', (
@@ -3014,6 +3441,43 @@ void main() {
         );
       });
     }
+
+    testWidgets('onTapOutside keeps the default: a click outside unfocuses', (
+      tester,
+    ) async {
+      final client = PlacesClient.testing(
+        apiKey: 'test',
+        backend: _FakeBackend(),
+      );
+      final downs = <PointerDownEvent>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: <Widget>[
+                PlacesAutocompleteField(
+                  client: client,
+                  onTapOutside: downs.add,
+                ),
+                const SizedBox(height: 400),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      final focusNode = tester
+          .widget<TextField>(find.byType(TextField))
+          .focusNode!;
+      expect(focusNode.hasFocus, isTrue);
+
+      await tester.tapAt(const Offset(400, 500), kind: PointerDeviceKind.mouse);
+      await tester.pump();
+
+      expect(downs, hasLength(1));
+      expect(focusNode.hasFocus, isFalse);
+    });
 
     testWidgets('below minInputLength the results close; the session '
         'carries on', (tester) async {

@@ -548,6 +548,21 @@ void main() {
           },
         ],
       },
+      'entrances': <Map<String, Object?>>[
+        <String, Object?>{
+          'location': <String, Object?>{'latitude': 40.71, 'longitude': -74.01},
+          'tags': <String>['PREFERRED'],
+        },
+      ],
+      'navigationPoints': <Map<String, Object?>>[
+        <String, Object?>{
+          'navigationPointToken': 'np-1',
+          'displayName': <String, Object?>{'text': 'Gate B'},
+          'location': <String, Object?>{'latitude': 40.72, 'longitude': -74.02},
+          'travelModes': <String>['WALK'],
+          'usages': <String>['DROPOFF'],
+        },
+      ],
     });
 
     expect(place.adrFormatAddress, contains('1 Main St'));
@@ -578,6 +593,16 @@ void main() {
     expect(place.transitStation?.displayName?.text, 'Central Station');
     expect(place.transitStation?.agencies.single.lines.single.id, 'A');
     expect(place.transitStation?.stops.single.location?.latitude, 40.7);
+    expect(place.entrances.single['tags'], <String>['PREFERRED']);
+    expect(place.navigationPoints.single['navigationPointToken'], 'np-1');
+    expect(
+      () => (place.entrances.single['tags']! as List<Object?>).add('x'),
+      throwsUnsupportedError,
+    );
+    expect(
+      () => place.navigationPoints.add(<String, Object?>{}),
+      throwsUnsupportedError,
+    );
 
     expect(
       () => place.attributions.add(const PlaceAttribution(provider: 'x')),
@@ -699,6 +724,8 @@ void main() {
       PlaceField.pureServiceAreaBusiness,
       PlaceField.movedPlace,
       PlaceField.movedPlaceId,
+      PlaceField.entrances,
+      PlaceField.navigationPoints,
     };
 
     final detailsRequest = PlaceDetailsRequest(
@@ -719,6 +746,74 @@ void main() {
       fields.map((field) => field.searchMaskPath).join(','),
     );
   });
+
+  test('location areas compare by value', () {
+    const center = PlaceCoordinates(latitude: 1, longitude: 2);
+    const high = PlaceCoordinates(latitude: 3, longitude: 4);
+    expect(
+      LocationBias.circle(center: center, radiusMeters: 5),
+      LocationBias.circle(center: center, radiusMeters: 5),
+    );
+    expect(
+      LocationBias.circle(center: center, radiusMeters: 5),
+      isNot(LocationBias.circle(center: center, radiusMeters: 6)),
+    );
+    expect(
+      LocationRestriction.rectangle(low: center, high: high),
+      LocationRestriction.rectangle(low: center, high: high),
+    );
+    expect(
+      LocationRestriction.rectangle(low: center, high: high).hashCode,
+      LocationRestriction.rectangle(low: center, high: high).hashCode,
+    );
+    expect(
+      LocationRestriction.rectangle(low: center, high: high),
+      isNot(LocationRestriction.circle(center: center, radiusMeters: 5)),
+    );
+    expect(
+      LocationBias.circle(center: center, radiusMeters: 5),
+      isNot(LocationRestriction.circle(center: center, radiusMeters: 5)),
+    );
+  });
+
+  test(
+    'the all preset holds every PlaceField and is valid on every operation',
+    () {
+      expect(PlaceFieldPresets.all, PlaceField.values.toSet());
+      expect(PlaceFieldPresets.all, contains(PlaceField.entrances));
+      expect(PlaceFieldPresets.all, contains(PlaceField.navigationPoints));
+      expect(
+        () => PlaceFieldPresets.all.add(PlaceField.id),
+        throwsUnsupportedError,
+      );
+
+      final allNames = PlaceField.values.map((field) => field.apiName);
+      expect(
+        PlaceDetailsRequest(
+          placeId: 'place-1',
+          fields: PlaceFieldPresets.all,
+        ).detailsFieldMask.split(','),
+        allNames,
+      );
+      expect(
+        TextSearchRequest(
+          textQuery: 'coffee',
+          fields: PlaceFieldPresets.all,
+        ).searchFieldMask.split(','),
+        allNames.map((name) => 'places.$name'),
+      );
+      expect(
+        NearbySearchRequest(
+          locationRestriction: LocationRestriction.circle(
+            center: const PlaceCoordinates(latitude: 32.08, longitude: 34.78),
+            radiusMeters: 500,
+          ),
+          fields: PlaceFieldPresets.all,
+        ).searchFieldMask.split(','),
+        allNames.map((name) => 'places.$name'),
+      );
+    },
+  );
 
   test('maps REST field names to current Maps JavaScript Place properties', () {
     expect(webPlaceFieldName(PlaceField.openingDate), 'futureOpeningDate');

@@ -73,7 +73,7 @@ Not a fit if your users need to pick a point on a map: this package searches by 
 | Search in a dialog or on a full screen, awaiting the pick | `PlacesAutocompleteOverlay.show()` | [Dialog and full screen](doc/recipes.md#search-in-a-dialog-or-on-a-full-screen) |
 | Place data with no UI — details, Text Search, Nearby Search, photos, time zone | `PlacesClient` | [Search without a widget](doc/recipes.md#search-without-a-widget) |
 | The widget, with your own field, rows, or styling | `fieldBuilder`, `suggestionItemBuilder`, `suggestionsViewBuilder` | [Customize](doc/recipes.md#customize-the-field-and-the-suggestions) |
-| Your own suggestion UI, still billed per session | `PlacesClient.autocomplete()` with an `AutocompleteSessionToken` | [Your own autocomplete UI](doc/recipes.md#build-your-own-autocomplete-ui) |
+| Your own search UI, still billed per session | `PlacesAutocompleteController` | [Your own autocomplete UI](doc/recipes.md#build-your-own-autocomplete-ui) |
 
 Every option and default is in the [API reference](doc/api_reference.md).
 
@@ -159,7 +159,13 @@ expensive field:
 | `PlaceFieldPresets.address` (default) | coordinates, the address, and its parsed parts | Essentials |
 | `PlaceFieldPresets.recommended` | coordinates, the address, name, type, Maps link, icon, and rating — **not** the parsed parts | Enterprise |
 | `PlaceFieldPresets.rich` | `recommended` plus the parsed parts, phone, website, opening hours, photos, reviews, and amenities | Enterprise + Atmosphere |
-| Your own set of `PlaceField` values | exactly what you list, from all 78 fields | the highest among them |
+| Your own set of `PlaceField` values | exactly what you list, from all 80 fields | the highest among them |
+| `PlaceFieldPresets.all` | every field — for exploring the data and for admin tools | Enterprise + Atmosphere, always |
+
+`PlaceFieldPresets.all` is not for production: it always bills at the highest tier, returns the
+largest responses, and grows when a package version adds fields. On web it takes the HTTP path,
+because the Maps JavaScript backend does not have every field: the web fallback policy must allow
+it, and that details request is not part of the autocomplete session.
 
 To keep the parsed address, add to the default rather than replacing it:
 

@@ -9,6 +9,7 @@
 * `PlacesClient` requests fewer fields by default: `PlaceFieldPresets.address` for details, `PlaceFieldPresets.minimal` for Text Search and Nearby Search.
 * Inline suggestions float over the page instead of pushing the content below the field down, opening above the field when the keyboard leaves more room there.
 * The field's keyboard defaults to `TextInputType.streetAddress`: an address keyboard on Android, word capitalization on Linux.
+* `PlacesAutocompleteController.selectedSelection` is read-only; use `setSelection`, `restoreSelection`, or `clearSelection`.
 
 **New:**
 
@@ -18,9 +19,11 @@
 * Dialog and fullscreen search keep the field in place and scroll only the results; fullscreen puts the field in the top bar.
 * `fieldBuilder`, `suggestionItemBuilder`, and `suggestionsViewBuilder` build the field, each row, and the suggestion area; the view gets the typed `PlacesException` when a search fails.
 * `minInputLength` and `debounceDuration` on the widgets, to send fewer billed autocomplete requests.
-* `TextField` options on the widgets: `keyboardType`, `textInputAction`, `inputFormatters`, `onSubmitted`, and more.
+* Every `TextField` option that fits an autocomplete field, on the widgets — `keyboardType`, `inputFormatters`, `onSubmitted`, the cursor and spell-check options, and more.
 * `suggestionsViewOpenDirection` and `unfocusOnSelection` for inline fields, and `includeFutureOpeningBusinesses` on the widgets.
+* `PlacesAutocompleteController` runs the search for your own UI — `search()`, `select()`, `retry()`, and its `suggestions`, `status`, and `error`, notifying its listeners as they change — and takes your own `TextEditingController` and `FocusNode`.
 * `PlaceSelection.fromPlace` starts a form field from a saved place.
+* `PlaceField.entrances` and `PlaceField.navigationPoints`, and `PlaceFieldPresets.all` with every field — for exploration, as it always bills at the highest tier.
 
 **Fixed:**
 
@@ -28,6 +31,8 @@
 * The keyboard-highlighted row has a background, keeps its text colours, and scrolls into view.
 * A `Theme` around the field now reaches the fullscreen search, as it already reached the dialog.
 * On web, a circle `locationRestriction` for autocomplete through Maps JavaScript now fails with a `validation` error instead of being sent to an API that does not accept it.
+* In `PlacesAutocompleteFormField`, typing after picking a place no longer clears the field.
+* Rebuilding a widget with an equal `LocationBias` or `LocationRestriction`, or with new selection settings, no longer ends the user's search and billing session.
 
 **Deprecated:**
 

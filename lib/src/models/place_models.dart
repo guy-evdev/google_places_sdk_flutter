@@ -286,6 +286,16 @@ class CircleArea extends PlacesArea {
     'center': center.toWebJson(),
     'radius': radiusMeters,
   };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CircleArea &&
+          other.center == center &&
+          other.radiusMeters == radiusMeters;
+
+  @override
+  int get hashCode => Object.hash(center, radiusMeters);
 }
 
 @immutable
@@ -312,6 +322,14 @@ class RectangleArea extends PlacesArea {
     'north': high.latitude,
     'east': high.longitude,
   };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RectangleArea && other.low == low && other.high == high;
+
+  @override
+  int get hashCode => Object.hash(low, high);
 }
 
 @immutable
@@ -340,6 +358,14 @@ class LocationBias {
     required PlaceCoordinates low,
     required PlaceCoordinates high,
   }) => LocationBias._(RectangleArea(low: low, high: high));
+
+  // By value, so a widget rebuilt with an equal bias keeps its session.
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is LocationBias && other.area == area;
+
+  @override
+  int get hashCode => area.hashCode;
 }
 
 @immutable
@@ -374,6 +400,15 @@ class LocationRestriction {
     required PlaceCoordinates low,
     required PlaceCoordinates high,
   }) => LocationRestriction._(RectangleArea(low: low, high: high));
+
+  // By value, so a widget rebuilt with an equal restriction keeps its session.
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LocationRestriction && other.area == area;
+
+  @override
+  int get hashCode => area.hashCode;
 }
 
 /// Field-mask entries supported by Places API (New) details and search calls.
@@ -462,7 +497,9 @@ enum PlaceField {
   transitStation('transitStation'),
   pureServiceAreaBusiness('pureServiceAreaBusiness'),
   movedPlace('movedPlace'),
-  movedPlaceId('movedPlaceId');
+  movedPlaceId('movedPlaceId'),
+  entrances('entrances'),
+  navigationPoints('navigationPoints');
 
   const PlaceField(this.apiName);
 
@@ -559,6 +596,23 @@ abstract final class PlaceFieldPresets {
     PlaceField.parkingOptions,
     PlaceField.accessibilityOptions,
   };
+
+  /// Every [PlaceField] the package supports — for exploring the data and for
+  /// admin tools, not for production autocomplete.
+  ///
+  /// It always bills at the highest tier, Enterprise + Atmosphere, on Place
+  /// Details, Text Search and Nearby Search, and returns the largest
+  /// responses. It is built from [PlaceField.values], so it grows between
+  /// package versions as fields are added, and a request that used it can
+  /// bill differently after an upgrade.
+  ///
+  /// On web, several of its fields are not available through the Maps
+  /// JavaScript backend — the web default — so a request that uses it takes
+  /// the HTTP path there, which `PlacesWebFallbackPolicy` must allow. A Place
+  /// Details request on that path is not part of the autocomplete session.
+  static final Set<PlaceField> all = Set<PlaceField>.unmodifiable(
+    PlaceField.values,
+  );
 }
 
 /// Ranking preference for text search.
@@ -1832,6 +1886,8 @@ class PlaceData {
     this.pureServiceAreaBusiness,
     this.movedPlace,
     this.movedPlaceId,
+    this.entrances = const <Map<String, Object?>>[],
+    this.navigationPoints = const <Map<String, Object?>>[],
     this.reviews = const <PlaceReview>[],
     this.photos = const <PlacePhoto>[],
     this.rawData = const <String, Object?>{},
@@ -2064,6 +2120,26 @@ class PlaceData {
 
   /// Place id of the moved-to place when this place has moved.
   final String? movedPlaceId;
+
+  /// The place's entrances, as Google returns them, deeply immutable.
+  ///
+  /// Each entry has a `location` and a list of `tags`; see Google's
+  /// [Place resource](https://developers.google.com/maps/documentation/places/web-service/reference/rest/v1/places).
+  /// Requested with [PlaceField.entrances], a Pro field. The Maps JavaScript
+  /// backend does not have it, so on web the request falls back to the HTTP
+  /// path, which `PlacesWebFallbackPolicy` must allow.
+  final List<Map<String, Object?>> entrances;
+
+  /// Points next to a road where navigation to the place can end, as Google
+  /// returns them, deeply immutable.
+  ///
+  /// Each entry has a `navigationPointToken`, a `displayName`, a `location`,
+  /// `travelModes` and `usages`; see Google's
+  /// [Place resource](https://developers.google.com/maps/documentation/places/web-service/reference/rest/v1/places).
+  /// Requested with [PlaceField.navigationPoints], a Pro field. The Maps
+  /// JavaScript backend does not have it, so on web the request falls back to
+  /// the HTTP path, which `PlacesWebFallbackPolicy` must allow.
+  final List<Map<String, Object?>> navigationPoints;
 
   /// Reviews returned when review fields are requested.
   final List<PlaceReview> reviews;
@@ -2341,6 +2417,8 @@ class PlaceData {
     pureServiceAreaBusiness: json['pureServiceAreaBusiness'] as bool?,
     movedPlace: json['movedPlace'] as String?,
     movedPlaceId: json['movedPlaceId'] as String?,
+    entrances: _deepImmutableJsonMapList(json['entrances']),
+    navigationPoints: _deepImmutableJsonMapList(json['navigationPoints']),
     reviews: List<PlaceReview>.unmodifiable(
       ((json['reviews'] as List?) ?? <Object?>[])
           .whereType<Map<Object?, Object?>>()

@@ -115,6 +115,32 @@ void main() {
     expect(find.byType(AdaptiveTextSelectionToolbar), findsOneWidget);
   }, skip: kIsWeb); // The browser supplies its own context menu on web.
 
+  testWidgets('a custom long-press menu builds in a legacy app', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _legacyApp(
+        PlacesAutocompleteField(
+          client: _client(),
+          contextMenuBuilder: (context, state) =>
+              AdaptiveTextSelectionToolbar.editableText(
+                key: const ValueKey<String>('custom-menu'),
+                editableTextState: state,
+              ),
+        ),
+      ),
+    );
+    await tester.enterText(find.byType(TextField), 'coffee');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.byType(TextField));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const ValueKey<String>('custom-menu')), findsOneWidget);
+  }, skip: kIsWeb); // The browser supplies its own context menu on web.
+
   for (final fieldMode in <PlacesAutocompleteFieldMode>[
     PlacesAutocompleteFieldMode.dialog,
     PlacesAutocompleteFieldMode.fullscreen,

@@ -396,4 +396,36 @@ void main() {
       );
     });
   });
+
+  testWidgets('a controller given apiKey makes its own client and closes it', (
+    tester,
+  ) async {
+    final clients = <_RecordingHttpClient>[];
+    await _withRecordedClients(clients, () async {
+      final controller = PlacesAutocompleteController(apiKey: 'controller-key');
+      controller.textController.text = 'cof';
+      controller.search();
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump();
+
+      expect(_keyOf(clients.single.requests.single), 'controller-key');
+      expect(controller.suggestions, isNotEmpty);
+      expect(clients.single.closed, isFalse);
+      controller.dispose();
+      expect(clients.single.closed, isTrue);
+    });
+  });
+
+  testWidgets('a controller never closes a client it was given', (
+    tester,
+  ) async {
+    final backend = _ClosingBackend();
+    final controller = PlacesAutocompleteController(
+      client: PlacesClient.testing(apiKey: 'test', backend: backend),
+    );
+    controller.dispose();
+    await tester.pump();
+
+    expect(backend.closed, isFalse);
+  });
 }

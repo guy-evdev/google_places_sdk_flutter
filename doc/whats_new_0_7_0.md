@@ -17,6 +17,8 @@ and why.
 - [Your own field, rows, and suggestion area](#your-own-field-rows-and-suggestion-area)
 - [Fewer billed requests](#fewer-billed-requests)
 - [`TextField` options and inline placement](#textfield-options-and-inline-placement)
+- [Your own search UI with the controller](#your-own-search-ui-with-the-controller)
+- [Entrances, navigation points, and every field at once](#entrances-navigation-points-and-every-field-at-once)
 - [Why the `material_ui` migration exists](#why-this-release-exists)
 
 ## Apps on either design library
@@ -241,11 +243,12 @@ PlacesAutocompleteField(
 
 ## `TextField` options and inline placement
 
-The widgets take the `TextField` options a search field uses, under `TextField`'s own names:
-`keyboardType`, `textInputAction`, `textCapitalization`, `style`, `textAlign`, `textDirection`,
-`autocorrect`, `enableSuggestions`, `enableIMEPersonalizedLearning`, `inputFormatters`,
-`maxLength`, `maxLengthEnforcement`, `autofillHints`, `keyboardAppearance`, `scrollPadding`,
-`onSubmitted`, and `onEditingComplete`. They reach the dialog and fullscreen search too:
+The widgets take `TextField`'s own options, under `TextField`'s names and with its defaults, so
+swapping a `TextField` for a `PlacesAutocompleteField` keeps them. That is every option except the
+few a one-line search field cannot honour — `readOnly`, `canRequestFocus`, `obscureText`,
+`obscuringCharacter`, `maxLines`, `minLines`, `expands`, `restorationId`, and the deprecated
+`toolbarOptions` and `scribbleEnabled` — and the ones the widget already has (`controller`,
+`decoration`, `enabled`, `autofocus`). They reach the dialog and fullscreen search too:
 
 ```dart
 PlacesAutocompleteField(
@@ -259,8 +262,14 @@ PlacesAutocompleteField(
 addresses on Android and asks Linux input methods to capitalize words; iOS, the web, macOS, and
 Windows keep the usual text keyboard. See
 [MIGRATION.md](../MIGRATION.md#10-the-keyboard-is-for-street-addresses) to keep the old one. The
-options configure the package's own field; with a `fieldBuilder`, set them on yours. Cursor and
-selection colours come from the theme, as for any `TextField`. The keyboard's action button, as in
+options configure the package's own field; with a `fieldBuilder`, set them on yours.
+
+Five of them run alongside what the widget does rather than replacing it: `onChanged` (typing still
+searches), `onTap` (a launcher tap still opens the search), `onTapOutside` and `onTapUpOutside` (a
+tap outside still does what `TextField` does by default), and `contextMenuBuilder` (your menu also
+works in apps still on `package:flutter/material.dart`). `scrollController`, `undoController`,
+and `statesController` attach to one field, so in dialog and fullscreen modes they go to the search
+field, not the launcher. The keyboard's action button, as in
 any `TextField`, gives up focus by default, which closes the suggestions; pass `onEditingComplete`
 to keep them open.
 
@@ -282,6 +291,86 @@ Fixed on the way: on the web, a circle `locationRestriction` for autocomplete th
 JavaScript API — which accepts only a rectangle there — was sent anyway, where Google could reject
 it with an unclear error or leave the search unrestricted. It now fails with a `validation` error
 that says so.
+
+## Your own search UI with the controller
+
+`PlacesAutocompleteController` now runs the search itself, so you can draw the field and the
+suggestions yourself and still get the debounce, the minimum length, stale-result handling, and
+one billing session per search:
+
+```dart
+final controller = PlacesAutocompleteController(apiKey: apiKey);
+
+TextField(
+  controller: controller.textController,
+  onChanged: (_) => controller.search(),
+);
+ListenableBuilder(
+  listenable: controller,
+  builder: (context, _) => Column(
+    children: [
+      for (final suggestion in controller.suggestions)
+        ListTile(
+          title: Text(suggestion.displayText),
+          onTap: () => controller.select(suggestion),
+        ),
+    ],
+  ),
+);
+```
+
+Its `suggestions`, `status`, `error`, `highlightIndex`, and `selectionLoading` are what the widgets
+draw, and it notifies its listeners when they change. `select()` loads the place's details and
+ends the session with that request, as the widgets do; `clear()`, `resetSession()`, and `dispose()`
+end it without one. Search settings go in `PlacesAutocompleteOptions`, under the widgets' names.
+Given `apiKey:`, the controller creates a client and closes it in `dispose()`; given `client:`, it
+never closes it. It also takes your own `TextEditingController` and `FocusNode`.
+
+Passed to a widget, the controller is driven by it: the widget's parameters and client apply, not
+the controller's. An app that listens to its controller now hears every change to the search, not
+only selection and session changes.
+
+Fixed on the way: a widget rebuilt with a new but equal `LocationBias` or `LocationRestriction` —
+`LocationBias.circle(...)` written in `build` — ended the user's session and dropped the search on
+every rebuild. Both now compare by value. Only the settings that shape the autocomplete request
+end a session when they change; `maxSuggestions`, `minInputLength`, and the selection settings,
+such as `selectionTimeZoneAt: DateTime.now()`, apply from the next search or pick. And `selectedSelection` is now read-only — assigning it never notified anyone;
+see [MIGRATION.md](../MIGRATION.md#11-selectedselection-is-read-only).
+
+Fixed on the way: in `PlacesAutocompleteFormField`, typing after picking a place emptied the field
+— the form followed the controller in clearing its value, and then put that empty value back into
+the text. Typing now keeps the text and clears only the value.
+
+Picking a query suggestion now ends the session *before* `onQuerySelection` is called, so
+`onQuerySelection: (_) => controller.search()` searches for the picked phrase in a new session; see
+the [recipe](recipes.md#search-again-with-a-picked-query-suggestion).
+
+## Entrances, navigation points, and every field at once
+
+`PlaceField.entrances` and `PlaceField.navigationPoints` request two fields Google added in August
+2026: where a place's entrances are, and the points next to a road where navigation to it can end.
+Both are Place Details Pro fields, and both arrive as read-only JSON on `PlaceData.entrances` and
+`PlaceData.navigationPoints`:
+
+```dart
+final place = await client.fetchPlaceById(
+  placeId,
+  fields: {...PlaceFieldPresets.address, PlaceField.entrances},
+);
+for (final entrance in place.entrances) {
+  debugPrint('${entrance['location']} ${entrance['tags']}');
+}
+```
+
+The Maps JavaScript `Place` class does not have them, so on the web a request for either one falls
+back to the HTTP path, which `PlacesWebFallbackPolicy` must allow.
+
+`PlaceFieldPresets.all` is every `PlaceField` the package supports, built from `PlaceField.values`.
+It is for exploring what Google returns and for admin tools, **not** for production autocomplete:
+it always bills at the highest tier, Enterprise + Atmosphere, on Place Details, Text Search and
+Nearby Search; it returns the largest responses; and it grows when a package version adds fields,
+so a request that uses it can bill differently after an upgrade. On the web it takes the HTTP path
+for the same reason as the two new fields.
 
 ## Why this release exists
 
