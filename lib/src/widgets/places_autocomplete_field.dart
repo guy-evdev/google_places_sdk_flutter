@@ -748,11 +748,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField>
     if (_suggestionPointerDown || controller._selectionInProgress) {
       return;
     }
-    final hadActiveSession = controller._hasActiveSession;
-    controller._closeSearch();
-    if (hadActiveSession) {
-      controller.resetSession();
-    }
+    controller._abandonSearch();
   }
 
   void _onTextControllerChanged() {
@@ -788,8 +784,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField>
       return KeyEventResult.ignored;
     }
     if (event.logicalKey == LogicalKeyboardKey.escape) {
-      controller._closeSearch();
-      controller.resetSession();
+      controller._abandonSearch();
       return KeyEventResult.handled;
     }
     final suggestions = controller._suggestions;

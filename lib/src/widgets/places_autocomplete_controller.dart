@@ -106,17 +106,7 @@ class PlacesAutocompleteOptions {
   @override
   bool operator ==(Object other) =>
       other is PlacesAutocompleteOptions &&
-      other.languageCode == languageCode &&
-      other.regionCode == regionCode &&
-      other.origin == origin &&
-      other.locationBias == locationBias &&
-      other.locationRestriction == locationRestriction &&
-      listEquals(other.includedPrimaryTypes, includedPrimaryTypes) &&
-      listEquals(other.includedRegionCodes, includedRegionCodes) &&
-      other.includePureServiceAreaBusinesses ==
-          includePureServiceAreaBusinesses &&
-      other.includeFutureOpeningBusinesses == includeFutureOpeningBusinesses &&
-      other.includeQueryPredictions == includeQueryPredictions &&
+      _sameSearch(other) &&
       other.maxSuggestions == maxSuggestions &&
       other.minInputLength == minInputLength &&
       other.fetchPlaceDetailsOnSelection == fetchPlaceDetailsOnSelection &&
@@ -470,9 +460,8 @@ class PlacesAutocompleteController extends ChangeNotifier {
   bool _open = false;
   int _highlightIndex = -1;
   int _searchGeneration = 0;
-  int _selectionGeneration = 0;
-  bool _selectionInProgress = false;
   PlacesCancellationToken? _searchCancellationToken;
+  // The pick in progress, if any; a pick is current while its token is.
   PlacesCancellationToken? _selectionCancellationToken;
   // The session the last request went out in. Compared by value with the
   // current one, so it needs no clearing when the session resets.
@@ -486,6 +475,8 @@ class PlacesAutocompleteController extends ChangeNotifier {
 
   Duration get _debounceDuration =>
       _binding?.widget.debounceDuration ?? debounceDuration;
+
+  bool get _selectionInProgress => _selectionCancellationToken != null;
 
   // Shown, pending, or already billed: input below minInputLength closes the
   // results but not the session its earlier requests went out in.
@@ -584,22 +575,23 @@ class PlacesAutocompleteController extends ChangeNotifier {
     }
   }
 
+  // Closes the search and abandons any pick in progress.
   void _invalidateAsyncWork({bool notify = true}) {
-    _debounce?.cancel();
-    _searchCancellationToken?.cancel();
-    _searchCancellationToken = null;
+    _closeSearch(notify: false);
     _selectionCancellationToken?.cancel();
     _selectionCancellationToken = null;
-    _searchGeneration++;
-    _selectionGeneration++;
-    _selectionInProgress = false;
-    _open = false;
-    _loading = false;
     _selectionLoading = false;
-    _error = null;
-    _suggestions = const <AutocompleteSuggestion>[];
-    _highlightIndex = -1;
     _changed(notify: notify);
+  }
+
+  // The user left the search without picking: close it, and end the session
+  // if anything went out in it.
+  void _abandonSearch() {
+    final hadActiveSession = _hasActiveSession;
+    _closeSearch();
+    if (hadActiveSession) {
+      resetSession();
+    }
   }
 
   // The text changed.
@@ -617,11 +609,7 @@ class PlacesAutocompleteController extends ChangeNotifier {
     _debounce?.cancel();
     final input = value.trim();
     if (input.isEmpty) {
-      final hadActiveSession = _hasActiveSession;
-      _closeSearch();
-      if (hadActiveSession) {
-        resetSession();
-      }
+      _abandonSearch();
       return;
     }
     if (input.characters.length < _effectiveOptions.minInputLength) {
@@ -642,12 +630,6 @@ class PlacesAutocompleteController extends ChangeNotifier {
     });
   }
 
-  void _invalidateSearches() {
-    _searchCancellationToken?.cancel();
-    _searchCancellationToken = null;
-    _searchGeneration++;
-  }
-
   bool _isActiveSearch(String input, int generation) {
     return generation == _searchGeneration &&
         _open &&
@@ -657,7 +639,9 @@ class PlacesAutocompleteController extends ChangeNotifier {
 
   void _closeSearch({bool notify = true}) {
     _debounce?.cancel();
-    _invalidateSearches();
+    _searchCancellationToken?.cancel();
+    _searchCancellationToken = null;
+    _searchGeneration++;
     _open = false;
     _loading = false;
     _error = null;
@@ -831,11 +815,8 @@ class PlacesAutocompleteController extends ChangeNotifier {
     final options = _effectiveOptions;
     final client = _client!;
     final sessionToken = _sessionToken;
-    final generation = ++_selectionGeneration;
-    _selectionCancellationToken?.cancel();
     final cancellationToken = PlacesCancellationToken();
     _selectionCancellationToken = cancellationToken;
-    _selectionInProgress = true;
     _closeSearch();
     final initialSelection = PlaceSelection(
       suggestion: suggestion,
@@ -848,7 +829,7 @@ class PlacesAutocompleteController extends ChangeNotifier {
     try {
       if (!options.fetchPlaceDetailsOnSelection &&
           !options.fetchTimeZoneOnSelection) {
-        if (!_isActiveSelection(generation, client, binding)) {
+        if (!_isActiveSelection(cancellationToken, client, binding)) {
           return null;
         }
         widget?.onSelection?.call(initialSelection);
@@ -868,7 +849,7 @@ class PlacesAutocompleteController extends ChangeNotifier {
         ),
         cancellationToken: cancellationToken,
       );
-      if (!_isActiveSelection(generation, client, binding)) {
+      if (!_isActiveSelection(cancellationToken, client, binding)) {
         return null;
       }
       PlaceTimeZoneData? timeZone;
@@ -882,7 +863,7 @@ class PlacesAutocompleteController extends ChangeNotifier {
               options.languageCode,
           cancellationToken: cancellationToken,
         );
-        if (!_isActiveSelection(generation, client, binding)) {
+        if (!_isActiveSelection(cancellationToken, client, binding)) {
           return null;
         }
       }
@@ -896,7 +877,7 @@ class PlacesAutocompleteController extends ChangeNotifier {
       widget?.onSelection?.call(resolvedSelection);
       return resolvedSelection;
     } catch (error) {
-      if (!_isActiveSelection(generation, client, binding)) {
+      if (!_isActiveSelection(cancellationToken, client, binding)) {
         return null;
       }
       widget?.onError?.call(error);
@@ -905,11 +886,8 @@ class PlacesAutocompleteController extends ChangeNotifier {
       }
       return null;
     } finally {
-      if (identical(_selectionCancellationToken, cancellationToken)) {
+      if (_isActiveSelection(cancellationToken, client, binding)) {
         _selectionCancellationToken = null;
-      }
-      if (_isActiveSelection(generation, client, binding)) {
-        _selectionInProgress = false;
         _selectionLoading = false;
         _changed();
       }
@@ -925,12 +903,12 @@ class PlacesAutocompleteController extends ChangeNotifier {
   }
 
   bool _isActiveSelection(
-    int generation,
+    PlacesCancellationToken cancellationToken,
     PlacesClient client,
     _PlacesAutocompleteFieldState? binding,
   ) {
     return !_disposed &&
-        generation == _selectionGeneration &&
+        identical(cancellationToken, _selectionCancellationToken) &&
         identical(binding, _binding) &&
         identical(client, _client);
   }

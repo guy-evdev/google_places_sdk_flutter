@@ -440,6 +440,32 @@ void main() {
     expect(options(), isNot(const PlacesAutocompleteOptions()));
   });
 
+  test('options differing in one search setting are not equal', () {
+    const point = PlaceCoordinates(latitude: 1, longitude: 2);
+    final variants = <PlacesAutocompleteOptions>[
+      const PlacesAutocompleteOptions(languageCode: 'fr'),
+      const PlacesAutocompleteOptions(regionCode: 'fr'),
+      const PlacesAutocompleteOptions(origin: point),
+      PlacesAutocompleteOptions(
+        locationBias: LocationBias.circle(center: point, radiusMeters: 5),
+      ),
+      PlacesAutocompleteOptions(
+        locationRestriction: LocationRestriction.rectangle(
+          low: const PlaceCoordinates(latitude: 0, longitude: 0),
+          high: point,
+        ),
+      ),
+      const PlacesAutocompleteOptions(includedPrimaryTypes: <String>['cafe']),
+      const PlacesAutocompleteOptions(includedRegionCodes: <String>['fr']),
+      const PlacesAutocompleteOptions(includePureServiceAreaBusinesses: true),
+      const PlacesAutocompleteOptions(includeFutureOpeningBusinesses: true),
+      const PlacesAutocompleteOptions(includeQueryPredictions: true),
+    ];
+    for (final variant in variants) {
+      expect(variant, isNot(const PlacesAutocompleteOptions()));
+    }
+  });
+
   test('with no client, search and select fail clearly', () {
     final controller = PlacesAutocompleteController(initialText: 'cof');
     addTearDown(controller.dispose);
