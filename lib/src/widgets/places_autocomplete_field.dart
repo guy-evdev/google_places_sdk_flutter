@@ -425,6 +425,9 @@ class PlacesAutocompleteField extends StatefulWidget {
   final bool showPoweredByGoogle;
 
   /// Whether autocomplete should include query suggestions as well as places.
+  ///
+  /// On web through the Maps JavaScript API — the default there — only places
+  /// are suggested; see [AutocompleteRequest.includeQueryPredictions].
   final bool includeQueryPredictions;
 
   /// Called when the user selects a query suggestion.
@@ -561,7 +564,8 @@ class PlacesAutocompleteField extends StatefulWidget {
       _PlacesAutocompleteFieldState();
 }
 
-class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
+class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField>
+    with WidgetsBindingObserver {
   PlacesAutocompleteController? _ownedController;
   PlacesClient? _ownedClient;
   bool _suggestionPointerDown = false;
@@ -610,6 +614,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _createOwnedClient();
     _attachController(_controller);
     _syncFocusMode();
@@ -700,10 +705,30 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _detachController(_controller, _client);
     _ownedController?.dispose();
     unawaited(_ownedClient?.close());
     super.dispose();
+  }
+
+  // The inline suggestions are sized to the room the keyboard leaves. Their
+  // OverlayPortal copies the overlay's view insets into the suggestions'
+  // MediaQuery only when it rebuilds, and it rebuilds only when the field's
+  // own MediaQuery changes — which, under a resizing Scaffold, has the bottom
+  // inset removed (Flutter 3.44.0 to 3.47.7 and the 3.50 beta). Without this,
+  // results open while the keyboard hides stay squeezed into the old room, and
+  // results open while it shows run under it. Dialog and fullscreen fields
+  // lay out in their route and need nothing.
+  // ponytail: view metrics only; an inset changed by an app's own MediaQuery
+  // is still missed. Drop this once OverlayPortal depends on those values.
+  @override
+  void didChangeMetrics() {
+    if (_controller._open &&
+        context.findAncestorWidgetOfExactType<PlacesAutocompleteOverlay>() ==
+            null) {
+      setState(() {});
+    }
   }
 
   void _onFocusChanged() {

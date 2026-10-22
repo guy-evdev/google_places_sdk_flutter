@@ -18,6 +18,11 @@ enum PlacesAutocompleteOverlayMode {
   dialog,
 
   /// Presents the autocomplete UI as a fullscreen route.
+  ///
+  /// Escape does what the top bar's back button does: the first press closes
+  /// the results, the next one calls `Navigator.maybePop` — so it closes the
+  /// route [PlacesAutocompleteOverlay.show] pushed, or the page an app mounts
+  /// the overlay in. On a first route there is nothing to pop.
   fullscreen,
 }
 
@@ -267,6 +272,9 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   final bool showPoweredByGoogle;
 
   /// Whether autocomplete should include query suggestions as well as places.
+  ///
+  /// On web through the Maps JavaScript API — the default there — only places
+  /// are suggested; see [AutocompleteRequest.includeQueryPredictions].
   final bool includeQueryPredictions;
 
   // The TextField options; see the constructor.
@@ -768,12 +776,22 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     final effectiveTitle = title ?? strings.overlayTitle;
     if (mode == PlacesAutocompleteOverlayMode.fullscreen) {
       // The field builds the top bar itself, with the search input in it.
+      // Escape does what the bar's back button does; with results open, the
+      // field's own Escape closes them first. Inside the Scaffold, whose own
+      // (drawer) Dismiss action would stop the lookup.
       return Scaffold(
-        body: Semantics(
-          namesRoute: true,
-          explicitChildNodes: true,
-          label: effectiveTitle,
-          child: field,
+        body: Actions(
+          actions: <Type, Action<Intent>>{
+            DismissIntent: CallbackAction<DismissIntent>(
+              onInvoke: (_) => Navigator.of(context).maybePop(),
+            ),
+          },
+          child: Semantics(
+            namesRoute: true,
+            explicitChildNodes: true,
+            label: effectiveTitle,
+            child: field,
+          ),
         ),
       );
     }

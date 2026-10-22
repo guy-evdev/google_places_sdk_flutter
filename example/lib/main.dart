@@ -1,5 +1,6 @@
 import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 const _apiKey = String.fromEnvironment('GOOGLE_MAPS_API_KEY');
 const _proxyPlacesUrl = String.fromEnvironment('PLACES_PROXY_URL');
@@ -40,6 +41,19 @@ const _exampleDetailsFields = <PlaceField>{
   PlaceField.timeZone,
   PlaceField.transitStation,
 };
+
+/// The README's "What you get back" getters that the place has, one per line.
+List<String> _addressLines(PlaceData place) => <String>[
+  if (place.location case final location?)
+    'location: ${location.latitude}, ${location.longitude}',
+  if (place.streetAddress case final value?) 'streetAddress: $value',
+  if (place.unit case final value?) 'unit: $value',
+  if (place.city case final value?) 'city: $value',
+  if (place.administrativeArea case final value?) 'administrativeArea: $value',
+  if (place.postalCode case final value?) 'postalCode: $value',
+  if (place.country case final value?) 'country: $value',
+  if (place.countryShort case final value?) 'countryShort: $value',
+];
 
 void main() {
   runApp(const ExampleApp());
@@ -444,33 +458,14 @@ class _ExampleAppState extends State<ExampleApp> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  if (_selection!.place!.route != null ||
-                      _selection!.place!.streetNumber != null ||
-                      _selection!.place!.locality != null ||
-                      _selection!.place!.administrativeArea != null ||
-                      _selection!.place!.postalCode != null ||
-                      _selection!.place!.country != null) ...<Widget>[
+                  if (_addressLines(_selection!.place!) case final lines
+                      when lines.isNotEmpty) ...<Widget>[
                     Text(
-                      'Typed address fields',
+                      'Coordinates and address',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
-                    if (_selection!.place!.route != null)
-                      Text('route: ${_selection!.place!.route}'),
-                    if (_selection!.place!.streetNumber != null)
-                      Text('streetNumber: ${_selection!.place!.streetNumber}'),
-                    if (_selection!.place!.locality != null)
-                      Text('locality: ${_selection!.place!.locality}'),
-                    if (_selection!.place!.administrativeArea != null)
-                      Text(
-                        'administrativeArea: ${_selection!.place!.administrativeArea}',
-                      ),
-                    if (_selection!.place!.postalCode != null)
-                      Text('postalCode: ${_selection!.place!.postalCode}'),
-                    if (_selection!.place!.country != null)
-                      Text('country: ${_selection!.place!.country}'),
-                    if (_selection!.place!.countryCode != null)
-                      Text('countryCode: ${_selection!.place!.countryCode}'),
+                    for (final line in lines) Text(line),
                     const SizedBox(height: 16),
                   ],
                   if (_selection!.place!.googleMapsTypeLabel != null ||
@@ -1265,6 +1260,9 @@ class _PhotoStrip extends StatelessWidget {
             width: 160,
             height: 120,
             strings: strings,
+            // Opens "View on Google Maps" and author profiles. Google requires
+            // the Maps link; outside the browser it is shown only with this.
+            onOpenLink: (uri) => launchUrl(uri),
             // The default views show loading and draw the attribution; a
             // failure shows the typed error's kind beside the retry button.
             builder: (context, photo) => switch (photo.status) {

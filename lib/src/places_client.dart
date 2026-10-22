@@ -125,7 +125,8 @@ class PlacesClient {
   /// Fetches autocomplete place and query suggestions for the supplied request.
   ///
   /// To receive [QuerySuggestion] values, set
-  /// [AutocompleteRequest.includeQueryPredictions] to `true`.
+  /// [AutocompleteRequest.includeQueryPredictions] to `true`. On web through
+  /// the Maps JavaScript API there are none; see that flag.
   Future<List<AutocompleteSuggestion>> autocompleteSuggestions(
     AutocompleteRequest request, {
     PlacesCancellationToken? cancellationToken,

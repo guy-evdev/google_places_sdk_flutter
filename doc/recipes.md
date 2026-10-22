@@ -661,7 +661,11 @@ given. Pass your own `textController` or `focusNode` to share them with the rest
 ### Search again with a picked query suggestion
 
 With `includeQueryPredictions: true` the suggestions include phrases such as "coffee near me".
-Picking one fills the field and ends the session. To search for it straight away, so the user can
+They are not available on web through Maps JavaScript, the web default: there the option is
+ignored and only places are suggested. A web client with a proxy and no API key gets them, because
+its requests go over REST.
+
+Picking a query suggestion fills the field and ends the session. To search for it straight away, so the user can
 pick a place from the results, set `searchOnQuerySelection`:
 
 ```dart
@@ -847,13 +851,22 @@ PlacesAutocompleteField(
 ```
 
 ```dart
+// import 'package:url_launcher/url_launcher.dart';
 if (place?.photos case [final photo, ...])
-  PlacePhotoView(photo: photo, apiKey: apiKey, height: 200),
+  PlacePhotoView(
+    photo: photo,
+    apiKey: apiKey,
+    height: 200,
+    onOpenLink: (uri) => launchUrl(uri),
+  ),
 ```
 
 The widget fetches the photo, shows a progress indicator meanwhile and a retry
 button if it fails, and draws the author's name and a "View on Google Maps"
-link over the bottom of the image, as Google requires — see
+link over the bottom of the image. Google requires that link. On Android, iOS,
+macOS, Windows and Linux, `onOpenLink` is what shows it — the package cannot
+open a link there without a plugin, so here `url_launcher`, added to your app,
+opens it. On web it opens in a new tab even without `onOpenLink`. See
 [Link to the photo on Google Maps](#link-to-the-photo-on-google-maps).
 `PlaceField.photos` is an Essentials (IDs Only) field, so it does not raise the
 details tier; each photo shown is one billed Place Photos request.
@@ -1113,7 +1126,7 @@ field.
 | `fetchPlaceDetailsOnSelection` | `true` | Set `false` when only the place ID is needed. |
 | `selectionFields` | `address` | You need more than coordinates and an address. |
 | `fetchTimeZoneOnSelection` | `false` | The selection needs Time Zone API data. |
-| `includeQueryPredictions` | `false` | You also accept suggested search phrases. |
+| `includeQueryPredictions` | `false` | You also accept suggested search phrases. Not on web through Maps JavaScript. |
 | `maxSuggestions` | `5` | You want fewer than Google's five suggestions. |
 | `minInputLength` | `1` | You want fewer billed requests: no search until this many characters. |
 | `debounceDuration` | 300 ms | You want fewer billed requests: a longer pause before each search. |

@@ -12,13 +12,13 @@ topics:
   - address
 
 screenshots:
-  - description: 'Inline text field mode with the embedded autocomplete experience.'
+  - description: 'Inline mode: suggestions in a card anchored to the search field.'
     path: assets/readme/text_field_mode.png
-  - description: 'Dialog launcher mode using the overlay search experience.'
+  - description: 'Dialog mode: the search opens in a dialog.'
     path: assets/readme/dialog_mode.png
-  - description: 'Fullscreen launcher mode for dedicated place search.'
+  - description: 'Fullscreen mode: the search opens on its own page.'
     path: assets/readme/fullscreen_mode.png
-  - description: 'Rich place details shown after selection.'
+  - description: 'A picked place: coordinates, a parsed address and photos.'
     path: assets/readme/rich_result.png
 
 environment:

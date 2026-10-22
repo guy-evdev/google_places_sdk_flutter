@@ -156,7 +156,8 @@ results move.
   keyboard up — the whole dialog scrolls instead.
 - **Fullscreen.** The field sits in the top bar with the platform's back button, as on platform
   search screens, and the results run edge to edge below it. It opens as a regular page, so the
-  Android back gesture and the iOS edge swipe close it too. The field has no border there unless
+  Android back gesture and the iOS edge swipe close it too, and so does Escape on a keyboard, as
+  in the dialog (the first Escape closes the results). The field has no border there unless
   your `decoration:` sets one, and the bar grows to fit a label or an error line. Its colours come
   from the colour scheme, not your app bar theme, so a brand-coloured app bar cannot make the
   search text unreadable.
@@ -471,6 +472,19 @@ backend also refuses an injected `httpClient`, an `applicationIdentity` and a ci
 The fix is in `0.7.0` only: `0.6.x` will not be patched. A Wasm app needs the **Maps JavaScript
 API** enabled for its key, like any other web app — see
 [step 13 of the migration guide](../MIGRATION.md#13-wasm-web-builds-use-the-maps-javascript-api).
+
+## Web autocomplete fixes
+
+The field tells Google where the cursor is. With the cursor at the end of the text — nearly always,
+while typing — it sent a position equal to the text's length. Google's REST API takes that as its
+default, but the Maps JavaScript API rejects it, so autocomplete on the web failed with
+`javascript_failure` on almost every keystroke. That position is now left out, which changes
+nothing for REST. `0.6.x` has the same bug and will not be patched.
+
+`includeQueryPredictions: true` made every autocomplete request through Maps JavaScript fail too,
+because that API has no query suggestions. There the option is now ignored and only places are
+suggested. A web client with a proxy and no API key sends autocomplete over REST, and does get
+them.
 
 ## Why this release exists
 

@@ -10,7 +10,7 @@ Address autocomplete for Flutter on Google Places API (New): the user types, pic
 your app gets its coordinates and a parsed address.
 
 <p>
-  <img src="https://raw.githubusercontent.com/guy-evdev/google_places_sdk_flutter/main/assets/readme/example.gif" alt="Package example" width="320" />
+  <img src="https://raw.githubusercontent.com/guy-evdev/google_places_sdk_flutter/main/assets/readme/example.gif" alt="Typing a place name, picking a suggestion and its details, then searching again in a dialog" width="320" />
 </p>
 
 Open a search and wait for the pick:
@@ -62,7 +62,7 @@ Not a fit if your users need to pick a point on a map: this package searches by 
 ## Ways to use it
 
 <p>
-  <img src="https://raw.githubusercontent.com/guy-evdev/google_places_sdk_flutter/main/assets/readme/text_field_mode.png" alt="Suggestions below a search field" width="220" />
+  <img src="https://raw.githubusercontent.com/guy-evdev/google_places_sdk_flutter/main/assets/readme/text_field_mode.png" alt="Suggestions in a card anchored to a search field" width="220" />
   <img src="https://raw.githubusercontent.com/guy-evdev/google_places_sdk_flutter/main/assets/readme/dialog_mode.png" alt="Search in a dialog" width="220" />
   <img src="https://raw.githubusercontent.com/guy-evdev/google_places_sdk_flutter/main/assets/readme/fullscreen_mode.png" alt="Search on a full screen" width="220" />
 </p>
@@ -219,21 +219,20 @@ what each way returns.
 Add `PlaceField.photos` to `selectionFields`, then show one with `PlacePhotoView`:
 
 ```dart
-PlacePhotoView(photo: place.photos.first, apiKey: apiKey, height: 200)
-```
-
-It fetches the image at that size and draws the author's name and a "View on Google Maps" link
-over it, as Google requires. On web the link opens in a new tab. Elsewhere the package cannot open
-links without a plugin, so pass `onOpenLink`, for example with `url_launcher` in your app:
-
-```dart
+// import 'package:url_launcher/url_launcher.dart';
 PlacePhotoView(
-  photo: photo,
+  photo: place.photos.first,
   apiKey: apiKey,
   height: 200,
   onOpenLink: (uri) => launchUrl(uri),
 )
 ```
+
+It fetches the image at that size and draws the author's name and a "View on Google Maps" link
+over it. Google requires that link. On web it opens in a new tab by itself. On Android, iOS,
+macOS, Windows and Linux the package cannot open a link without a plugin, so **`onOpenLink` is
+what shows the link there** — here with `url_launcher`, added to your app. Without it the link is
+not shown.
 
 Each photo shown is one billed Place Photos request. On web the lookup is a REST call, so with
 `apiKey:` the key is sent from the browser; pass a proxy `client:` to avoid that.

@@ -176,11 +176,6 @@ class PlacesWebBackend implements PlacesBackend {
             sessionToken: cachePredictions ? sessionToken : null,
           ),
         );
-        continue;
-      }
-      final queryPrediction = suggestion.getProperty('queryPrediction'.toJS);
-      if (queryPrediction != null) {
-        items.add(_queryPredictionToSuggestion(queryPrediction as JSObject));
       }
     }
     return items;
@@ -720,25 +715,7 @@ class PlacesWebBackend implements PlacesBackend {
   }) {
     request.validate();
     return <String, Object?>{
-          'input': request.input,
-          if (request.languageCode != null) 'language': request.languageCode,
-          if (request.regionCode != null) 'region': request.regionCode,
-          if (request.inputOffset != null) 'inputOffset': request.inputOffset,
-          if (request.origin != null) 'origin': request.origin!.toWebJson(),
-          if (request.locationBias != null)
-            'locationBias': request.locationBias!.area.toWebJson(),
-          if (request.locationRestriction != null)
-            'locationRestriction': request.locationRestriction!.area
-                .toWebJson(),
-          if (request.includedPrimaryTypes.isNotEmpty)
-            'includedPrimaryTypes': request.includedPrimaryTypes,
-          if (request.includedRegionCodes.isNotEmpty)
-            'includedRegionCodes': request.includedRegionCodes,
-          if (request.includePureServiceAreaBusinesses)
-            'pureServiceAreaBusinessesIncluded': true,
-          if (request.includeFutureOpeningBusinesses)
-            'futureOpeningBusinessesIncluded': true,
-          if (request.includeQueryPredictions) 'includeQueryPredictions': true,
+          ...webAutocompleteRequest(request),
           if (request.sessionToken != null)
             'sessionToken': _sessionTokenFor(
               request.sessionToken!,
@@ -804,17 +781,6 @@ class PlacesWebBackend implements PlacesBackend {
             'place':
                 ((prediction.getProperty('place'.toJS) as JSString?)?.toDart),
           },
-    );
-  }
-
-  QuerySuggestion _queryPredictionToSuggestion(JSObject prediction) {
-    final text = _structuredTextFromJs(prediction.getProperty('text'.toJS));
-    return QuerySuggestion(
-      fullText: text,
-      matches: text.matches,
-      rawData:
-          _dartify(prediction as JSAny?) as Map<String, Object?>? ??
-          <String, Object?>{'text': text.text},
     );
   }
 
@@ -1339,6 +1305,37 @@ class PlacesWebBackend implements PlacesBackend {
     return value;
   }
 }
+
+/// The Maps JavaScript form of an autocomplete [request], without its session
+/// token.
+///
+/// It leaves out two things the REST body carries, because Maps JavaScript
+/// rejects them: an `inputOffset` equal to the input's length — REST's own
+/// default, so leaving it out changes nothing — and `includeQueryPredictions`,
+/// which Maps JavaScript does not have.
+@visibleForTesting
+Map<String, Object?> webAutocompleteRequest(AutocompleteRequest request) =>
+    <String, Object?>{
+      'input': request.input,
+      if (request.languageCode != null) 'language': request.languageCode,
+      if (request.regionCode != null) 'region': request.regionCode,
+      if (request.inputOffset != null &&
+          request.inputOffset != request.input.runes.length)
+        'inputOffset': request.inputOffset,
+      if (request.origin != null) 'origin': request.origin!.toWebJson(),
+      if (request.locationBias != null)
+        'locationBias': request.locationBias!.area.toWebJson(),
+      if (request.locationRestriction != null)
+        'locationRestriction': request.locationRestriction!.area.toWebJson(),
+      if (request.includedPrimaryTypes.isNotEmpty)
+        'includedPrimaryTypes': request.includedPrimaryTypes,
+      if (request.includedRegionCodes.isNotEmpty)
+        'includedRegionCodes': request.includedRegionCodes,
+      if (request.includePureServiceAreaBusinesses)
+        'pureServiceAreaBusinessesIncluded': true,
+      if (request.includeFutureOpeningBusinesses)
+        'futureOpeningBusinessesIncluded': true,
+    };
 
 /// Whether a Maps JavaScript failure means "this field set is unsupported",
 /// which is the only case the HTTP fallback is meant to cover.

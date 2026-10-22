@@ -49,8 +49,11 @@ Run with `flutter run --dart-define=GOOGLE_MAPS_API_KEY=...`.
   from a saved place: store its place ID, then
   `initialValue: PlaceSelection.fromPlace(await client.fetchPlaceById(savedId))`.
 - `PlacesAutocompleteOverlay.show(context, ...)` → `Future<PlaceSelection?>`; `null` if dismissed.
-- `PlacePhotoView(photo: place.photos.first, apiKey: key, height: 200)` — fetches and shows one
-  photo with its required author attribution drawn over it. Exactly one of `apiKey:` / `client:`.
+- `PlacePhotoView(photo: photo, apiKey: key, height: 200, onOpenLink: (uri) => launchUrl(uri))`
+  — fetches and shows one photo with its required author attribution and "View on Google Maps"
+  link drawn over it. Always pass `onOpenLink` (`url_launcher` in the app): on Android, iOS,
+  macOS, Windows and Linux it is what shows the link Google requires; on web the link opens a new
+  tab without it. Exactly one of `apiKey:` / `client:`.
   `width`/`height` (logical px) set the requested size × device pixel ratio, capped at 4800;
   `maxWidthPx`/`maxHeightPx` override. `builder: (context, view) => ...` gets `view.status`
   (`PlacePhotoStatus.loading` / `loaded` / `error`), `view.image`, `view.error`
@@ -263,6 +266,8 @@ default theme there. A `decoration:` must still be `material_ui`'s `InputDecorat
   `fieldBuilder` field — they configure the default field only; set them on your own.
 - Building rows inside `suggestionsViewBuilder` instead of using `view.items` — keyboard
   highlighting then cannot keep the highlighted row in view.
+- Expecting query suggestions on web through Maps JavaScript (the web default) —
+  `includeQueryPredictions` is ignored there and only places come back.
 - Passing `LocationRestriction.circle(...)` to autocomplete through Maps JavaScript (web), or to
   `TextSearchRequest` — it fails with a `validation` error; use `.rectangle(...)`. Setting both
   `locationBias` and `locationRestriction` fails validation.

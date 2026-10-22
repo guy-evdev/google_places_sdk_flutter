@@ -500,6 +500,61 @@ void main() {
     await client.close();
   });
 
+  testWidgets('a pick shows its coordinates and parsed address', (
+    tester,
+  ) async {
+    final backend = _RecordingBackend()
+      ..suggestions = const <PlaceSuggestion>[
+        PlaceSuggestion(
+          placeId: 'place-1',
+          placeResourceName: 'places/place-1',
+          fullText: StructuredText(text: 'Coffee Lab, Main Street'),
+          primaryText: StructuredText(text: 'Coffee Lab'),
+          secondaryText: StructuredText(text: 'Main Street'),
+        ),
+      ]
+      ..place = const PlaceData(
+        id: 'place-1',
+        formattedAddress: '151 Broadway, New York, NY 10007, USA',
+        location: PlaceCoordinates(latitude: 40.71, longitude: -74.01),
+        addressComponents: <PlaceAddressComponent>[
+          PlaceAddressComponent(
+            longText: '151',
+            types: <String>['street_number'],
+          ),
+          PlaceAddressComponent(longText: 'Broadway', types: <String>['route']),
+          PlaceAddressComponent(
+            longText: 'New York',
+            types: <String>['locality'],
+          ),
+          PlaceAddressComponent(
+            longText: 'United States',
+            shortText: 'US',
+            types: <String>['country'],
+          ),
+        ],
+      );
+    final client = _clientFor(backend);
+    await tester.pumpWidget(ExampleApp(client: client));
+
+    await tester.enterText(find.byType(TextField).first, 'cof');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Coffee Lab'));
+    await tester.pumpAndSettle();
+
+    for (final line in <String>[
+      'location: 40.71, -74.01',
+      'streetAddress: 151 Broadway',
+      'city: New York',
+      'countryShort: US',
+    ]) {
+      await tester.ensureVisible(find.text(line));
+      expect(find.text(line), findsOneWidget);
+    }
+    await client.close();
+  });
+
   testWidgets('the photo setting requests photos and shows them in a strip', (
     tester,
   ) async {
@@ -529,6 +584,7 @@ void main() {
         photos: <PlacePhoto>[
           PlacePhoto(
             name: 'places/place-1/photos/photo-1',
+            googleMapsUri: 'https://maps.google.com/photo-1',
             authorAttributions: <Map<String, Object?>>[
               <String, Object?>{'displayName': 'Ana Lima'},
             ],
@@ -551,7 +607,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(PlacePhotoView), findsOneWidget);
     expect(backend.photoRequests.single.maxHeightPx, isNotNull);
-    expect(find.text('Photo by Ana Lima'), findsOneWidget);
+    // Outside the browser the Maps link is drawn only with onOpenLink.
+    expect(
+      find.text('Photo by Ana Lima · View on Google Maps'),
+      findsOneWidget,
+    );
 
     await tester.drag(find.byType(ListView).first, const Offset(0, 3000));
     await tester.pumpAndSettle();

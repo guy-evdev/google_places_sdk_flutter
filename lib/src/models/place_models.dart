@@ -2931,6 +2931,12 @@ class AutocompleteRequest {
   /// `PlacesClient.autocomplete` keeps returning only `PlaceSuggestion` values.
   /// Use `PlacesClient.autocompleteSuggestions` to receive both place and
   /// query suggestions.
+  ///
+  /// **Not available on web through the Maps JavaScript API**, which serves
+  /// web autocomplete whenever the client has an API key. That API has no query
+  /// predictions, so there the flag is ignored and only place suggestions are
+  /// returned. A web client with a proxy and no API key sends autocomplete
+  /// over REST, which does return them.
   final bool includeQueryPredictions;
 
   /// Validates request invariants before serialization.

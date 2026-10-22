@@ -43,6 +43,8 @@
 * The keyboard-highlighted row has a background, keeps its text colours, and scrolls into view.
 * A `Theme` around the field now reaches the fullscreen search, as it already reached the dialog.
 * On web, a circle `locationRestriction` for autocomplete through Maps JavaScript now fails with a `validation` error instead of being sent to an API that does not accept it.
+* On web, autocomplete through Maps JavaScript no longer fails with `javascript_failure` whenever the cursor is at the end of the text — in `0.6.x`, nearly every keystroke.
+* On web, `includeQueryPredictions: true` no longer makes every autocomplete request through Maps JavaScript fail. That API has no query suggestions, so only places are suggested there.
 * In `PlacesAutocompleteFormField`, typing after picking a place no longer clears the field.
 * `FormState.reset()` now also clears text typed without picking a place, and ends that search.
 * In dialog and fullscreen field modes, clearing inside the search now clears the field too, as `onClearField` already reported.

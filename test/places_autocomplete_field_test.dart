@@ -4173,4 +4173,387 @@ void main() {
       });
     }
   });
+
+  group('interactions and viewport changes', () {
+    // The 0.7.0 gate's list: mouse, touch, keyboard traversal, focus,
+    // escape/close, and a viewport change while results are open. Touch,
+    // focus and the rest are covered above; these close the remaining gaps.
+    Finder searchField(PlacesAutocompleteFieldMode mode) =>
+        mode == PlacesAutocompleteFieldMode.inline
+        ? find.byType(TextField)
+        : find.descendant(
+            of: find.byType(PlacesAutocompleteOverlay),
+            matching: find.byType(TextField),
+          );
+
+    Future<void> search(WidgetTester tester, Finder field) async {
+      await tester.enterText(field, 'cof');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      expect(find.text('Coffee Lab'), findsOneWidget);
+    }
+
+    for (final mode in PlacesAutocompleteFieldMode.values) {
+      testWidgets('${mode.name}: a mouse click picks a suggestion', (
+        tester,
+      ) async {
+        PlaceSelection? picked;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: PlacesAutocompleteField(
+                client: PlacesClient.testing(
+                  apiKey: 'test',
+                  backend: _FakeBackend(),
+                ),
+                fieldMode: mode,
+                onSelection: (selection) => picked = selection,
+              ),
+            ),
+          ),
+        );
+        if (mode != PlacesAutocompleteFieldMode.inline) {
+          await tester.tap(find.byType(TextField));
+          await tester.pumpAndSettle();
+        }
+        await search(tester, searchField(mode));
+
+        await tester.tap(
+          find.text('Coffee Lab'),
+          kind: PointerDeviceKind.mouse,
+        );
+        await tester.pumpAndSettle();
+
+        expect(picked?.suggestion.placeId, 'place-1');
+        expect(picked?.place?.id, 'place-1');
+        expect(find.byType(PlacesAutocompleteOverlay), findsNothing);
+      });
+    }
+
+    testWidgets('Tab leaves the input for the clear button, then moves on', (
+      tester,
+    ) async {
+      final backend = _FakeBackend();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: <Widget>[
+                PlacesAutocompleteField(
+                  client: PlacesClient.testing(
+                    apiKey: 'test',
+                    backend: backend,
+                  ),
+                ),
+                TextButton(onPressed: () {}, child: const Text('Next')),
+              ],
+            ),
+          ),
+        ),
+      );
+      await search(tester, find.byType(TextField));
+
+      Widget? focusedAncestor<T extends Widget>() => FocusManager
+          .instance
+          .primaryFocus
+          ?.context
+          ?.findAncestorWidgetOfExactType<T>();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+      // Leaving the input closes the results and ends the session, once.
+      expect(find.text('Coffee Lab'), findsNothing);
+      expect(backend.endedSessions, <AutocompleteSessionToken>[
+        backend.lastAutocompleteRequest!.sessionToken!,
+      ]);
+      expect(
+        (focusedAncestor<IconButton>() as IconButton?)?.tooltip,
+        'Clear search',
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+      expect(focusedAncestor<TextButton>(), isNotNull);
+      expect(backend.endedSessions, hasLength(1));
+    });
+
+    for (final mode in PlacesAutocompleteOverlayMode.values) {
+      testWidgets('show() in ${mode.name} mode: Escape closes the search', (
+        tester,
+      ) async {
+        final backend = _FakeBackend();
+        var closed = false;
+        PlaceSelection? result;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) => TextButton(
+                onPressed: () async {
+                  result = await PlacesAutocompleteOverlay.show(
+                    context,
+                    client: PlacesClient.testing(
+                      apiKey: 'test',
+                      backend: backend,
+                    ),
+                    mode: mode,
+                  );
+                  closed = true;
+                },
+                child: const Text('Search'),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('Search'));
+        await tester.pumpAndSettle();
+        await search(tester, searchField(PlacesAutocompleteFieldMode.dialog));
+
+        // The first Escape closes the results, as inline; the next one
+        // closes the search.
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(find.text('Coffee Lab'), findsNothing);
+        expect(find.byType(PlacesAutocompleteOverlay), findsOneWidget);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(find.byType(PlacesAutocompleteOverlay), findsNothing);
+        expect(closed, isTrue);
+        expect(result, isNull);
+        expect(
+          backend.endedSessions,
+          contains(backend.lastAutocompleteRequest!.sessionToken),
+          reason: 'the session the search went out in is ended',
+        );
+      });
+    }
+
+    for (final mode in PlacesAutocompleteOverlayMode.values) {
+      testWidgets('show() in ${mode.name} mode: arrow keys and Enter pick', (
+        tester,
+      ) async {
+        PlaceSelection? result;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) => TextButton(
+                onPressed: () async {
+                  result = await PlacesAutocompleteOverlay.show(
+                    context,
+                    client: PlacesClient.testing(
+                      apiKey: 'test',
+                      backend: _FakeBackend(),
+                    ),
+                    mode: mode,
+                  );
+                },
+                child: const Text('Search'),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('Search'));
+        await tester.pumpAndSettle();
+        await search(tester, searchField(PlacesAutocompleteFieldMode.dialog));
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(PlacesAutocompleteOverlay), findsNothing);
+        expect(result?.suggestion.placeId, 'place-2');
+      });
+    }
+
+    group('a viewport change while results are open', () {
+      const portrait = Size(400, 640);
+      const landscape = Size(640, 400);
+
+      void setView(WidgetTester tester, Size size, double keyboard) {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.viewInsets = FakeViewPadding(bottom: keyboard);
+      }
+
+      Rect attribution(WidgetTester tester) =>
+          tester.getRect(find.bySemanticsLabel('Powered by Google'));
+
+      testWidgets('inline: the keyboard going away gives the results room', (
+        tester,
+      ) async {
+        // A keyboard tall enough that the five rows do not fit above it.
+        setView(tester, portrait, 420);
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: PlacesAutocompleteField(
+                client: PlacesClient.testing(
+                  apiKey: 'test',
+                  backend: _FakeBackend(),
+                ),
+              ),
+            ),
+          ),
+        );
+        await search(tester, find.byType(TextField));
+        final withKeyboard = tester.getRect(find.byType(ListView));
+        expect(attribution(tester).bottom, lessThanOrEqualTo(220));
+
+        setView(tester, portrait, 0);
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Coffee Lab'), findsOneWidget);
+        final without = tester.getRect(find.byType(ListView));
+        expect(without.top, withKeyboard.top, reason: 'still under the field');
+        expect(without.height, greaterThan(withKeyboard.height));
+        expect(attribution(tester).bottom, lessThanOrEqualTo(640));
+      });
+
+      testWidgets('inline: a keyboard coming up moves the results above it', (
+        tester,
+      ) async {
+        setView(tester, portrait, 0);
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: PlacesAutocompleteField(
+                client: PlacesClient.testing(
+                  apiKey: 'test',
+                  backend: _FakeBackend(),
+                ),
+              ),
+            ),
+          ),
+        );
+        await search(tester, find.byType(TextField));
+        expect(attribution(tester).bottom, greaterThan(220));
+
+        setView(tester, portrait, 420);
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Coffee Lab'), findsOneWidget);
+        expect(attribution(tester).bottom, lessThanOrEqualTo(220));
+      });
+
+      testWidgets('inline: rotating keeps the results on the field', (
+        tester,
+      ) async {
+        setView(tester, portrait, 0);
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: PlacesAutocompleteField(
+                client: PlacesClient.testing(
+                  apiKey: 'test',
+                  backend: _FakeBackend(),
+                ),
+              ),
+            ),
+          ),
+        );
+        await search(tester, find.byType(TextField));
+
+        setView(tester, landscape, 0);
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Coffee Lab'), findsOneWidget);
+        final field = tester.getRect(find.byType(TextField));
+        final results = tester.getRect(find.byType(ListView));
+        expect(results.top, greaterThanOrEqualTo(field.bottom));
+        expect(results.width, field.width, reason: 'as wide as the field');
+        expect(attribution(tester).bottom, lessThanOrEqualTo(400));
+      });
+
+      for (final mode in PlacesAutocompleteOverlayMode.values) {
+        testWidgets('show() in ${mode.name} mode: rotating with the keyboard '
+            'up keeps the field and the results', (tester) async {
+          setView(tester, portrait, 300);
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => PlacesAutocompleteOverlay.show(
+                    context,
+                    client: PlacesClient.testing(
+                      apiKey: 'test',
+                      backend: _FakeBackend(),
+                    ),
+                    mode: mode,
+                  ),
+                  child: const Text('Search'),
+                ),
+              ),
+            ),
+          );
+          await tester.tap(find.text('Search'));
+          await tester.pumpAndSettle();
+          final field = searchField(PlacesAutocompleteFieldMode.dialog);
+          await search(tester, field);
+
+          setView(tester, landscape, 200);
+          await tester.pumpAndSettle();
+
+          expect(tester.takeException(), isNull);
+          expect(find.text('Coffee Lab'), findsOneWidget);
+          expect(tester.getRect(field).top, greaterThanOrEqualTo(0));
+          expect(
+            tester.getRect(field).bottom,
+            lessThanOrEqualTo(200),
+            reason: 'the field stays above the keyboard',
+          );
+          expect(
+            tester.getRect(find.text('Coffee Lab')).bottom,
+            lessThanOrEqualTo(200),
+            reason: 'the first result stays above the keyboard',
+          );
+        });
+
+        testWidgets('show() in ${mode.name} mode: the keyboard going away '
+            'keeps the results and gives them room', (tester) async {
+          setView(tester, portrait, 300);
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => PlacesAutocompleteOverlay.show(
+                    context,
+                    client: PlacesClient.testing(
+                      apiKey: 'test',
+                      backend: _FakeBackend(),
+                    ),
+                    mode: mode,
+                  ),
+                  child: const Text('Search'),
+                ),
+              ),
+            ),
+          );
+          await tester.tap(find.text('Search'));
+          await tester.pumpAndSettle();
+          await search(tester, searchField(PlacesAutocompleteFieldMode.dialog));
+          final withKeyboard = tester.getRect(find.byType(ListView));
+
+          setView(tester, portrait, 0);
+          await tester.pumpAndSettle();
+
+          expect(tester.takeException(), isNull);
+          expect(find.text('Coffee Lab'), findsOneWidget);
+          expect(
+            tester.getRect(find.byType(ListView)).height,
+            greaterThanOrEqualTo(withKeyboard.height),
+          );
+          expect(attribution(tester).bottom, lessThanOrEqualTo(640));
+        });
+      }
+    });
+  });
 }

@@ -71,7 +71,7 @@ unchanged; only the library it is imported from moved. See
 | `unfocusOnSelection` | `bool` | `true` | Whether picking a place takes focus from the field, which on a phone hides the keyboard. Inline mode only; the dialog and fullscreen search close on a pick. |
 | `suggestionsViewOpenDirection` | `OptionsViewOpenDirection` | `OptionsViewOpenDirection.mostSpace` | Which side of the field the suggestions open on: the one with more room, or always `down` or `up`. Inline mode only; the dialog and fullscreen search show them below the field. |
 | `showPoweredByGoogle` | `bool` | `true` | Shows required Google attribution for suggestion UI. |
-| `includeQueryPredictions` | `bool` | `false` | Adds query suggestions alongside place suggestions. |
+| `includeQueryPredictions` | `bool` | `false` | Adds query suggestions alongside place suggestions. Ignored on web through Maps JavaScript, which has none. |
 | `onQuerySelection` | `ValueChanged<QuerySuggestion>?` | `null` | Called when a query suggestion is selected. |
 | `searchOnQuerySelection` | `bool` | `false` | Whether picking a query suggestion searches for its text at once, in a new billing session. Every field mode. |
 | `fieldBuilder` | `PlacesFieldBuilder?` | `null` | Builds the text field instead of the default one; see [Builders](#builders). Only `decoration`'s `errorText` is then used. |
@@ -316,7 +316,7 @@ browser, and `proxyOnly` needs a proxy client.
 | `AutocompleteRequest` | `includedRegionCodes` | `List<String>` | `const <String>[]` | Region-code filters. |
 | `AutocompleteRequest` | `includePureServiceAreaBusinesses` | `bool` | `false` | Includes service-area businesses. |
 | `AutocompleteRequest` | `includeFutureOpeningBusinesses` | `bool` | `false` | Includes businesses expected to open in the future. |
-| `AutocompleteRequest` | `includeQueryPredictions` | `bool` | `false` | Enables `QuerySuggestion` results in `autocompleteSuggestions()`. |
+| `AutocompleteRequest` | `includeQueryPredictions` | `bool` | `false` | Enables `QuerySuggestion` results in `autocompleteSuggestions()`. Ignored on web through Maps JavaScript, which has none. |
 | `PlacesClient.fetchPlaceById` | `fields` | `Set<PlaceField>` | `PlaceFieldPresets.address` | Same default as `PlaceDetailsRequest`. |
 | `PlaceDetailsRequest` | `placeId` | `String` | Required | Place id or `places/{id}` resource name. |
 | `PlaceDetailsRequest` | `fields` | `Set<PlaceField>` | `PlaceFieldPresets.address` | Place Details field mask. The default bills as Essentials. |

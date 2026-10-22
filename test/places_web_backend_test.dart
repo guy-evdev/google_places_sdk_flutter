@@ -146,6 +146,80 @@ void main() {
     });
   });
 
+  group('Maps JavaScript autocomplete request', () {
+    // Maps JavaScript rejects this with "'inputOffset' should be less than
+    // 'input.length'"; REST treats it as the default. The widget sends it
+    // whenever the cursor is at the end, so this was every keystroke.
+    test('leaves out an inputOffset at the end of the input', () {
+      expect(
+        webAutocompleteRequest(
+          const AutocompleteRequest(input: 'Empire', inputOffset: 6),
+        ),
+        isNot(contains('inputOffset')),
+      );
+    });
+
+    test('measures the end in Unicode characters, not UTF-16 units', () {
+      expect(
+        webAutocompleteRequest(
+          const AutocompleteRequest(input: '😀ab', inputOffset: 3),
+        ),
+        isNot(contains('inputOffset')),
+      );
+    });
+
+    test('keeps an inputOffset inside the input', () {
+      expect(
+        webAutocompleteRequest(
+          const AutocompleteRequest(input: 'Empire', inputOffset: 3),
+        )['inputOffset'],
+        3,
+      );
+    });
+
+    test('never asks for query predictions, which it does not have', () {
+      expect(
+        webAutocompleteRequest(
+          const AutocompleteRequest(
+            input: 'coffee',
+            includeQueryPredictions: true,
+          ),
+        ),
+        isNot(contains('includeQueryPredictions')),
+      );
+    });
+  });
+
+  test('keyless web proxy returns query suggestions over REST', () async {
+    final backend = PlacesWebBackend(
+      apiKey: '',
+      proxyConfiguration: PlacesProxyConfiguration(
+        placesEndpoint: Uri.parse('https://proxy.example.test/places/v1'),
+      ),
+      httpClient: MockClient(
+        (request) async => http.Response(
+          jsonEncode(<String, Object?>{
+            'suggestions': <Object?>[
+              <String, Object?>{
+                'queryPrediction': <String, Object?>{
+                  'text': <String, Object?>{'text': 'coffee near me'},
+                },
+              },
+            ],
+          }),
+          200,
+        ),
+      ),
+    );
+
+    final suggestions = await backend.autocompleteSuggestions(
+      const AutocompleteRequest(input: 'coffee', includeQueryPredictions: true),
+    );
+
+    expect(suggestions.single, isA<QuerySuggestion>());
+    await backend.close();
+  });
+
   test('proxy-only web policy rejects direct HTTP operations', () async {
     final backend = PlacesWebBackend(
       apiKey: 'browser-key',

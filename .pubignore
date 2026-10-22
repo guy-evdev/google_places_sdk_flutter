@@ -18,3 +18,5 @@ example/ios/Flutter/ephemeral/
 example/pubspec.lock
 *.iml
 **/.DS_Store
+# The README loads it from raw.githubusercontent.com; the archive copy is never used.
+assets/readme/example.gif
