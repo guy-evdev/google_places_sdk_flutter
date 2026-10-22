@@ -2,62 +2,38 @@
 
 **Breaking changes:**
 
-* Widgets now use [`material_ui`](https://pub.dev/packages/material_ui); build any `decoration:` from it. See [Migrating to 0.7.0](MIGRATION.md#070).
-* Requires Flutter `>=3.44.0` and Dart `>=3.12.0`, `material_ui`'s minimum.
-* `fetchPlaceDetailsOnSelection` now defaults to `true`, and `selectionFields` to the new Essentials-tier `PlaceFieldPresets.address`.
-* `PlacesAutocompleteField.client` and `PlacesAutocompleteOverlay.client` are now nullable.
-* `PlacesClient` requests fewer fields by default: `PlaceFieldPresets.address` for details, `PlaceFieldPresets.minimal` for Text Search and Nearby Search.
-* Inline suggestions float over the page instead of pushing the content below the field down, opening above the field when the keyboard leaves more room there.
-* The field's keyboard defaults to `TextInputType.streetAddress`: an address keyboard on Android, word capitalization on Linux.
-* `PlacesAutocompleteController.selectedSelection` is read-only; use `setSelection`, `restoreSelection`, or `clearSelection`.
-* `PlacesPhotoAttribution.prefix` is now a `String?`, `null` unless you set it.
-* Web apps built with `--wasm` now use the Maps JavaScript API like other web builds: the key needs it enabled, and an injected `httpClient`, an `applicationIdentity`, or a circle `locationRestriction` now fails there. See [step 13](MIGRATION.md#13-wasm-web-builds-use-the-maps-javascript-api).
-* `PlacesPhotoAttribution` now ends with a "View on Google Maps" link on web, and renders that link for a photo with no author names.
+* Requires Flutter `3.44.0` and Dart `3.12.0` or later.
+* `decoration:` takes [`material_ui`](https://pub.dev/packages/material_ui)'s `InputDecoration`. Apps still on `package:flutter/material.dart` need no other change.
+* Picking a place now loads its coordinates and address by default, and `PlacesClient` requests fewer fields when you pass none.
+* Inline suggestions float over the page instead of pushing it down.
+* Wasm web builds use the Maps JavaScript API, like other web builds.
+* A few smaller API changes. [Migrating to 0.7.0](MIGRATION.md#070) covers every step, with before/after code.
 
 **Security:**
 
-* Web apps built with `--wasm` now follow `PlacesWebOptions.fallbackPolicy`. Through `0.6.x` they ignored it: a client with an `apiKey` called Google's REST API from the browser with the key, even under `disabled` or `proxyOnly`. `0.6.x` will not be patched; upgrade to `0.7.0`.
+* Wasm web builds now follow `PlacesWebOptions.fallbackPolicy`. `0.6.x` ignored it and will not be patched.
 
 **New:**
 
-* `apiKey:` on the autocomplete widgets and on `PlacesAutocompleteOverlay.show()`.
-* Works in apps still on `package:flutter/material.dart`, with no extra code.
-* Address getters: `city`, `streetAddress`, `county`, `neighborhood`, `unit`, `postalCodeSuffix`.
-* Dialog and fullscreen search keep the field in place and scroll only the results; fullscreen puts the field in the top bar.
-* `fieldBuilder`, `suggestionItemBuilder`, and `suggestionsViewBuilder` build the field, each row, and the suggestion area; the view gets the typed `PlacesException` when a search fails.
-* `minInputLength` and `debounceDuration` on the widgets, to send fewer billed autocomplete requests.
-* Every `TextField` option that fits an autocomplete field, on the widgets — `keyboardType`, `inputFormatters`, `onSubmitted`, the cursor and spell-check options, and more.
-* `suggestionsViewOpenDirection` and `unfocusOnSelection` for inline fields, and `includeFutureOpeningBusinesses` on the widgets.
-* `searchOnQuerySelection` searches again for a picked query suggestion, in every field mode.
-* `PlaceTypePresets` — `cities`, `regions`, `postalCode`, `address`, `establishment` — for `includedPrimaryTypes`.
-* `PlacesAutocompleteController` runs the search for your own UI — `search()`, `select()`, `retry()`, and its `suggestions`, `status`, and `error`, notifying its listeners as they change — and takes your own `TextEditingController` and `FocusNode`.
-* `PlaceSelection.fromPlace` starts a form field from a saved place.
-* `PlaceField.entrances` and `PlaceField.navigationPoints`, and `PlaceFieldPresets.all` with every field — for exploration, as it always bills at the highest tier.
-* `PlacePhotoView` shows a place photo at the size you give it, with its required author attribution and a `builder` for every state.
-* `PlacesStrings.photoAttributionPrefix` sets the "Photo by" text.
-* Photo attribution links to the photo on Google Maps, as Google requires, and to author profiles; outside the browser pass `onOpenLink`, or no link is shown.
+* `apiKey:` on the widgets — no client to create or close.
+* Builders for the field, each row and the suggestion area, and `PlacesAutocompleteController` for a search UI of your own.
+* `PlacePhotoView` shows place photos with their required attribution.
+* `minInputLength` and `debounceDuration` to send fewer billed requests, and the `TextField` options on the widgets.
+* Address getters such as `city` and `streetAddress`, and `PlaceTypePresets` for common place types.
 
 **Fixed:**
 
-* The first keystrokes no longer flash "No matching places found." before any response.
-* The keyboard-highlighted row has a background, keeps its text colours, and scrolls into view.
-* A `Theme` around the field now reaches the fullscreen search, as it already reached the dialog.
-* On web, a circle `locationRestriction` for autocomplete through Maps JavaScript now fails with a `validation` error instead of being sent to an API that does not accept it.
-* On web, autocomplete through Maps JavaScript no longer fails with `javascript_failure` whenever the cursor is at the end of the text — in `0.6.x`, nearly every keystroke.
-* On web, `includeQueryPredictions: true` no longer makes every autocomplete request through Maps JavaScript fail. That API has no query suggestions, so only places are suggested there.
-* In `PlacesAutocompleteFormField`, typing after picking a place no longer clears the field.
-* `FormState.reset()` now also clears text typed without picking a place, and ends that search.
-* In dialog and fullscreen field modes, clearing inside the search now clears the field too, as `onClearField` already reported.
-* Rebuilding a widget with an equal `LocationBias` or `LocationRestriction`, or with new selection settings, no longer ends the user's search and billing session.
+* On web, autocomplete no longer fails on nearly every keystroke.
+* Rebuilding a widget no longer ends the user's search and billing session.
+* Form field and dialog fixes: typing after a pick, `FormState.reset()`, and clearing inside the search.
 
 **Deprecated:**
 
-* `suggestionBuilder` — use `suggestionItemBuilder`. Removed in `1.0.0`.
-* `PlacesPhotoAttribution.prefix` — use `strings: PlacesStrings(photoAttributionPrefix: ...)`. Removed in `1.0.0`.
+* `suggestionBuilder` and `PlacesPhotoAttribution.prefix`, for removal in `1.0.0`.
 
 **Compatibility:**
 
-* Wider dependency ranges: `http: ^1.5.0`, `web: ^1.0.0`; new `material_ui: ^1.0.0`.
+* Wider `http` and `web` ranges, and a new `material_ui` dependency.
 
 See [What's new in 0.7.0](doc/whats_new_0_7_0.md) for details and examples.
 
