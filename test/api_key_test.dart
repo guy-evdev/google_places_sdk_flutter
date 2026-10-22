@@ -428,4 +428,54 @@ void main() {
 
     expect(backend.closed, isFalse);
   });
+
+  testWidgets('PlacePhotoView makes a client per key and closes it', (
+    tester,
+  ) async {
+    final clients = <_RecordingHttpClient>[];
+    await _withRecordedClients(clients, () async {
+      Widget view(String apiKey) => MaterialApp(
+        home: PlacePhotoView(
+          photo: const PlacePhoto(name: 'places/place-1/photos/photo-1'),
+          apiKey: apiKey,
+          width: 10,
+        ),
+      );
+
+      await tester.pumpWidget(view('key-1'));
+      await tester.pump();
+      await tester.pumpWidget(view('key-1'));
+      expect(clients, hasLength(1), reason: 'a rebuild keeps the client');
+      final request = clients.single.requests.single;
+      expect(_keyOf(request), 'key-1');
+      expect(request.url.path, endsWith('/photos/photo-1/media'));
+
+      await tester.pumpWidget(view('key-2'));
+      await tester.pump();
+      expect(clients, hasLength(2));
+      expect(clients.first.closed, isTrue);
+      expect(_keyOf(clients.last.requests.single), 'key-2');
+
+      await tester.pumpWidget(const SizedBox());
+      expect(clients.last.closed, isTrue);
+    });
+  });
+
+  testWidgets('PlacePhotoView never closes a client it was given', (
+    tester,
+  ) async {
+    final backend = _ClosingBackend();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlacePhotoView(
+          photo: const PlacePhoto(name: 'places/place-1/photos/photo-1'),
+          client: PlacesClient.testing(apiKey: 'test', backend: backend),
+          width: 10,
+        ),
+      ),
+    );
+    await tester.pumpWidget(const SizedBox());
+
+    expect(backend.closed, isFalse);
+  });
 }

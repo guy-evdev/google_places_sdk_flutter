@@ -85,6 +85,14 @@ which removes the key from the client entirely.
 > media URL, where proxy logs, CDN logs, and browser history could record it. If
 > an application called `fetchPhotoMedia` on those versions, rotate that API key.
 
+### Photo images do not pass through the proxy
+
+`fetchPhotoMedia` — and `PlacePhotoView`, which calls it — goes through the
+proxy like every other operation, and returns the photo's address. The image
+itself is then downloaded by Flutter's image loader directly from that address,
+with no API key and without passing through the proxy. An application that uses the proxy to control where its traffic goes
+should allow that host, or not show photos.
+
 ### Proxy responsibilities
 
 The proxy should:
@@ -210,8 +218,8 @@ Place Photos and Time Zone are HTTP operations on every platform. Prefer the
 authenticated proxy path when an untrusted client would otherwise carry a
 web-service key.
 
-When displaying a photo, render every returned author attribution. The simplest
-Flutter implementation is:
+When displaying a photo, render every returned author attribution.
+`PlacePhotoView` does this for you; for an image you show yourself, use:
 
 ```dart
 PlacesPhotoAttribution(photo: photo)

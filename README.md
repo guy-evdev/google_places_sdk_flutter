@@ -214,6 +214,20 @@ enabled for the key. It also returns the offset at a given moment, including day
 the moment with `selectionTimeZoneAt`. [The recipe](doc/recipes.md#get-a-places-time-zone) shows
 what each way returns.
 
+### Photos
+
+Add `PlaceField.photos` to `selectionFields`, then show one with `PlacePhotoView`:
+
+```dart
+PlacePhotoView(photo: place.photos.first, apiKey: apiKey, height: 200)
+```
+
+It fetches the image at that size and draws the author's name over it, as Google requires. Each
+photo shown is one billed Place Photos request. On web the lookup is a REST call, so with `apiKey:`
+the key is sent from the browser; pass a proxy `client:` to avoid that. Google also asks that users can open the photo on
+Google Maps; the package does not open links, so [the recipe](doc/recipes.md#show-place-photos)
+shows how to add one, along with strips and galleries.
+
 ## Restricting results
 
 ```dart
@@ -300,7 +314,7 @@ The widget shows a short error message. Pass `onError: (error) => debugPrint('$e
 | `HTTP 403, PERMISSION_DENIED`: "Requests from this Android client application…" or "…iOS client application… are blocked" | The key is restricted to your app but the request carried no identity. Pass a `client:` with `PlacesClientOptions.applicationIdentity` — see [Security](#security). |
 | On web, nothing loads and the browser console shows `ApiNotActivatedMapError` or `RefererNotAllowedMapError` | Enable the **Maps JavaScript API**, and add your site to the key's website restrictions. |
 | `REQUEST_DENIED` from a time-zone lookup | Enable the **Time Zone API** for the key, or turn off `fetchTimeZoneOnSelection`. |
-| `place.photos` is always empty | Photos are not in the default fields. Add `PlaceField.photos` to `selectionFields`, as shown in [What you get back](#what-you-get-back). |
+| `place.photos` is always empty | Photos are not in the default fields. Add `PlaceField.photos` to `selectionFields`, as shown in [Photos](#photos). |
 | `place.displayName` is `null` | It is a Pro field, not in the default. Use `selection.suggestion.primaryText.text`, or add `PlaceField.displayName`. |
 
 ## What's new
@@ -313,6 +327,7 @@ over the page instead of pushing it down, and the fullscreen search puts the fie
 Three builders let you supply the field, each row, or the whole suggestion area.
 `minInputLength` and `debounceDuration` send fewer billed requests, and the widgets take
 `TextField`'s own options, such as `keyboardType` and `inputFormatters`.
+`PlacePhotoView` shows a place's photos with their required attribution.
 `PlacesClient` requests fewer fields by default. The supported floor rises to Flutter `>=3.44.0` and Dart `>=3.12.0`. See
 [MIGRATION.md](MIGRATION.md#070) for the defaults that changed.
 
@@ -340,7 +355,7 @@ notices, and the extended feature summaries.
 ## More documentation
 
 - [Recipes](doc/recipes.md) — forms, dialogs, search without a widget, your own UI, distances,
-  proxies, errors
+  photos, proxies, errors
 - [API reference and defaults](doc/api_reference.md)
 - [Generated API docs](https://pub.dev/documentation/google_places_sdk_flutter/latest/) — every
   class and member

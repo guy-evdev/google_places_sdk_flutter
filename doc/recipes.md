@@ -14,7 +14,7 @@ Task-by-task guides for `google_places_sdk_flutter`, beyond the
 - [Search without a widget](#search-without-a-widget)
 - [Build your own autocomplete UI](#build-your-own-autocomplete-ui)
 - [Show the distance from the user's location](#show-the-distance-from-the-users-location)
-- [Display photo attribution](#display-photo-attribution)
+- [Show place photos](#show-place-photos)
 - [Cancel work that is no longer needed](#cancel-work-that-is-no-longer-needed)
 - [Secure proxy and platform identity](#secure-proxy-and-platform-identity)
 - [Typed errors and HTTP ownership](#typed-errors-and-http-ownership)
@@ -161,6 +161,7 @@ PlacesAutocompleteField(
     placeSuggestionLabel: 'Suggestion de lieu',
     querySuggestionLabel: 'Suggestion de recherche',
     distanceUnitMeters: 'm',
+    photoAttributionPrefix: 'Photo de',
   ),
 )
 ```
@@ -171,8 +172,8 @@ itself; the [API reference](api_reference.md#display-strings) lists them all.
 `languageCode:` is separate: it sets the language of Google's results, not of
 the widget's own text.
 
-The photo attribution's "Photo by" is not in `PlacesStrings` yet. Set it on the
-widget instead: `PlacesPhotoAttribution(photo: photo, prefix: 'Photo de')`.
+`PlacePhotoView` and `PlacesPhotoAttribution` take the same `strings:` for
+their "Photo by" text and retry button.
 
 ## Limit results to an area
 
@@ -831,19 +832,137 @@ A first GPS fix can take several seconds. Resolving it in `initState` as above
 means the field is usable immediately and distances appear once the fix lands —
 do not block the search on it.
 
-## Display photo attribution
+## Show place photos
 
-Photos are not in the default fields: add `PlaceField.photos` to
-`selectionFields` or `fields:`, or `place.photos` comes back empty. When a
-returned photo includes authors, display Google's supplied attribution beside
-the image:
+Ask for `PlaceField.photos` — it is not in the default fields, so without it
+`place.photos` comes back empty — then show a photo with `PlacePhotoView`:
+
+```dart
+PlacesAutocompleteField(
+  apiKey: apiKey,
+  selectionFields: {...PlaceFieldPresets.address, PlaceField.photos},
+  onSelection: (selection) => setState(() => place = selection.place),
+)
+```
+
+```dart
+if (place?.photos case [final photo, ...])
+  PlacePhotoView(photo: photo, apiKey: apiKey, height: 200),
+```
+
+The widget fetches the photo, shows a progress indicator meanwhile and a retry
+button if it fails, and draws the author's name over the bottom of the image,
+as Google requires. `PlaceField.photos` is an Essentials (IDs Only) field, so it
+does not raise the details tier; each photo shown is one billed Place Photos
+request.
+
+Pass `width` or `height`: the widget requests the photo at that size times the
+device pixel ratio, so a thumbnail does not download a full-size image. Each
+change of size fetches again, so use a fixed size rather than one that follows
+a resizing window. `maxWidthPx` / `maxHeightPx` set the requested pixels
+directly.
+
+### A strip or a gallery
+
+There is no gallery widget; compose `PlacePhotoView`s. A horizontal strip:
+
+```dart
+SizedBox(
+  height: 120,
+  child: ListView.separated(
+    scrollDirection: Axis.horizontal,
+    itemCount: place.photos.length,
+    separatorBuilder: (context, index) => const SizedBox(width: 8),
+    itemBuilder: (context, index) => PlacePhotoView(
+      photo: place.photos[index],
+      client: client,
+      width: 160,
+      height: 120,
+    ),
+  ),
+)
+```
+
+A swipeable gallery is the same with a `PageView.builder`. A list builds the
+photos on screen and a little beyond, so only those are fetched and billed —
+but a photo scrolled away and back is built, fetched, and billed again. Share
+one `client` across many views rather than giving each its own `apiKey`.
+
+### Your own look
+
+`builder` receives every state, with the package's `defaultView` to return for
+the states you keep:
+
+```dart
+PlacePhotoView(
+  photo: photo,
+  client: client,
+  width: 300,
+  height: 200,
+  builder: (context, view) => switch (view.status) {
+    PlacePhotoStatus.loaded => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(borderRadius: BorderRadius.circular(12), child: view.image),
+        ?view.attribution,
+      ],
+    ),
+    PlacePhotoStatus.error => TextButton(
+      onPressed: view.onRetry,
+      child: Text('Could not load the photo (${view.error?.kind.name})'),
+    ),
+    PlacePhotoStatus.loading => view.defaultView,
+  },
+)
+```
+
+Place `view.attribution` with the image. Google's
+[policies](https://developers.google.com/maps/documentation/places/web-service/policies)
+allow leaving it out only when space is limited — a thumbnail, say — and the
+user can open a larger version of the photo that carries the attribution.
+
+### Link to the photo on Google Maps
+
+Google's policies also ask that users can open each photo on Google Maps. The
+package does not open links, so add one with your app's own way of opening a
+URL — here `openLink`:
+
+```dart
+TextButton(
+  onPressed: photo.googleMapsUri == null
+      ? null
+      : () => openLink(Uri.parse(photo.googleMapsUri!)),
+  child: const Text('View on Google Maps'),
+)
+```
+
+`PlacePhoto.authors` also carries each author's profile link (`uri`) and
+avatar (`photoUri`), which the policies ask you to show when space allows.
+
+### A photo you show yourself
+
+If you download the image another way, `client.fetchPhotoMedia()` returns its
+address, and `PlacesPhotoAttribution` draws the attribution to put beside it:
 
 ```dart
 PlacesPhotoAttribution(photo: photo)
 ```
 
-`PlacePhoto.authors` is available when a custom attribution layout is needed.
-Each `client.fetchPhotoMedia()` call is billed separately.
+Google does not allow photo names to be cached, and they can expire: always
+take them from a fresh place response.
+
+### Where the image comes from
+
+The photo's address comes through the client — through your proxy, with
+`PlacesClient.proxy()`. The image itself is downloaded by Flutter's image
+loader straight from that address, so that request does not pass through the
+proxy.
+
+On web, looking up the address is a REST request even though autocomplete uses
+Maps JavaScript, so it follows the client's `PlacesWebOptions.fallbackPolicy`:
+with `apiKey:` the key is sent from the browser, and under `proxyOnly` the
+widget needs a proxy client. See the
+[security guide](security_and_transports.md#photos-and-time-zone).
 
 ## Cancel work that is no longer needed
 

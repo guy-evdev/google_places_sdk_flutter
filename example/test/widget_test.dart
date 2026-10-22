@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:example/main.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
 import 'package:google_places_sdk_flutter/src/internal/backend.dart';
@@ -14,18 +15,22 @@ class _RecordingBackend implements PlacesBackend {
   Completer<List<PlaceData>>? firstTextSearch;
   Object? textSearchError;
   int closeCount = 0;
+  List<PlaceSuggestion> suggestions = const <PlaceSuggestion>[];
+  PlaceData place = const PlaceData(id: 'place-1');
+  final List<PlaceDetailsRequest> detailsRequests = <PlaceDetailsRequest>[];
+  final List<PhotoMediaRequest> photoRequests = <PhotoMediaRequest>[];
 
   @override
   Future<List<PlaceSuggestion>> autocomplete(
     AutocompleteRequest request, {
     PlacesCancellationToken? cancellationToken,
-  }) async => const <PlaceSuggestion>[];
+  }) async => suggestions;
 
   @override
   Future<List<AutocompleteSuggestion>> autocompleteSuggestions(
     AutocompleteRequest request, {
     PlacesCancellationToken? cancellationToken,
-  }) async => const <AutocompleteSuggestion>[];
+  }) async => suggestions;
 
   @override
   Future<void> close() async {
@@ -39,16 +44,22 @@ class _RecordingBackend implements PlacesBackend {
   Future<PlaceData> fetchPlace(
     PlaceDetailsRequest request, {
     PlacesCancellationToken? cancellationToken,
-  }) async => const PlaceData(id: 'place-1');
+  }) async {
+    detailsRequests.add(request);
+    return place;
+  }
 
   @override
   Future<PlacePhotoMedia> fetchPhotoMedia(
     PhotoMediaRequest request, {
     PlacesCancellationToken? cancellationToken,
-  }) async => const PlacePhotoMedia(
-    name: 'places/place-1/photos/photo-1/media',
-    photoUri: 'https://example.com/photo.jpg',
-  );
+  }) async {
+    photoRequests.add(request);
+    return const PlacePhotoMedia(
+      name: 'places/place-1/photos/photo-1/media',
+      photoUri: 'https://example.com/photo.jpg',
+    );
+  }
 
   @override
   Future<PlaceTimeZoneData> fetchTimeZone(
@@ -486,6 +497,77 @@ void main() {
     await _searchFor(tester, 'museums');
     expect(find.textContaining('Temporary search failure.'), findsOneWidget);
     expect(find.textContaining('network · textSearch'), findsOneWidget);
+    await client.close();
+  });
+
+  testWidgets('the photo setting requests photos and shows them in a strip', (
+    tester,
+  ) async {
+    // Lets Image.network load the photo without the network.
+    final image = await tester.runAsync(
+      () => createTestImage(width: 4, height: 4),
+    );
+    imageCache.putIfAbsent(
+      const NetworkImage('https://example.com/photo.jpg'),
+      () => OneFrameImageStreamCompleter(
+        SynchronousFuture<ImageInfo>(ImageInfo(image: image!)),
+      ),
+    );
+    addTearDown(imageCache.clear);
+    final backend = _RecordingBackend()
+      ..suggestions = const <PlaceSuggestion>[
+        PlaceSuggestion(
+          placeId: 'place-1',
+          placeResourceName: 'places/place-1',
+          fullText: StructuredText(text: 'Coffee Lab, Main Street'),
+          primaryText: StructuredText(text: 'Coffee Lab'),
+          secondaryText: StructuredText(text: 'Main Street'),
+        ),
+      ]
+      ..place = const PlaceData(
+        id: 'place-1',
+        photos: <PlacePhoto>[
+          PlacePhoto(
+            name: 'places/place-1/photos/photo-1',
+            authorAttributions: <Map<String, Object?>>[
+              <String, Object?>{'displayName': 'Ana Lima'},
+            ],
+          ),
+        ],
+      );
+    final client = _clientFor(backend);
+    await tester.pumpWidget(ExampleApp(client: client));
+
+    expect(find.text('Photos'), findsOneWidget, reason: 'summary chip');
+    await tester.enterText(find.byType(TextField).first, 'cof');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Coffee Lab'));
+    await tester.pumpAndSettle();
+
+    expect(backend.detailsRequests.single.fields, contains(PlaceField.photos));
+    final strip = find.byKey(const ValueKey<String>('photo-strip'));
+    await tester.ensureVisible(strip);
+    await tester.pumpAndSettle();
+    expect(find.byType(PlacePhotoView), findsOneWidget);
+    expect(backend.photoRequests.single.maxHeightPx, isNotNull);
+    expect(find.text('Photo by Ana Lima'), findsOneWidget);
+
+    await tester.drag(find.byType(ListView).first, const Offset(0, 3000));
+    await tester.pumpAndSettle();
+    await _openConfiguration(tester);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('configuration-advanced')),
+    );
+    await tester.pumpAndSettle();
+    await _toggleConfigurationSwitch(tester, 'Show place photos');
+    await _applyConfiguration(tester);
+
+    expect(find.byType(PlacePhotoView), findsNothing);
+    final field = tester.widget<PlacesAutocompleteField>(
+      find.byType(PlacesAutocompleteField),
+    );
+    expect(field.selectionFields, isNot(contains(PlaceField.photos)));
     await client.close();
   });
 }

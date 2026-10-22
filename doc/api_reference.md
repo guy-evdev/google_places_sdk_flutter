@@ -11,6 +11,7 @@ on pub.dev.
 - [Widget Defaults](#widget-defaults)
 - [Display Strings](#display-strings)
 - [Builders](#builders)
+- [Place Photos](#place-photos)
 - [Client and Request Defaults](#client-and-request-defaults)
 - [Autocomplete Sessions](#autocomplete-sessions)
 - [Errors, Validation, and Ownership](#errors-validation-and-ownership)
@@ -147,7 +148,7 @@ dropped `decoration`, `suggestionBuilder`, `showPoweredByGoogle`,
 
 ## Display Strings
 
-`PlacesStrings` holds every piece of text the autocomplete widgets show. Pass
+`PlacesStrings` holds every piece of text the package's widgets show. Pass
 one to `strings:` to change any of them; omitted values keep their default. The
 package does not yet choose strings from the app's locale, so an app in another
 language supplies them itself — see the
@@ -167,9 +168,11 @@ language supplies them itself — see the
 | `placeSuggestionLabel` | `'Place suggestion'` | Screen-reader prefix for a place suggestion. |
 | `querySuggestionLabel` | `'Query suggestion'` | Screen-reader prefix for a query suggestion. |
 | `distanceUnitMeters` | `'m'` | Suffix of the distance beside a suggestion when `origin` is set. Distances are shown in meters. |
+| `photoAttributionPrefix` | `'Photo by'` | Before the author names that `PlacePhotoView` and `PlacesPhotoAttribution` show. |
 
-`PlacesPhotoAttribution` takes its "Photo by" text from its own `prefix`
-parameter, not from `PlacesStrings`.
+`PlacePhotoView` also uses `retryText`, on its retry button.
+`PlacesPhotoAttribution`'s own `prefix` is deprecated; when set, it still wins
+over `photoAttributionPrefix`.
 
 ## Builders
 
@@ -225,6 +228,57 @@ The suggestions themselves:
 | `PlaceSuggestion` | `placeId`, `placeResourceName`, `primaryText` (the name), `secondaryText` (the rest of the address), `distanceMeters` (only with `origin`), `types` |
 | `QuerySuggestion` | `matches` — a suggested search phrase, not a place. Arrives only with `includeQueryPredictions: true` |
 | `StructuredText` | `text` and `matches`, the `TextMatch` ranges that match what the user typed |
+
+## Place Photos
+
+`PlacePhotoView` shows one `PlacePhoto` from `PlaceData.photos`, which arrives
+only when `PlaceField.photos` was requested. For worked examples, including
+strips and galleries, see the [recipe](recipes.md#show-place-photos).
+
+| Option | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `photo` | `PlacePhoto` | required | The photo to show. Changing its `name` fetches again. |
+| `apiKey` / `client` | `String?` / `PlacesClient?` | one required | Exactly one. A client made from `apiKey` is owned and closed by the widget; a `client` passed in is never closed. |
+| `width`, `height` | `double?` | `null` | The image's size in logical pixels. Also the size requested from Google: times the device pixel ratio, rounded up, at most 4800. |
+| `maxWidthPx`, `maxHeightPx` | `int?` | `null` | Physical pixels to request, 1–4800. When either is set, they replace the size worked out from `width` and `height`. |
+| `fit` | `BoxFit` | `BoxFit.cover` | How the image fills `width` and `height`. |
+| `builder` | `PlacePhotoViewBuilder?` | `null` | Builds every state in place of the default look. |
+| `strings` | `PlacesStrings` | `PlacesStrings()` | `photoAttributionPrefix` and `retryText`. |
+
+With no size at all, the widget requests the photo's own width (`widthPx`),
+or 4800 when that is unknown; Google returns the original when it is smaller.
+It fetches again when `photo.name`, the client, or the requested size changes —
+including the device pixel ratio — and cancels a running fetch when disposed.
+The default look shows a progress indicator while loading, a retry button on
+failure, and the image with the author names on a dark band across its bottom.
+
+`builder` receives a `PlacePhotoViewData`:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `status` | `PlacePhotoStatus` | `loading` (fetching the address or downloading the image), `loaded`, or `error`. |
+| `photo` | `PlacePhoto` | The photo, with its `authors` and `googleMapsUri`. |
+| `image` | `Widget?` | The image, sized and fitted; only when `loaded`. |
+| `error` | `PlacesException?` | Why it failed. A failed image download is kind `network` with the HTTP `statusCode`; an image that cannot be decoded is kind `unknown` with its type in `metadata`. |
+| `onRetry` | `VoidCallback` | Fetches the photo again. Call it from an event handler, not while building. |
+| `attribution` | `Widget?` | The author names; `null` when Google returned none. Place it with the image. |
+| `defaultView` | `Widget` | The package's own view for this state. |
+| `strings` | `PlacesStrings` | The widget's strings. |
+
+There is no option to hide the attribution: Google requires the author to be
+credited wherever a photo is shown, and allows leaving it out only on a small
+thumbnail whose larger version carries it. Google's
+[policies](https://developers.google.com/maps/documentation/places/web-service/policies)
+also ask that users can open each photo on Google Maps through
+`PlacePhoto.googleMapsUri`; the package does not open links, so the app adds
+that link.
+
+Each fetch is one billed Place Photos request. The image itself is
+downloaded by Flutter's image loader directly from the returned address, so it
+does not pass through a `PlacesClient.proxy()` proxy. On web the address
+lookup is a REST request on every client, so it follows
+`PlacesWebOptions.fallbackPolicy`: with `apiKey:` the key is sent from the
+browser, and `proxyOnly` needs a proxy client.
 
 ## Client and Request Defaults
 
@@ -306,8 +360,9 @@ The suggestions themselves:
 Every asynchronous `PlacesClient` operation accepts an optional
 `PlacesCancellationToken`. Cancellation is reported as
 `PlacesErrorKind.cancellation`; HTTP transports also abort the underlying
-request. `PlacePhoto.authors` provides typed required author attribution, and
-`PlacesPhotoAttribution` renders it next to a displayed image.
+request. `PlacePhoto.authors` provides typed required author attribution.
+`PlacePhotoView` shows a photo with it; `PlacesPhotoAttribution` renders it next
+to an image you show yourself.
 
 ## Autocomplete Sessions
 

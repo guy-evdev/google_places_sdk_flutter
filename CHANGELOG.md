@@ -10,6 +10,7 @@
 * Inline suggestions float over the page instead of pushing the content below the field down, opening above the field when the keyboard leaves more room there.
 * The field's keyboard defaults to `TextInputType.streetAddress`: an address keyboard on Android, word capitalization on Linux.
 * `PlacesAutocompleteController.selectedSelection` is read-only; use `setSelection`, `restoreSelection`, or `clearSelection`.
+* `PlacesPhotoAttribution.prefix` is now a `String?`, `null` unless you set it.
 
 **New:**
 
@@ -26,6 +27,8 @@
 * `PlacesAutocompleteController` runs the search for your own UI — `search()`, `select()`, `retry()`, and its `suggestions`, `status`, and `error`, notifying its listeners as they change — and takes your own `TextEditingController` and `FocusNode`.
 * `PlaceSelection.fromPlace` starts a form field from a saved place.
 * `PlaceField.entrances` and `PlaceField.navigationPoints`, and `PlaceFieldPresets.all` with every field — for exploration, as it always bills at the highest tier.
+* `PlacePhotoView` shows a place photo at the size you give it, with its required author attribution and a `builder` for every state.
+* `PlacesStrings.photoAttributionPrefix` sets the "Photo by" text.
 
 **Fixed:**
 
@@ -41,6 +44,7 @@
 **Deprecated:**
 
 * `suggestionBuilder` — use `suggestionItemBuilder`. Removed in `1.0.0`.
+* `PlacesPhotoAttribution.prefix` — use `strings: PlacesStrings(photoAttributionPrefix: ...)`. Removed in `1.0.0`.
 
 **Compatibility:**
 

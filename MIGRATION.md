@@ -19,6 +19,7 @@ and an address, and `PlacesClient` requests fewer fields when you pass none.
 | Has an inline field with a control just below it | Step 9 |
 | Wants the plain text keyboard on Android | Step 10 |
 | Assigns `PlacesAutocompleteController.selectedSelection` | Step 11 |
+| Reads `PlacesPhotoAttribution.prefix` | Step 12 |
 
 ### 1. Raise your SDK floor
 
@@ -294,4 +295,22 @@ controller.setSelection(selection); // also puts its text in the field
 controller.setSelection(selection, updateText: false); // keeps the text
 controller.restoreSelection(selection); // a saved value, with its text
 controller.clearSelection();
+```
+
+### 12. `PlacesPhotoAttribution.prefix` is nullable and deprecated
+
+The "Photo by" text moved to `PlacesStrings.photoAttributionPrefix`, shared with `PlacePhotoView`.
+`prefix` still works, but it is now `null` unless you set it:
+
+```dart
+// Before
+PlacesPhotoAttribution(photo: photo, prefix: 'Photo de')
+final String text = attribution.prefix;
+
+// After
+PlacesPhotoAttribution(
+  photo: photo,
+  strings: const PlacesStrings(photoAttributionPrefix: 'Photo de'),
+)
+final String text = attribution.strings.photoAttributionPrefix;
 ```

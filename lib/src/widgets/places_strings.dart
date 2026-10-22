@@ -1,9 +1,10 @@
 import 'package:flutter/widgets.dart';
 
-/// Localized UI strings used by the autocomplete widgets.
+/// Localized UI strings used by the package's widgets.
 ///
-/// Provide custom values to localize inline, dialog, and fullscreen widget
-/// text without replacing the package UI.
+/// Provide custom values to localize the autocomplete widgets in inline,
+/// dialog, and fullscreen modes, and the photo widgets, without replacing the
+/// package UI.
 ///
 /// Example:
 /// ```dart
@@ -14,7 +15,7 @@ import 'package:flutter/widgets.dart';
 /// ```
 @immutable
 class PlacesStrings {
-  /// Creates a bundle of UI strings for the autocomplete widgets.
+  /// Creates a bundle of UI strings for the package's widgets.
   const PlacesStrings({
     this.searchHint = 'Search places',
     this.loadingText = 'Loading places…',
@@ -28,6 +29,7 @@ class PlacesStrings {
     this.placeSuggestionLabel = 'Place suggestion',
     this.querySuggestionLabel = 'Query suggestion',
     this.distanceUnitMeters = 'm',
+    this.photoAttributionPrefix = 'Photo by',
   });
 
   /// Placeholder text shown in the search field.
@@ -75,4 +77,8 @@ class PlacesStrings {
   /// exactly as Google returns it; conversion to kilometers or miles and
   /// locale-aware number formatting are planned for `0.8.0`.
   final String distanceUnitMeters;
+
+  /// Text placed before a photo's author names, as in "Photo by Ana Lima", by
+  /// `PlacePhotoView` and `PlacesPhotoAttribution`.
+  final String photoAttributionPrefix;
 }

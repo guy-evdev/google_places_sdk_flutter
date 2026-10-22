@@ -91,6 +91,7 @@ class DemoConfiguration {
     this.fetchTimeZone = false,
     this.includeQueryPredictions = false,
     this.showDistanceFromOrigin = false,
+    this.showPhotos = true,
     this.pageSize = 5,
   });
 
@@ -108,6 +109,7 @@ class DemoConfiguration {
   final bool fetchTimeZone;
   final bool includeQueryPredictions;
   final bool showDistanceFromOrigin;
+  final bool showPhotos;
   final int pageSize;
 
   /// Origin handed to the autocomplete widgets, or `null` when the demo is
@@ -122,6 +124,7 @@ class DemoConfiguration {
     bool? fetchTimeZone,
     bool? includeQueryPredictions,
     bool? showDistanceFromOrigin,
+    bool? showPhotos,
     int? pageSize,
   }) {
     return DemoConfiguration(
@@ -134,6 +137,7 @@ class DemoConfiguration {
           includeQueryPredictions ?? this.includeQueryPredictions,
       showDistanceFromOrigin:
           showDistanceFromOrigin ?? this.showDistanceFromOrigin,
+      showPhotos: showPhotos ?? this.showPhotos,
       pageSize: pageSize ?? this.pageSize,
     );
   }
@@ -182,6 +186,12 @@ class _ExampleAppState extends State<ExampleApp> {
   bool get _includeQueryPredictions => _configuration.includeQueryPredictions;
 
   PlaceCoordinates? get _origin => _configuration.origin;
+
+  /// The details fields, with `PlaceField.photos` only when the photo demo is
+  /// on — without it, `place.photos` comes back empty.
+  Set<PlaceField> get _detailsFields => _configuration.showPhotos
+      ? _exampleDetailsFields
+      : _exampleDetailsFields.difference(const <PlaceField>{PlaceField.photos});
 
   /// Decoration shared by every widget mode, so the demo shows that dialog and
   /// fullscreen launchers honour field customization too.
@@ -301,7 +311,7 @@ class _ExampleAppState extends State<ExampleApp> {
             origin: _origin,
             fetchPlaceDetailsOnSelection: _fetchPlaceDetails,
             fetchTimeZoneOnSelection: _fetchTimeZoneOnSelection,
-            selectionFields: _exampleDetailsFields,
+            selectionFields: _detailsFields,
             fieldMode: _fieldMode,
             includeQueryPredictions: _includeQueryPredictions,
             onSelection: (selection) {
@@ -347,7 +357,7 @@ class _ExampleAppState extends State<ExampleApp> {
               origin: _origin,
               fetchPlaceDetailsOnSelection: _fetchPlaceDetails,
               fetchTimeZoneOnSelection: _fetchTimeZoneOnSelection,
-              selectionFields: _exampleDetailsFields,
+              selectionFields: _detailsFields,
               includeQueryPredictions: _includeQueryPredictions,
               validator: (selection) => selection == null
                   ? 'Choose a place before submitting.'
@@ -510,6 +520,20 @@ class _ExampleAppState extends State<ExampleApp> {
                       ),
                     const SizedBox(height: 16),
                   ],
+                  if (_configuration.showPhotos &&
+                      _selection!.place!.photos.isNotEmpty) ...<Widget>[
+                    Text(
+                      'Photos',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    _PhotoStrip(
+                      photos: _selection!.place!.photos,
+                      client: _client,
+                      strings: strings,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   SelectableText(prettyJson(_selection!.place!.rawData)),
                 ],
               ),
@@ -563,9 +587,12 @@ class _ExampleAppState extends State<ExampleApp> {
       origin: _origin,
       fetchPlaceDetailsOnSelection: _fetchPlaceDetails,
       fetchTimeZoneOnSelection: _fetchTimeZoneOnSelection,
-      selectionFields: mode == PlacesAutocompleteOverlayMode.dialog
-          ? PlaceFieldPresets.recommended
-          : PlaceFieldPresets.minimal,
+      selectionFields: <PlaceField>{
+        ...mode == PlacesAutocompleteOverlayMode.dialog
+            ? PlaceFieldPresets.recommended
+            : PlaceFieldPresets.minimal,
+        if (_configuration.showPhotos) PlaceField.photos,
+      },
       includeQueryPredictions: _includeQueryPredictions,
       onQuerySelection: (selection) {
         setState(() {
@@ -841,6 +868,7 @@ class _ExampleAppState extends State<ExampleApp> {
         searchHint: 'Search for a place',
         overlayTitle: 'Search places',
         distanceUnitMeters: 'm',
+        photoAttributionPrefix: 'Photo by',
       ),
       DemoLocale.hebrew => const PlacesStrings(
         searchHint: 'חיפוש מקום',
@@ -853,6 +881,7 @@ class _ExampleAppState extends State<ExampleApp> {
         closeLabel: 'סגור',
         clearLabel: 'נקה חיפוש',
         distanceUnitMeters: 'מ׳',
+        photoAttributionPrefix: 'צילום:',
       ),
       DemoLocale.arabic => const PlacesStrings(
         searchHint: 'ابحث عن مكان',
@@ -865,6 +894,7 @@ class _ExampleAppState extends State<ExampleApp> {
         closeLabel: 'إغلاق',
         clearLabel: 'مسح البحث',
         distanceUnitMeters: 'م',
+        photoAttributionPrefix: 'تصوير:',
       ),
     };
   }
@@ -943,6 +973,11 @@ class _ConfigurationSummary extends StatelessWidget {
                 if (configuration.showDistanceFromOrigin)
                   const Chip(
                     label: Text('Distance from origin'),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                if (configuration.showPhotos)
+                  const Chip(
+                    label: Text('Photos'),
                     visualDensity: VisualDensity.compact,
                   ),
               ],
@@ -1128,6 +1163,20 @@ class _ConfigurationSheetState extends State<_ConfigurationSheet> {
                         ),
                       ),
                     ),
+                    SwitchListTile(
+                      key: const ValueKey<String>('configuration-photos'),
+                      contentPadding: EdgeInsets.zero,
+                      value: _draft.showPhotos,
+                      title: const Text('Show place photos'),
+                      subtitle: const Text(
+                        'Adds PlaceField.photos to the details request and '
+                        'shows them with PlacePhotoView. Each photo shown is '
+                        'one billed request.',
+                      ),
+                      onChanged: (value) => setState(
+                        () => _draft = _draft.copyWith(showPhotos: value),
+                      ),
+                    ),
                     if (_draft.textSearchMode == TextSearchMode.paged)
                       DropdownButtonFormField<int>(
                         key: const ValueKey<String>('configuration-page-size'),
@@ -1178,6 +1227,60 @@ class _ConfigurationSheetState extends State<_ConfigurationSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A horizontal strip of the place's photos — a composition of
+/// [PlacePhotoView]s, since the package has no gallery widget.
+class _PhotoStrip extends StatelessWidget {
+  const _PhotoStrip({
+    required this.photos,
+    required this.client,
+    required this.strings,
+  });
+
+  final List<PlacePhoto> photos;
+  final PlacesClient client;
+  final PlacesStrings strings;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 120,
+      child: ListView.separated(
+        key: const ValueKey<String>('photo-strip'),
+        scrollDirection: Axis.horizontal,
+        itemCount: photos.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 8),
+        itemBuilder: (context, index) => ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: PlacePhotoView(
+            photo: photos[index],
+            client: client,
+            width: 160,
+            height: 120,
+            strings: strings,
+            // The default views show loading and draw the attribution; a
+            // failure shows the typed error's kind beside the retry button.
+            builder: (context, photo) => switch (photo.status) {
+              PlacePhotoStatus.error => SizedBox(
+                width: 160,
+                height: 120,
+                child: Center(
+                  child: TextButton(
+                    onPressed: photo.onRetry,
+                    child: Text(
+                      '${photo.error?.kind.name} · ${photo.strings.retryText}',
+                    ),
+                  ),
+                ),
+              ),
+              _ => photo.defaultView,
+            },
+          ),
+        ),
       ),
     );
   }

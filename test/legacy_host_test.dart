@@ -3,7 +3,7 @@
 // they build there with no app code. The import is prefixed so every
 // unprefixed Material name below is material_ui's.
 // ignore_for_file: deprecated_member_use
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show SynchronousFuture, kIsWeb;
 import 'package:flutter/material.dart' as legacy;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
@@ -41,6 +41,17 @@ class _FakeBackend implements PlacesBackend {
   // Nothing else is reached by these tests.
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _PhotoMediaBackend extends _FakeBackend {
+  @override
+  Future<PlacePhotoMedia> fetchPhotoMedia(
+    PhotoMediaRequest request, {
+    PlacesCancellationToken? cancellationToken,
+  }) async => const PlacePhotoMedia(
+    name: 'places/place-1/photos/photo-1/media',
+    photoUri: 'https://img.test/legacy',
+  );
 }
 
 PlacesClient _client() =>
@@ -299,6 +310,63 @@ void main() {
 
     final text = tester.widget<Text>(find.textContaining('A. Photographer'));
     expect(text.style?.color?.computeLuminance(), greaterThan(0.5));
+  });
+
+  testWidgets('PlacePhotoView builds its loading and retry views', (
+    tester,
+  ) async {
+    // The fake backend has no photo support, so the fetch fails at once.
+    await tester.pumpWidget(
+      _legacyApp(
+        PlacePhotoView(
+          photo: const PlacePhoto(name: 'places/place-1/photos/photo-1'),
+          client: _client(),
+          width: 100,
+        ),
+      ),
+    );
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Retry'), findsOneWidget);
+  });
+
+  testWidgets('PlacePhotoView draws a legible attribution once loaded', (
+    tester,
+  ) async {
+    final image = await tester.runAsync(
+      () => createTestImage(width: 4, height: 4),
+    );
+    imageCache.putIfAbsent(
+      const NetworkImage('https://img.test/legacy'),
+      () => OneFrameImageStreamCompleter(
+        SynchronousFuture<ImageInfo>(ImageInfo(image: image!)),
+      ),
+    );
+    addTearDown(imageCache.clear);
+    await tester.pumpWidget(
+      _legacyApp(
+        PlacePhotoView(
+          photo: const PlacePhoto(
+            name: 'places/place-1/photos/photo-1',
+            authors: <PlacePhotoAuthorAttribution>[
+              PlacePhotoAuthorAttribution(displayName: 'A. Photographer'),
+            ],
+          ),
+          client: PlacesClient.testing(
+            apiKey: 'test',
+            backend: _PhotoMediaBackend(),
+          ),
+          width: 100,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    final text = tester.widget<Text>(find.textContaining('A. Photographer'));
+    expect(text.style?.color, const Color(0xFFFFFFFF));
   });
 
   testWidgets('prints its debug notice once per run', (tester) async {

@@ -49,7 +49,15 @@ Run with `flutter run --dart-define=GOOGLE_MAPS_API_KEY=...`.
   from a saved place: store its place ID, then
   `initialValue: PlaceSelection.fromPlace(await client.fetchPlaceById(savedId))`.
 - `PlacesAutocompleteOverlay.show(context, ...)` → `Future<PlaceSelection?>`; `null` if dismissed.
-- `PlacesPhotoAttribution(photo: photo)` — required author attribution next to a photo.
+- `PlacePhotoView(photo: place.photos.first, apiKey: key, height: 200)` — fetches and shows one
+  photo with its required author attribution drawn over it. Exactly one of `apiKey:` / `client:`.
+  `width`/`height` (logical px) set the requested size × device pixel ratio, capped at 4800;
+  `maxWidthPx`/`maxHeightPx` override. `builder: (context, view) => ...` gets `view.status`
+  (`PlacePhotoStatus.loading` / `loaded` / `error`), `view.image`, `view.error`
+  (`PlacesException`), `view.onRetry`, `view.attribution`, `view.defaultView`. No option hides the
+  attribution. Strips and galleries: `ListView` / `PageView` of `PlacePhotoView`s.
+- `PlacesPhotoAttribution(photo: photo)` — the attribution alone, beside an image you show
+  yourself.
 
 All four autocomplete surfaces (field, form field, overlay widget, `show()`) take **exactly one** of `apiKey:` (widget owns, replaces, and
 closes its client) or `client:` (caller owns a `PlacesClient`). Use `client:` to share a client,
@@ -84,10 +92,11 @@ every surface: every `TextField` parameter except `controller`, `focusNode`, `de
 
 Widget text: `strings: const PlacesStrings(searchHint: ..., loadingText: ..., noResultsText: ...,
 errorText: ..., retryText: ..., poweredByGoogleLabel: ..., overlayTitle: ..., closeLabel: ...,
-clearLabel: ..., placeSuggestionLabel: ..., querySuggestionLabel: ..., distanceUnitMeters: ...)`.
+clearLabel: ..., placeSuggestionLabel: ..., querySuggestionLabel: ..., distanceUnitMeters: ...,
+photoAttributionPrefix: ...)`.
 Every default is English and the package does not pick strings from the app's locale yet, so a
 non-English app passes them all. `languageCode` sets Google's result language, not the widget's
-text. `PlacesPhotoAttribution`'s "Photo by" is its own `prefix:` parameter.
+text. The photo widgets take the same `strings:` for "Photo by" (`photoAttributionPrefix`).
 
 Builders — each gets one data object and reaches every mode:
 
@@ -202,7 +211,8 @@ at `selectionTimeZoneAt` (default now).
   at Enterprise + Atmosphere.
 - `displayName` is not in the default; the picked name is `selection.suggestion.primaryText.text`.
 - Photos are not in the default: add `PlaceField.photos` to `selectionFields`, or
-  `place.photos` is empty. Each `client.fetchPhotoMedia` call is billed separately.
+  `place.photos` is empty. Each photo a `PlacePhotoView` shows, and each `client.fetchPhotoMedia`
+  call, is one billed Place Photos request.
 - The widgets manage autocomplete session tokens and end the session with the details request.
 
 ## Client
@@ -260,6 +270,13 @@ default theme there. A `decoration:` must still be `material_ui`'s `InputDecorat
   leaves without picking — that session is not ended until `dispose()`.
 - Assigning `controller.selectedSelection` — it is read-only since `0.7.0`; use `setSelection`,
   `restoreSelection`, or `clearSelection`.
+- Calling `fetchPhotoMedia` and `Image.network` by hand instead of `PlacePhotoView` — and then
+  dropping the author attribution Google requires.
+- Storing `PlacePhoto.name` to show later — Google does not allow caching it, and it expires.
+- Expecting the photo image to pass through a `PlacesClient.proxy` proxy — only the photo's
+  address does; the image is downloaded straight from Google.
+- `PlacesPhotoAttribution(prefix: ...)` — deprecated; use
+  `strings: PlacesStrings(photoAttributionPrefix: ...)`.
 
 ## Links
 

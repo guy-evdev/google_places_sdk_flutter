@@ -18,7 +18,9 @@ and why.
 - [Fewer billed requests](#fewer-billed-requests)
 - [`TextField` options and inline placement](#textfield-options-and-inline-placement)
 - [Your own search UI with the controller](#your-own-search-ui-with-the-controller)
+- [Address forms](#address-forms)
 - [Entrances, navigation points, and every field at once](#entrances-navigation-points-and-every-field-at-once)
+- [Place photos](#place-photos)
 - [Why the `material_ui` migration exists](#why-this-release-exists)
 
 ## Apps on either design library
@@ -416,6 +418,40 @@ it always bills at the highest tier, Enterprise + Atmosphere, on Place Details, 
 Nearby Search; it returns the largest responses; and it grows when a package version adds fields,
 so a request that uses it can bill differently after an upgrade. On the web it takes the HTTP path
 for the same reason as the two new fields.
+
+## Place photos
+
+`PlacePhotoView` shows a photo from a place result. Request `PlaceField.photos`, then:
+
+```dart
+PlacePhotoView(photo: place.photos.first, apiKey: apiKey, height: 200)
+```
+
+Before, showing a photo meant calling `fetchPhotoMedia` for its address, loading that address into
+an `Image`, and placing `PlacesPhotoAttribution` beside it — and getting cancellation, stale results
+and sizing right by hand. The widget does all of it:
+
+- **Size.** `width` and `height` are logical pixels; the widget requests that size times the device
+  pixel ratio, rounded up and capped at Google's 4800. `maxWidthPx` / `maxHeightPx` set the request
+  directly. With no size, it requests the photo's own width, so pass one for a thumbnail.
+- **Fetching.** One billed Place Photos request when the widget is built, and again only when the
+  photo, the client or the requested size changes. A fetch still running is cancelled when the
+  widget goes away, and an answer for a photo it no longer shows is dropped.
+- **Attribution.** The author's name is drawn over the bottom of the image. There is no option to
+  hide it: Google requires the author to be credited wherever the photo is shown.
+- **Your own look.** `builder` gets the state (`loading`, `loaded`, `error`), the image, the typed
+  `PlacesException`, a retry callback, the attribution to place, and the package's `defaultView`.
+
+Two things the widget cannot do for you. Google's policies ask that users can open each photo on
+Google Maps through `PlacePhoto.googleMapsUri`, and the package does not open links — add one, as
+the [recipe](recipes.md#link-to-the-photo-on-google-maps) shows. And the image is downloaded by
+Flutter's image loader straight from the address Google returned: with `PlacesClient.proxy()`, the
+photo's address goes through your proxy, but the image does not. On web the address lookup is a REST
+request, so with `apiKey:` the key is sent from the browser — pass a proxy `client:` to avoid it.
+
+"Photo by" is now `PlacesStrings.photoAttributionPrefix`, shared by `PlacePhotoView` and
+`PlacesPhotoAttribution`. `PlacesPhotoAttribution`'s own `prefix` still works and is deprecated,
+for removal in `1.0.0`.
 
 ## Why this release exists
 

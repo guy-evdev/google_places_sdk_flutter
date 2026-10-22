@@ -8,7 +8,7 @@
 /// - autocomplete billing-session preservation through place selection
 /// - typed errors, request validation, deadlines, and HTTP ownership options
 /// - keyless authenticated proxy, mobile identity, and web fallback controls
-/// - Place Photos (New) media lookup
+/// - Place Photos (New) media lookup and a [PlacePhotoView] widget
 /// - optional Google Time Zone API integration
 /// - inline, dialog, and fullscreen autocomplete widgets
 /// - localization strings and controller types for UI integration
@@ -33,6 +33,7 @@ export 'src/places_client_options.dart';
 export 'src/widgets/places_autocomplete_builders.dart';
 export 'src/widgets/places_autocomplete_field.dart';
 export 'src/widgets/places_autocomplete_form_field.dart';
+export 'src/widgets/place_photo_view.dart';
 export 'src/widgets/places_autocomplete_overlay.dart';
 export 'src/widgets/places_photo_attribution.dart';
 export 'src/widgets/places_strings.dart';
