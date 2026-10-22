@@ -38,12 +38,25 @@ enum PlacesErrorKind {
 
 /// Public operations that can be attached to a [PlacesException].
 enum PlacesOperation {
+  /// Autocomplete suggestions.
   autocomplete,
+
+  /// Fetching place details.
   placeDetails,
+
+  /// Fetching photo media.
   photoMedia,
+
+  /// Fetching time zone data.
   timeZone,
+
+  /// Text search.
   textSearch,
+
+  /// Nearby search.
   nearbySearch,
+
+  /// Initializing the Places client.
   clientInitialization,
 }
 
@@ -420,85 +433,245 @@ class LocationRestriction {
 /// Official reference:
 /// https://developers.google.com/maps/documentation/places/web-service/place-details#fields
 enum PlaceField {
+  /// The place's ID.
   id('id'),
+
+  /// The place's resource name.
   name('name'),
+
+  /// The place's display name.
   displayName('displayName'),
+
+  /// The place's full formatted address.
   formattedAddress('formattedAddress'),
+
+  /// The place's short formatted address.
   shortFormattedAddress('shortFormattedAddress'),
+
+  /// The place's address in the adr microformat.
   adrFormatAddress('adrFormatAddress'),
+
+  /// The place's structured postal address.
   postalAddress('postalAddress'),
+
+  /// The place's coordinates.
   location('location'),
+
+  /// The viewport suited to displaying the place on a map.
   viewport('viewport'),
+
+  /// The place's types.
   types('types'),
+
+  /// The place's primary type.
   primaryType('primaryType'),
+
+  /// The display name of the place's primary type.
   primaryTypeDisplayName('primaryTypeDisplayName'),
+
+  /// The type label Google Maps shows for the place.
   googleMapsTypeLabel('googleMapsTypeLabel'),
+
+  /// The place's business status.
   businessStatus('businessStatus'),
+
+  /// The date the place opened or is expected to open.
   openingDate('openingDate'),
+
+  /// A link to the place on Google Maps.
   googleMapsUri('googleMapsUri'),
+
+  /// Google Maps links for directions, the place, reviews and photos.
   googleMapsLinks('googleMapsLinks'),
+
+  /// The place's website.
   websiteUri('websiteUri'),
+
+  /// The place's phone number in national format.
   nationalPhoneNumber('nationalPhoneNumber'),
+
+  /// The place's phone number in international format.
   internationalPhoneNumber('internationalPhoneNumber'),
+
+  /// The place's average rating.
   rating('rating'),
+
+  /// The number of ratings behind the place's rating.
   userRatingCount('userRatingCount'),
+
+  /// The place's price level.
   priceLevel('priceLevel'),
+
+  /// The place's price range.
   priceRange('priceRange'),
+
+  /// The place's Plus Code.
   plusCode('plusCode'),
+
+  /// The data-provider attributions to show with the place.
   attributions('attributions'),
+
+  /// The base URI of the place's icon mask.
   iconMaskBaseUri('iconMaskBaseUri'),
+
+  /// The background color for the place's icon.
   iconBackgroundColor('iconBackgroundColor'),
+
+  /// The place's current offset from UTC, in minutes.
   utcOffsetMinutes('utcOffsetMinutes'),
+
+  /// The place's IANA time zone.
   timeZone('timeZone'),
+
+  /// The place's editorial summary.
   editorialSummary('editorialSummary'),
+
+  /// The place's opening hours for the coming seven days.
   currentOpeningHours('currentOpeningHours'),
+
+  /// The place's regular weekly opening hours.
   regularOpeningHours('regularOpeningHours'),
+
+  /// The place's secondary opening hours for the coming seven days.
   currentSecondaryOpeningHours('currentSecondaryOpeningHours'),
+
+  /// The place's regular secondary opening hours.
   regularSecondaryOpeningHours('regularSecondaryOpeningHours'),
+
+  /// The place's photos.
   photos('photos'),
+
+  /// The place's reviews.
   reviews('reviews'),
+
+  /// The place's structured address components.
   addressComponents('addressComponents'),
+
+  /// The places that contain this place.
   containingPlaces('containingPlaces'),
+
+  /// Notable places that belong to this one, such as an airport's terminals.
   subDestinations('subDestinations'),
+
+  /// Whether the place offers delivery.
   delivery('delivery'),
+
+  /// Whether the place offers dine-in seating.
   dineIn('dineIn'),
+
+  /// Whether the place offers takeout.
   takeout('takeout'),
+
+  /// Whether the place offers curbside pickup.
   curbsidePickup('curbsidePickup'),
+
+  /// Whether the place accepts reservations.
   reservable('reservable'),
+
+  /// Whether the place serves breakfast.
   servesBreakfast('servesBreakfast'),
+
+  /// Whether the place serves lunch.
   servesLunch('servesLunch'),
+
+  /// Whether the place serves dinner.
   servesDinner('servesDinner'),
+
+  /// Whether the place serves beer.
   servesBeer('servesBeer'),
+
+  /// Whether the place serves wine.
   servesWine('servesWine'),
+
+  /// Whether the place serves brunch.
   servesBrunch('servesBrunch'),
+
+  /// Whether the place serves vegetarian food.
   servesVegetarianFood('servesVegetarianFood'),
+
+  /// Whether the place serves cocktails.
   servesCocktails('servesCocktails'),
+
+  /// Whether the place serves dessert.
   servesDessert('servesDessert'),
+
+  /// Whether the place serves coffee.
   servesCoffee('servesCoffee'),
+
+  /// Whether the place has outdoor seating.
   outdoorSeating('outdoorSeating'),
+
+  /// Whether the place has live music.
   liveMusic('liveMusic'),
+
+  /// Whether the place has a children's menu.
   menuForChildren('menuForChildren'),
+
+  /// Whether the place allows dogs.
   allowsDogs('allowsDogs'),
+
+  /// Whether the place has a restroom.
   restroom('restroom'),
+
+  /// Whether the place is good for children.
   goodForChildren('goodForChildren'),
+
+  /// Whether the place is good for groups.
   goodForGroups('goodForGroups'),
+
+  /// Whether the place is good for watching sports.
   goodForWatchingSports('goodForWatchingSports'),
+
+  /// The payment methods the place accepts.
   paymentOptions('paymentOptions'),
+
+  /// The parking options the place offers.
   parkingOptions('parkingOptions'),
+
+  /// The wheelchair accessibility options the place offers.
   accessibilityOptions('accessibilityOptions'),
+
+  /// The address descriptor, which locates the place relative to nearby landmarks and areas.
   addressDescriptor('addressDescriptor'),
+
+  /// The place's electric-vehicle charging options.
   evChargeOptions('evChargeOptions'),
+
+  /// The place's fuel options.
   fuelOptions('fuelOptions'),
+
+  /// The AI-generated summary of the place.
   generativeSummary('generativeSummary'),
+
+  /// The AI-generated summary of the place's reviews.
   reviewSummary('reviewSummary'),
+
+  /// The summary of amenities near the place's electric-vehicle chargers.
   evChargeAmenitySummary('evChargeAmenitySummary'),
+
+  /// The AI-generated summary of the place's neighborhood.
   neighborhoodSummary('neighborhoodSummary'),
+
+  /// Google's warning about the place, such as suspicious review activity, when there is one.
   consumerAlert('consumerAlert'),
+
+  /// The place's transit-station information.
   transitStation('transitStation'),
+
+  /// Whether the place is a business that visits or delivers to people and has no address
+  /// where it serves them.
   pureServiceAreaBusiness('pureServiceAreaBusiness'),
+
+  /// The resource name of the place this one moved to.
   movedPlace('movedPlace'),
+
+  /// The ID of the place this one moved to.
   movedPlaceId('movedPlaceId'),
+
+  /// The place's entrances.
   entrances('entrances'),
+
+  /// The place's navigation points.
   navigationPoints('navigationPoints');
 
   const PlaceField(this.apiName);
@@ -655,7 +828,10 @@ abstract final class PlaceTypePresets {
 
 /// Ranking preference for text search.
 enum SearchByTextRankPreference {
+  /// Rank results by relevance to the query.
   relevance('RELEVANCE'),
+
+  /// Rank results by distance from the search location.
   distance('DISTANCE');
 
   const SearchByTextRankPreference(this.restName);
@@ -666,7 +842,10 @@ enum SearchByTextRankPreference {
 
 /// Ranking preference for nearby search.
 enum SearchNearbyRankPreference {
+  /// Rank results by popularity.
   popularity('POPULARITY'),
+
+  /// Rank results by distance from the search location.
   distance('DISTANCE');
 
   const SearchNearbyRankPreference(this.restName);
@@ -681,11 +860,22 @@ enum SearchNearbyRankPreference {
 /// Search filter. [unspecified] is included for forward-compatible response
 /// mapping and is likewise not a valid request filter.
 enum PlacePriceLevel {
+  /// The price level is not specified.
   unspecified('PRICE_LEVEL_UNSPECIFIED'),
+
+  /// Free.
   free('PRICE_LEVEL_FREE'),
+
+  /// Inexpensive.
   inexpensive('PRICE_LEVEL_INEXPENSIVE'),
+
+  /// Moderately priced.
   moderate('PRICE_LEVEL_MODERATE'),
+
+  /// Expensive.
   expensive('PRICE_LEVEL_EXPENSIVE'),
+
+  /// Very expensive.
   veryExpensive('PRICE_LEVEL_VERY_EXPENSIVE');
 
   const PlacePriceLevel(this.restName);
@@ -706,6 +896,8 @@ class LocalizedText {
   /// Optional BCP-47 language code for [text].
   final String? languageCode;
 
+  /// Creates a [LocalizedText] from a Google JSON value, accepting a plain string or a map with
+  /// `text` and `languageCode`.
   factory LocalizedText.fromJson(Object? source) {
     if (source is String) {
       return LocalizedText(text: source);
@@ -746,6 +938,8 @@ class StructuredText {
   /// Highlight ranges inside [text].
   final List<TextMatch> matches;
 
+  /// Creates a [StructuredText] from a Google JSON value, accepting a plain string or a map with
+  /// `text` and `matches`.
   factory StructuredText.fromJson(Object? source) {
     if (source is String) {
       return StructuredText(text: source);
@@ -801,6 +995,7 @@ sealed class AutocompleteSuggestion {
 @immutable
 /// Lightweight place autocomplete suggestion returned by Places API (New).
 class PlaceSuggestion extends AutocompleteSuggestion {
+  /// Creates a place autocomplete suggestion.
   const PlaceSuggestion({
     required this.placeId,
     required this.placeResourceName,
@@ -830,6 +1025,7 @@ class PlaceSuggestion extends AutocompleteSuggestion {
   /// Place types returned for this suggestion.
   final List<String> types;
 
+  /// Creates a [PlaceSuggestion] from a Places API (New) autocomplete response entry.
   factory PlaceSuggestion.fromRestJson(Map<String, Object?> json) {
     final prediction =
         (json['placePrediction'] as Map<Object?, Object?>?)
@@ -871,6 +1067,7 @@ class QuerySuggestion extends AutocompleteSuggestion {
   /// Match ranges returned for the suggested query text.
   final List<TextMatch> matches;
 
+  /// Creates a [QuerySuggestion] from a Places API (New) autocomplete response entry.
   factory QuerySuggestion.fromRestJson(Map<String, Object?> json) {
     final prediction =
         (json['queryPrediction'] as Map<Object?, Object?>?)
@@ -894,6 +1091,7 @@ class QuerySuggestion extends AutocompleteSuggestion {
 /// Official reference:
 /// https://developers.google.com/maps/documentation/timezone/requests-timezone
 class PlaceTimeZoneData {
+  /// Creates time zone data.
   const PlaceTimeZoneData({
     required this.dstOffset,
     required this.rawOffset,
@@ -921,6 +1119,7 @@ class PlaceTimeZoneData {
   /// Full raw payload from Google.
   final Map<String, Object?> rawData;
 
+  /// Creates [PlaceTimeZoneData] from a Google Time Zone API response, stamped with [timestamp].
   factory PlaceTimeZoneData.fromJson(
     Map<String, Object?> json, {
     required DateTime timestamp,
@@ -945,6 +1144,7 @@ class PlaceTimeZoneData {
 /// [place] may also be populated. When time-zone fetching is enabled,
 /// [timeZone] may also be populated.
 class PlaceSelection {
+  /// Creates a selection result.
   const PlaceSelection({
     required this.suggestion,
     this.sessionToken,
@@ -1000,6 +1200,7 @@ class PlaceSelection {
   /// Whether [timeZone] is available.
   bool get hasTimeZone => timeZone != null;
 
+  /// Returns a copy with the given fields replaced.
   PlaceSelection copyWith({
     PlaceSuggestion? suggestion,
     AutocompleteSessionToken? sessionToken,
@@ -1044,6 +1245,7 @@ class PlaceAddressComponent {
   /// Optional BCP-47 language code for the component text.
   final String? languageCode;
 
+  /// Creates a [PlaceAddressComponent] from Places API (New) JSON.
   factory PlaceAddressComponent.fromJson(Map<String, Object?> json) =>
       PlaceAddressComponent(
         longText: (json['longText'] ?? '') as String,
@@ -1115,6 +1317,7 @@ class PlacePostalAddress {
   /// Organization associated with the address.
   final String? organization;
 
+  /// Creates a [PlacePostalAddress] from Places API (New) JSON.
   factory PlacePostalAddress.fromJson(Map<String, Object?> json) =>
       PlacePostalAddress(
         revision: (json['revision'] as num?)?.toInt(),
@@ -1210,6 +1413,7 @@ class PlacePhoto {
         authorAttributions.map(PlacePhotoAuthorAttribution.fromJson),
       );
 
+  /// Creates a [PlacePhoto] from Places API (New) JSON.
   factory PlacePhoto.fromJson(Map<String, Object?> json) {
     final attributions = ((json['authorAttributions'] as List?) ?? <Object?>[])
         .whereType<Map<Object?, Object?>>()
@@ -1320,6 +1524,7 @@ class PlacePhotoMedia {
   /// Full raw payload from Google.
   final Map<String, Object?> rawData;
 
+  /// Creates a [PlacePhotoMedia] from Google JSON.
   factory PlacePhotoMedia.fromJson(Map<String, Object?> json) =>
       PlacePhotoMedia(
         name: (json['name'] ?? '') as String,
@@ -1359,6 +1564,7 @@ class PlaceReview {
   /// Original untranslated review text, when provided.
   final LocalizedText? originalText;
 
+  /// Creates a [PlaceReview] from Places API (New) JSON.
   factory PlaceReview.fromJson(Map<String, Object?> json) {
     final authorAttribution =
         (json['authorAttribution'] as Map<Object?, Object?>?)
@@ -1381,15 +1587,22 @@ class PlaceReview {
 @immutable
 /// Whole or partial Gregorian calendar date returned by Places API.
 class PlaceDate {
+  /// Creates a date.
   const PlaceDate({required this.year, required this.month, required this.day});
 
+  /// Year, or 0 when Google did not return it.
   final int year;
+
+  /// Month from 1 to 12, or 0 when Google did not return it.
   final int month;
+
+  /// Day of the month, or 0 when Google did not return it.
   final int day;
 
   /// Whether this value contains a complete year, month, and day.
   bool get isComplete => year > 0 && month > 0 && day > 0;
 
+  /// Creates a [PlaceDate] from Places API (New) JSON, accepting a map or a date string.
   factory PlaceDate.fromJson(Object? source) {
     if (source is String) {
       final parsed = DateTime.tryParse(source);
@@ -1413,11 +1626,16 @@ class PlaceDate {
 @immutable
 /// Open Location Code values for a place.
 class PlacePlusCode {
+  /// Creates a Plus Code value.
   const PlacePlusCode({this.globalCode, this.compoundCode});
 
+  /// Global code, such as `849VCWC8+R9`, when Google returned it.
   final String? globalCode;
+
+  /// Compound code, which pairs a short code with a locality, when Google returned it.
   final String? compoundCode;
 
+  /// Creates a [PlacePlusCode] from Places API (New) JSON.
   factory PlacePlusCode.fromJson(Object? source) {
     final json = _jsonMap(source);
     return PlacePlusCode(
@@ -1430,11 +1648,16 @@ class PlacePlusCode {
 @immutable
 /// IANA time-zone identity embedded in a Place response.
 class PlaceTimeZone {
+  /// Creates a time zone identity.
   const PlaceTimeZone({required this.id, this.version});
 
+  /// IANA time zone ID, such as `America/New_York`.
   final String id;
+
+  /// IANA time zone database version, when Google returned it.
   final String? version;
 
+  /// Creates a [PlaceTimeZone] from Places API (New) JSON.
   factory PlaceTimeZone.fromJson(Object? source) {
     final json = _jsonMap(source);
     return PlaceTimeZone(
@@ -1447,11 +1670,16 @@ class PlaceTimeZone {
 @immutable
 /// Data-provider attribution that must be displayed with a place.
 class PlaceAttribution {
+  /// Creates a data-provider attribution.
   const PlaceAttribution({required this.provider, this.providerUri});
 
+  /// Name of the data provider.
   final String provider;
+
+  /// Link to the data provider, when Google returned it.
   final String? providerUri;
 
+  /// Creates a [PlaceAttribution] from Places API (New) JSON.
   factory PlaceAttribution.fromJson(Object? source) {
     final json = _jsonMap(source);
     return PlaceAttribution(
@@ -1464,6 +1692,7 @@ class PlaceAttribution {
 @immutable
 /// Payment methods accepted by a place.
 class PlacePaymentOptions {
+  /// Creates a set of payment options.
   const PlacePaymentOptions({
     this.acceptsCreditCards,
     this.acceptsDebitCards,
@@ -1471,11 +1700,19 @@ class PlacePaymentOptions {
     this.acceptsNfc,
   });
 
+  /// Whether the place accepts credit cards, when Google returned it.
   final bool? acceptsCreditCards;
+
+  /// Whether the place accepts debit cards, when Google returned it.
   final bool? acceptsDebitCards;
+
+  /// Whether the place accepts cash only, when Google returned it.
   final bool? acceptsCashOnly;
+
+  /// Whether the place accepts NFC payments, when Google returned it.
   final bool? acceptsNfc;
 
+  /// Creates a [PlacePaymentOptions] from Places API (New) JSON.
   factory PlacePaymentOptions.fromJson(Object? source) {
     final json = _jsonMap(source);
     return PlacePaymentOptions(
@@ -1490,6 +1727,7 @@ class PlacePaymentOptions {
 @immutable
 /// Parking options offered by a place.
 class PlaceParkingOptions {
+  /// Creates a set of parking options.
   const PlaceParkingOptions({
     this.freeParkingLot,
     this.paidParkingLot,
@@ -1500,14 +1738,28 @@ class PlaceParkingOptions {
     this.paidGarageParking,
   });
 
+  /// Whether the place has a free parking lot, when Google returned it.
   final bool? freeParkingLot;
+
+  /// Whether the place has a paid parking lot, when Google returned it.
   final bool? paidParkingLot;
+
+  /// Whether the place has free street parking, when Google returned it.
   final bool? freeStreetParking;
+
+  /// Whether the place has paid street parking, when Google returned it.
   final bool? paidStreetParking;
+
+  /// Whether the place has valet parking, when Google returned it.
   final bool? valetParking;
+
+  /// Whether the place has free garage parking, when Google returned it.
   final bool? freeGarageParking;
+
+  /// Whether the place has paid garage parking, when Google returned it.
   final bool? paidGarageParking;
 
+  /// Creates a [PlaceParkingOptions] from Places API (New) JSON.
   factory PlaceParkingOptions.fromJson(Object? source) {
     final json = _jsonMap(source);
     return PlaceParkingOptions(
@@ -1536,6 +1788,7 @@ class PlaceParkingOptions {
 @immutable
 /// Wheelchair accessibility options offered by a place.
 class PlaceAccessibilityOptions {
+  /// Creates a set of accessibility options.
   const PlaceAccessibilityOptions({
     this.wheelchairAccessibleParking,
     this.wheelchairAccessibleEntrance,
@@ -1543,11 +1796,19 @@ class PlaceAccessibilityOptions {
     this.wheelchairAccessibleSeating,
   });
 
+  /// Whether the place has wheelchair-accessible parking, when Google returned it.
   final bool? wheelchairAccessibleParking;
+
+  /// Whether the place has a wheelchair-accessible entrance, when Google returned it.
   final bool? wheelchairAccessibleEntrance;
+
+  /// Whether the place has a wheelchair-accessible restroom, when Google returned it.
   final bool? wheelchairAccessibleRestroom;
+
+  /// Whether the place has wheelchair-accessible seating, when Google returned it.
   final bool? wheelchairAccessibleSeating;
 
+  /// Creates a [PlaceAccessibilityOptions] from Places API (New) JSON.
   factory PlaceAccessibilityOptions.fromJson(Object? source) {
     final json = _jsonMap(source);
     return PlaceAccessibilityOptions(
@@ -1574,11 +1835,16 @@ class PlaceAccessibilityOptions {
 @immutable
 /// Place id and resource-name reference used for containing/sub-destinations.
 class PlaceResourceReference {
+  /// Creates a place reference.
   const PlaceResourceReference({required this.id, required this.resourceName});
 
+  /// The referenced place's ID.
   final String id;
+
+  /// The referenced place's resource name.
   final String resourceName;
 
+  /// Creates a [PlaceResourceReference] from Places API (New) JSON.
   factory PlaceResourceReference.fromJson(Object? source) {
     final json = _jsonMap(source);
     return PlaceResourceReference(
@@ -1591,6 +1857,7 @@ class PlaceResourceReference {
 @immutable
 /// Google Maps action links associated with a place.
 class PlaceGoogleMapsLinks {
+  /// Creates a set of Google Maps links.
   const PlaceGoogleMapsLinks({
     this.directionsUri,
     this.placeUri,
@@ -1599,12 +1866,22 @@ class PlaceGoogleMapsLinks {
     this.photosUri,
   });
 
+  /// Link to directions to the place, when Google returned it.
   final String? directionsUri;
+
+  /// Link to the place, when Google returned it.
   final String? placeUri;
+
+  /// Link to write a review for the place, when Google returned it.
   final String? writeAReviewUri;
+
+  /// Link to the place's reviews, when Google returned it.
   final String? reviewsUri;
+
+  /// Link to the place's photos, when Google returned it.
   final String? photosUri;
 
+  /// Creates a [PlaceGoogleMapsLinks] from Places API (New) JSON.
   factory PlaceGoogleMapsLinks.fromJson(Object? source) {
     final json = _jsonMap(source);
     return PlaceGoogleMapsLinks(
@@ -1622,19 +1899,23 @@ class PlaceGoogleMapsLinks {
 @immutable
 /// Currency amount returned inside a place price range.
 class PlaceMoney {
+  /// Creates a currency amount.
   const PlaceMoney({
     required this.currencyCode,
     required this.units,
     required this.nanos,
   });
 
+  /// Three-letter ISO 4217 currency code.
   final String currencyCode;
 
   /// Whole units preserved as an int64-compatible decimal string.
   final String units;
 
+  /// Number of nano (10^-9) units of the amount.
   final int nanos;
 
+  /// Creates a [PlaceMoney] from Places API (New) JSON.
   factory PlaceMoney.fromJson(Object? source) {
     final json = _jsonMap(source);
     return PlaceMoney(
@@ -1648,11 +1929,16 @@ class PlaceMoney {
 @immutable
 /// Inclusive start and optional exclusive end price for a place.
 class PlacePriceRange {
+  /// Creates a price range.
   const PlacePriceRange({this.startPrice, this.endPrice});
 
+  /// Lowest price in the range, when Google returned it.
   final PlaceMoney? startPrice;
+
+  /// Highest price in the range, when Google returned it.
   final PlaceMoney? endPrice;
 
+  /// Creates a [PlacePriceRange] from Places API (New) JSON.
   factory PlacePriceRange.fromJson(Object? source) {
     final json = _jsonMap(source);
     return PlacePriceRange(
@@ -1669,11 +1955,16 @@ class PlacePriceRange {
 @immutable
 /// Icon metadata for a transit agency, line, or vehicle.
 class PlaceTransitIcon {
+  /// Creates a transit icon.
   const PlaceTransitIcon({this.url, this.nameIncluded});
 
+  /// URL of the icon, when Google returned it.
   final String? url;
+
+  /// Whether the icon image already includes the name, when Google returned it.
   final bool? nameIncluded;
 
+  /// Creates a [PlaceTransitIcon] from Places API (New) JSON.
   factory PlaceTransitIcon.fromJson(Object? source) {
     final json = _jsonMap(source);
     return PlaceTransitIcon(
@@ -1686,6 +1977,7 @@ class PlaceTransitIcon {
 @immutable
 /// Transit line serving a station.
 class PlaceTransitLine {
+  /// Creates a transit line.
   const PlaceTransitLine({
     required this.id,
     this.vehicleType,
@@ -1698,16 +1990,34 @@ class PlaceTransitLine {
     this.vehicleIcon,
   });
 
+  /// Google's ID for the line.
   final String id;
+
+  /// Vehicle type of the line, when Google returned it.
   final String? vehicleType;
+
+  /// Name of the line, when Google returned it.
   final LocalizedText? displayName;
+
+  /// Short name of the line, when Google returned it.
   final LocalizedText? shortDisplayName;
+
+  /// Text color for the line, when Google returned it.
   final String? textColor;
+
+  /// Background color for the line, when Google returned it.
   final String? backgroundColor;
+
+  /// Link to the line, when Google returned it.
   final String? url;
+
+  /// Icon for the line, when Google returned it.
   final PlaceTransitIcon? icon;
+
+  /// Icon for the line's vehicle, when Google returned it.
   final PlaceTransitIcon? vehicleIcon;
 
+  /// Creates a [PlaceTransitLine] from Places API (New) JSON.
   factory PlaceTransitLine.fromJson(Object? source) {
     final json = _jsonMap(source);
     return PlaceTransitLine(
@@ -1735,6 +2045,7 @@ class PlaceTransitLine {
 @immutable
 /// Transit agency serving a station.
 class PlaceTransitAgency {
+  /// Creates a transit agency. [lines] is stored as an unmodifiable list.
   PlaceTransitAgency({
     this.displayName,
     this.url,
@@ -1743,12 +2054,22 @@ class PlaceTransitAgency {
     List<PlaceTransitLine> lines = const <PlaceTransitLine>[],
   }) : lines = List<PlaceTransitLine>.unmodifiable(lines);
 
+  /// Name of the agency, when Google returned it.
   final LocalizedText? displayName;
+
+  /// Link to the agency, when Google returned it.
   final String? url;
+
+  /// Link to the agency's fare information, when Google returned it.
   final String? fareUrl;
+
+  /// Icon for the agency, when Google returned it.
   final PlaceTransitIcon? icon;
+
+  /// Lines the agency operates at the station.
   final List<PlaceTransitLine> lines;
 
+  /// Creates a [PlaceTransitAgency] from Places API (New) JSON.
   factory PlaceTransitAgency.fromJson(Object? source) {
     final json = _jsonMap(source);
     return PlaceTransitAgency(
@@ -1770,6 +2091,7 @@ class PlaceTransitAgency {
 @immutable
 /// Boarding/alighting location within a transit station.
 class PlaceTransitStop {
+  /// Creates a transit stop.
   const PlaceTransitStop({
     required this.id,
     this.displayName,
@@ -1780,14 +2102,28 @@ class PlaceTransitStop {
     this.wheelchairAccessibleEntrance,
   });
 
+  /// Google's ID for the stop.
   final String id;
+
+  /// Name of the stop, when Google returned it.
   final LocalizedText? displayName;
+
+  /// Platform code of the stop, when Google returned it.
   final LocalizedText? platformCode;
+
+  /// Signage text at the stop, when Google returned it.
   final LocalizedText? signageText;
+
+  /// Stop code, when Google returned it.
   final LocalizedText? stopCode;
+
+  /// Coordinates of the stop, when Google returned them.
   final PlaceCoordinates? location;
+
+  /// Whether the stop has a wheelchair-accessible entrance, when Google returned it.
   final bool? wheelchairAccessibleEntrance;
 
+  /// Creates a [PlaceTransitStop] from Places API (New) JSON.
   factory PlaceTransitStop.fromJson(Object? source) {
     final json = _jsonMap(source);
     return PlaceTransitStop(
@@ -1816,6 +2152,7 @@ class PlaceTransitStop {
 @immutable
 /// Transit-specific information for a place.
 class PlaceTransitStation {
+  /// Creates transit station information. [agencies] and [stops] are stored as unmodifiable lists.
   PlaceTransitStation({
     this.displayName,
     List<PlaceTransitAgency> agencies = const <PlaceTransitAgency>[],
@@ -1823,10 +2160,16 @@ class PlaceTransitStation {
   }) : agencies = List<PlaceTransitAgency>.unmodifiable(agencies),
        stops = List<PlaceTransitStop>.unmodifiable(stops);
 
+  /// Name of the station, when Google returned it.
   final LocalizedText? displayName;
+
+  /// Agencies serving the station.
   final List<PlaceTransitAgency> agencies;
+
+  /// Stops within the station.
   final List<PlaceTransitStop> stops;
 
+  /// Creates a [PlaceTransitStation] from Places API (New) JSON.
   factory PlaceTransitStation.fromJson(Object? source) {
     final json = _jsonMap(source);
     return PlaceTransitStation(
@@ -2325,6 +2668,7 @@ class PlaceData {
     return null;
   }
 
+  /// Creates a [PlaceData] from Places API (New) JSON.
   factory PlaceData.fromJson(Map<String, Object?> json) => PlaceData(
     id: (json['id'] ?? '') as String,
     resourceName: json['name'] as String?,
@@ -2584,8 +2928,8 @@ class AutocompleteRequest {
 
   /// Whether query predictions should be included alongside place predictions.
   ///
-  /// [PlacesClient.autocomplete] keeps returning only [PlaceSuggestion] values.
-  /// Use [PlacesClient.autocompleteSuggestions] to receive both place and
+  /// `PlacesClient.autocomplete` keeps returning only `PlaceSuggestion` values.
+  /// Use `PlacesClient.autocompleteSuggestions` to receive both place and
   /// query suggestions.
   final bool includeQueryPredictions;
 
@@ -2742,6 +3086,7 @@ class PlaceDetailsRequest {
 /// Official reference:
 /// https://developers.google.com/maps/documentation/timezone/requests-timezone
 class TimeZoneRequest {
+  /// Creates a time zone request.
   const TimeZoneRequest({
     required this.location,
     this.timestamp,
@@ -2966,6 +3311,9 @@ class TextSearchRequest {
   String get searchFieldMask =>
       fields.map((field) => field.searchMaskPath).join(',');
 
+  /// Builds the Places API (New) text search request body.
+  ///
+  /// Validates the request first.
   Map<String, Object?> toRestJson() {
     validate();
     return <String, Object?>{
@@ -3320,5 +3668,6 @@ PlaceViewport? _parseViewport(Object? source) {
   return PlaceViewport(northeast: northeast, southwest: southwest);
 }
 
+/// Encodes [value] as JSON indented with two spaces.
 String prettyJson(Map<String, Object?> value) =>
     const JsonEncoder.withIndent('  ').convert(value);

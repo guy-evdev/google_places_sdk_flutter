@@ -222,11 +222,22 @@ Add `PlaceField.photos` to `selectionFields`, then show one with `PlacePhotoView
 PlacePhotoView(photo: place.photos.first, apiKey: apiKey, height: 200)
 ```
 
-It fetches the image at that size and draws the author's name over it, as Google requires. Each
-photo shown is one billed Place Photos request. On web the lookup is a REST call, so with `apiKey:`
-the key is sent from the browser; pass a proxy `client:` to avoid that. Google also asks that users can open the photo on
-Google Maps; the package does not open links, so [the recipe](doc/recipes.md#show-place-photos)
-shows how to add one, along with strips and galleries.
+It fetches the image at that size and draws the author's name and a "View on Google Maps" link
+over it, as Google requires. On web the link opens in a new tab. Elsewhere the package cannot open
+links without a plugin, so pass `onOpenLink`, for example with `url_launcher` in your app:
+
+```dart
+PlacePhotoView(
+  photo: photo,
+  apiKey: apiKey,
+  height: 200,
+  onOpenLink: (uri) => launchUrl(uri),
+)
+```
+
+Each photo shown is one billed Place Photos request. On web the lookup is a REST call, so with
+`apiKey:` the key is sent from the browser; pass a proxy `client:` to avoid that.
+[The recipe](doc/recipes.md#show-place-photos) covers strips, galleries, and your own look.
 
 ## Restricting results
 
@@ -312,7 +323,7 @@ The widget shows a short error message. Pass `onError: (error) => debugPrint('$e
 | `HTTP 403, PERMISSION_DENIED`: "Places API (New) has not been used in project…" | Enable **Places API (New)** for the key's project. The legacy Places API is a different API and cannot be enabled on new projects. |
 | `HTTP 403, PERMISSION_DENIED` mentioning billing | Enable billing on the Google Cloud project. |
 | `HTTP 403, PERMISSION_DENIED`: "Requests from this Android client application…" or "…iOS client application… are blocked" | The key is restricted to your app but the request carried no identity. Pass a `client:` with `PlacesClientOptions.applicationIdentity` — see [Security](#security). |
-| On web, nothing loads and the browser console shows `ApiNotActivatedMapError` or `RefererNotAllowedMapError` | Enable the **Maps JavaScript API**, and add your site to the key's website restrictions. |
+| On web, including `--wasm` builds, nothing loads and the browser console shows `ApiNotActivatedMapError` or `RefererNotAllowedMapError` | Enable the **Maps JavaScript API**, and add your site to the key's website restrictions. Wasm builds use it from `0.7.0` on. |
 | `REQUEST_DENIED` from a time-zone lookup | Enable the **Time Zone API** for the key, or turn off `fetchTimeZoneOnSelection`. |
 | `place.photos` is always empty | Photos are not in the default fields. Add `PlaceField.photos` to `selectionFields`, as shown in [Photos](#photos). |
 | `place.displayName` is `null` | It is a Pro field, not in the default. Use `selection.suggestion.primaryText.text`, or add `PlaceField.displayName`. |

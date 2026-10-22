@@ -20,6 +20,7 @@ and an address, and `PlacesClient` requests fewer fields when you pass none.
 | Wants the plain text keyboard on Android | Step 10 |
 | Assigns `PlacesAutocompleteController.selectedSelection` | Step 11 |
 | Reads `PlacesPhotoAttribution.prefix` | Step 12 |
+| Builds for web with `flutter build web --wasm` | Step 13 |
 
 ### 1. Raise your SDK floor
 
@@ -314,3 +315,45 @@ PlacesPhotoAttribution(
 )
 final String text = attribution.strings.photoAttributionPrefix;
 ```
+
+### 13. Wasm web builds use the Maps JavaScript API
+
+Through `0.6.x`, an app built with `flutter build web --wasm` used the package's REST backend and
+ignored `PlacesWebOptions.fallbackPolicy`. From `0.7.0` it uses the same web backend as a
+JavaScript web build: autocomplete and place details go through the Maps JavaScript API, and the
+fallback policy applies. In the Google Cloud console:
+
+- Enable the **Maps JavaScript API** for the key the app uses on web.
+- If the key has website restrictions, keep your site listed — the Maps JavaScript API checks them.
+
+Until it is enabled, the browser console shows `ApiNotActivatedMapError` and no suggestions load.
+
+The web backend also refuses three things the REST backend accepted, so a Wasm build that used them
+now fails with a `PlacesException`:
+
+```dart
+// Before — accepted by 0.6.x Wasm builds
+final client = PlacesClient(
+  apiKey: apiKey,
+  httpClient: myHttpClient,
+  options: PlacesClientOptions(applicationIdentity: identity),
+);
+PlacesAutocompleteField(
+  client: client,
+  locationRestriction: LocationRestriction.circle(center: center, radiusMeters: 5000),
+);
+
+// After — on web, no injected HTTP client or application identity, and a rectangle
+final client = PlacesClient(
+  apiKey: apiKey,
+  httpClient: kIsWeb ? null : myHttpClient,
+  options: PlacesClientOptions(applicationIdentity: kIsWeb ? null : identity),
+);
+PlacesAutocompleteField(
+  client: client,
+  locationRestriction: LocationRestriction.rectangle(low: southWest, high: northEast),
+);
+```
+
+Every client on a page also needs the same key: the Maps JavaScript API loads once per page, so a
+second client with a different key fails with `conflicting_javascript_api_key`.

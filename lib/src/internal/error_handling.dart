@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../models/place_models.dart';
 import '../places_cancellation_token.dart';
 
+/// Runs [action] with a timeout and cancellation, mapping failures to `PlacesException`.
 Future<T> runPlacesOperation<T>({
   required PlacesOperation operation,
   required Duration timeout,
@@ -80,6 +81,7 @@ Future<T> runPlacesOperation<T>({
   }
 }
 
+/// Sends an abortable HTTP request, aborting on timeout or cancellation.
 Future<http.Response> sendPlacesHttpRequest({
   required http.Client client,
   required String method,

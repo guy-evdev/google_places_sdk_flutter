@@ -17,7 +17,10 @@ import 'error_handling.dart';
 import 'place_field_mapping.dart';
 import 'proxy_transport.dart';
 
+/// Places backend for web builds, using the Google Maps JavaScript library and HTTP.
 class PlacesWebBackend implements PlacesBackend {
+  /// Creates the backend; throws a configuration error for conflicting or unsupported
+  /// options.
   PlacesWebBackend({
     required this.apiKey,
     this.proxyConfiguration,
@@ -55,10 +58,20 @@ class PlacesWebBackend implements PlacesBackend {
       'suggestions.placePrediction.distanceMeters,'
       'suggestions.placePrediction.types';
 
+  /// The Google API key.
   final String apiKey;
+
+  /// Proxy configuration, mutually exclusive with [proxyBaseUrl].
   final PlacesProxyConfiguration? proxyConfiguration;
+
+  /// Base URL replacing the default Places endpoint, mutually exclusive with
+  /// [proxyConfiguration].
   final String? proxyBaseUrl;
+
+  /// Overrides the default Time Zone endpoint.
   final String? timeZoneBaseUrl;
+
+  /// Client options this backend was created with.
   final PlacesClientOptions options;
   final http.Client _httpClient;
   final AutocompleteSessionCache<JSObject, JSObject> _autocompleteSessions =

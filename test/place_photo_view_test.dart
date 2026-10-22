@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
 import 'package:google_places_sdk_flutter/src/internal/backend.dart';
+import 'package:google_places_sdk_flutter/src/widgets/photo_links.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// Answers photo-media requests with completers the test resolves, so every
@@ -47,6 +48,23 @@ const _photo = PlacePhoto(
 );
 
 const _otherPhoto = PlacePhoto(name: 'places/p1/photos/b', widthPx: 640);
+
+/// A photo with a Google Maps link and one author profile link — the profile
+/// link without a scheme, as Google returns it.
+const _linkedPhoto = PlacePhoto(
+  name: 'places/p1/photos/c',
+  widthPx: 800,
+  googleMapsUri: 'https://maps.google.com/photo/c',
+  authorAttributions: <Map<String, Object?>>[
+    <String, Object?>{
+      'displayName': 'Ana Lima',
+      'uri': '//maps.google.com/maps/contrib/1',
+    },
+    <String, Object?>{'displayName': 'Bo Chen'},
+  ],
+);
+
+const _linkedText = 'Photo by Ana Lima, Bo Chen · View on Google Maps';
 
 /// Puts a decoded image in Flutter's image cache under [url], so
 /// `Image.network(url)` loads it without touching the network.
@@ -628,6 +646,307 @@ void main() {
     await tester.pump();
     expect(otherBackend.requests, hasLength(2));
     expect(otherBackend.requests.last.maxWidthPx, 240);
+  });
+
+  group('links', () {
+    // Captures the debug notice. debugPrint must be restored inside the test
+    // body, before flutter_test checks its foundation invariants.
+    void linkTest(
+      String description,
+      Future<void> Function(WidgetTester tester, List<String> printed) body, {
+      bool skip = false,
+    }) {
+      testWidgets(description, (tester) async {
+        debugResetPhotoLinkNotice();
+        final printed = <String>[];
+        final savedDebugPrint = debugPrint;
+        debugPrint = (message, {wrapWidth}) => printed.add(message ?? '');
+        try {
+          await body(tester, printed);
+        } finally {
+          debugPrint = savedDebugPrint;
+        }
+      }, skip: skip);
+    }
+
+    linkTest('the attribution opens the photo and the author profile', (
+      tester,
+      printed,
+    ) async {
+      final opened = <Uri>[];
+      await tester.pumpWidget(
+        _app(
+          PlacesPhotoAttribution(photo: _linkedPhoto, onOpenLink: opened.add),
+        ),
+      );
+      expect(find.text(_linkedText), findsOneWidget);
+
+      await tester.tapOnText(find.textRange.ofSubstring('View on Google Maps'));
+      await tester.tapOnText(find.textRange.ofSubstring('Ana Lima'));
+      await tester.tapOnText(find.textRange.ofSubstring('Bo Chen'));
+      expect(opened, <Uri>[
+        Uri.parse('https://maps.google.com/photo/c'),
+        Uri.parse('https://maps.google.com/maps/contrib/1'),
+      ], reason: 'Bo Chen has no profile link, so the name is plain text');
+      expect(printed, isEmpty);
+    });
+
+    linkTest('PlacePhotoView passes onOpenLink to its default view', (
+      tester,
+      printed,
+    ) async {
+      final opened = <Uri>[];
+      await _seedImage(tester, 'https://img.test/c');
+      await tester.pumpWidget(
+        _app(
+          PlacePhotoView(
+            photo: _linkedPhoto,
+            client: client,
+            width: 200,
+            onOpenLink: opened.add,
+            strings: const PlacesStrings(viewOnGoogleMapsText: 'Open in Maps'),
+          ),
+        ),
+      );
+      backend.succeed(0, 'https://img.test/c');
+      await tester.pump();
+
+      await tester.tapOnText(find.textRange.ofSubstring('Open in Maps'));
+      expect(opened, <Uri>[Uri.parse('https://maps.google.com/photo/c')]);
+    });
+
+    linkTest("PlacePhotoView passes onOpenLink to a builder's attribution", (
+      tester,
+      printed,
+    ) async {
+      final opened = <Uri>[];
+      await _seedImage(tester, 'https://img.test/c');
+      await tester.pumpWidget(
+        _app(
+          PlacePhotoView(
+            photo: _linkedPhoto,
+            client: client,
+            width: 200,
+            onOpenLink: opened.add,
+            builder: (context, photo) => photo.status == PlacePhotoStatus.loaded
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[photo.image!, photo.attribution!],
+                  )
+                : photo.defaultView,
+          ),
+        ),
+      );
+      backend.succeed(0, 'https://img.test/c');
+      await tester.pump();
+
+      await tester.tapOnText(find.textRange.ofSubstring('Ana Lima'));
+      expect(opened, <Uri>[
+        Uri.parse('https://maps.google.com/maps/contrib/1'),
+      ]);
+    });
+
+    linkTest('a photo with only a Google Maps link still gets the link', (
+      tester,
+      printed,
+    ) async {
+      final opened = <Uri>[];
+      PlacePhotoViewData? seen;
+      await _seedImage(tester, 'https://img.test/d');
+      await tester.pumpWidget(
+        _app(
+          PlacePhotoView(
+            photo: const PlacePhoto(
+              name: 'places/p1/photos/d',
+              googleMapsUri: 'https://maps.google.com/photo/d',
+            ),
+            client: client,
+            width: 200,
+            onOpenLink: opened.add,
+            builder: (context, photo) {
+              seen = photo;
+              return photo.defaultView;
+            },
+          ),
+        ),
+      );
+      backend.succeed(0, 'https://img.test/d');
+      await tester.pump();
+
+      expect(seen!.attribution, isNotNull);
+      expect(find.text('View on Google Maps'), findsOneWidget);
+      await tester.tapOnText(find.textRange.ofSubstring('View on Google Maps'));
+      expect(opened, <Uri>[Uri.parse('https://maps.google.com/photo/d')]);
+    });
+
+    linkTest('a link that is not https or http is never shown', (
+      tester,
+      printed,
+    ) async {
+      final opened = <Uri>[];
+      await tester.pumpWidget(
+        _app(
+          PlacesPhotoAttribution(
+            photo: const PlacePhoto(
+              name: 'places/p1/photos/e',
+              googleMapsUri: 'javascript://maps.google.com/%0Aalert(1)',
+              authorAttributions: <Map<String, Object?>>[
+                <String, Object?>{
+                  'displayName': 'Ana Lima',
+                  'uri': 'intent://maps.google.com/maps/contrib/1',
+                },
+              ],
+            ),
+            onOpenLink: opened.add,
+          ),
+        ),
+      );
+      expect(find.text('Photo by Ana Lima'), findsOneWidget);
+      await tester.tapOnText(find.textRange.ofSubstring('Ana Lima'));
+      expect(opened, isEmpty);
+    });
+
+    linkTest(
+      'with no onOpenLink, outside the browser: no link, and one notice',
+      (tester, printed) async {
+        await tester.pumpWidget(
+          _app(
+            const Column(
+              children: <Widget>[
+                PlacesPhotoAttribution(photo: _linkedPhoto),
+                PlacesPhotoAttribution(photo: _linkedPhoto),
+              ],
+            ),
+          ),
+        );
+        expect(find.text('Photo by Ana Lima, Bo Chen'), findsNWidgets(2));
+        expect(printed, hasLength(1));
+        expect(printed.single, contains('onOpenLink'));
+
+        // Taps on the plain names go nowhere and throw nothing.
+        await tester.tapOnText(find.textRange.ofSubstring('Ana Lima').first);
+        expect(tester.takeException(), isNull);
+      },
+      skip: kIsWeb, // The browser opens links itself; see photo_links_web_test.
+    );
+
+    linkTest('a rebuild during a tap still opens the link', (
+      tester,
+      printed,
+    ) async {
+      final opened = <Uri>[];
+      final rebuild = ValueNotifier<int>(0);
+      addTearDown(rebuild.dispose);
+      await tester.pumpWidget(
+        _app(
+          ValueListenableBuilder<int>(
+            valueListenable: rebuild,
+            builder: (context, value, _) => PlacesPhotoAttribution(
+              photo: _linkedPhoto,
+              onOpenLink: opened.add,
+            ),
+          ),
+        ),
+      );
+      final range = find.textRange
+          .ofSubstring('View on Google Maps')
+          .evaluate()
+          .single;
+      final boxes = range.renderObject.getBoxesForSelection(
+        TextSelection(
+          baseOffset: range.textRange.start,
+          extentOffset: range.textRange.end,
+        ),
+      );
+      final gesture = await tester.startGesture(
+        range.renderObject.localToGlobal(boxes.first.toRect().center),
+      );
+      rebuild.value++;
+      await tester.pump();
+      await gesture.up();
+      await tester.pump();
+      expect(opened, <Uri>[Uri.parse('https://maps.google.com/photo/c')]);
+    });
+
+    linkTest(
+      'with no onOpenLink, a Maps-link-only photo has a band only on web',
+      (tester, printed) async {
+        PlacePhotoViewData? seen;
+        await _seedImage(tester, 'https://img.test/d');
+        await tester.pumpWidget(
+          _app(
+            PlacePhotoView(
+              photo: const PlacePhoto(
+                name: 'places/p1/photos/d',
+                googleMapsUri: 'https://maps.google.com/photo/d',
+              ),
+              client: client,
+              width: 200,
+              builder: (context, photo) {
+                seen = photo;
+                return photo.defaultView;
+              },
+            ),
+          ),
+        );
+        backend.succeed(0, 'https://img.test/d');
+        await tester.pump();
+
+        // The browser opens links itself; elsewhere there is nothing to draw.
+        expect(seen!.attribution == null, !kIsWeb);
+        expect(
+          find.text('View on Google Maps'),
+          kIsWeb ? findsOneWidget : findsNothing,
+        );
+        expect(
+          find.descendant(
+            of: find.ancestor(
+              of: find.byType(RawImage),
+              matching: find.byType(Stack),
+            ),
+            matching: find.byType(ColoredBox),
+          ),
+          kIsWeb ? findsOneWidget : findsNothing,
+          reason: 'the dark band under the attribution',
+        );
+      },
+    );
+
+    linkTest('a link carrying credentials is never shown', (
+      tester,
+      printed,
+    ) async {
+      final opened = <Uri>[];
+      await tester.pumpWidget(
+        _app(
+          PlacesPhotoAttribution(
+            photo: const PlacePhoto(
+              name: 'places/p1/photos/f',
+              authorAttributions: <Map<String, Object?>>[
+                <String, Object?>{
+                  'displayName': 'Ana Lima',
+                  'uri': 'https://user:secret@maps.google.com/maps/contrib/1',
+                },
+              ],
+            ),
+            onOpenLink: opened.add,
+          ),
+        ),
+      );
+      await tester.tapOnText(find.textRange.ofSubstring('Ana Lima'));
+      expect(opened, isEmpty);
+    });
+
+    linkTest('no notice for a photo without a Google Maps link', (
+      tester,
+      printed,
+    ) async {
+      await tester.pumpWidget(
+        _app(const PlacesPhotoAttribution(photo: _photo)),
+      );
+      expect(find.text('Photo by Ana Lima'), findsOneWidget);
+      expect(printed, isEmpty);
+    });
   });
 
   group('PlacesPhotoAttribution', () {

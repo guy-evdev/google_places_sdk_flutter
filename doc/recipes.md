@@ -162,6 +162,7 @@ PlacesAutocompleteField(
     querySuggestionLabel: 'Suggestion de recherche',
     distanceUnitMeters: 'm',
     photoAttributionPrefix: 'Photo de',
+    viewOnGoogleMapsText: 'Voir sur Google Maps',
   ),
 )
 ```
@@ -173,7 +174,7 @@ itself; the [API reference](api_reference.md#display-strings) lists them all.
 the widget's own text.
 
 `PlacePhotoView` and `PlacesPhotoAttribution` take the same `strings:` for
-their "Photo by" text and retry button.
+their "Photo by" text, the "View on Google Maps" link, and the retry button.
 
 ## Limit results to an area
 
@@ -851,10 +852,11 @@ if (place?.photos case [final photo, ...])
 ```
 
 The widget fetches the photo, shows a progress indicator meanwhile and a retry
-button if it fails, and draws the author's name over the bottom of the image,
-as Google requires. `PlaceField.photos` is an Essentials (IDs Only) field, so it
-does not raise the details tier; each photo shown is one billed Place Photos
-request.
+button if it fails, and draws the author's name and a "View on Google Maps"
+link over the bottom of the image, as Google requires — see
+[Link to the photo on Google Maps](#link-to-the-photo-on-google-maps).
+`PlaceField.photos` is an Essentials (IDs Only) field, so it does not raise the
+details tier; each photo shown is one billed Place Photos request.
 
 Pass `width` or `height`: the widget requests the photo at that size times the
 device pixel ratio, so a thumbnail does not download a full-size image. Each
@@ -916,36 +918,51 @@ PlacePhotoView(
 )
 ```
 
-Place `view.attribution` with the image. Google's
+Place `view.attribution` with the image: it carries the author names and the
+Google Maps link. Google's
 [policies](https://developers.google.com/maps/documentation/places/web-service/policies)
-allow leaving it out only when space is limited — a thumbnail, say — and the
-user can open a larger version of the photo that carries the attribution.
+allow leaving the author names out only when space is limited — a thumbnail,
+say — and the user can open a larger version of the photo that carries the
+attribution. That larger version must carry the Google Maps link too, so give
+it the same `onOpenLink`.
 
 ### Link to the photo on Google Maps
 
-Google's policies also ask that users can open each photo on Google Maps. The
-package does not open links, so add one with your app's own way of opening a
-URL — here `openLink`:
+Google requires that users can always open a photo on Google Maps. The
+attribution therefore ends with a "View on Google Maps" link
+(`PlacesStrings.viewOnGoogleMapsText`), and an author's name links to their
+profile when Google returned one.
+
+On web, a link opens in a new browser tab. On Android, iOS, macOS, Windows and
+Linux the package cannot open a link without a plugin, so pass `onOpenLink`
+with your app's own way of opening a URL — usually `url_launcher`, added to
+your app:
 
 ```dart
-TextButton(
-  onPressed: photo.googleMapsUri == null
-      ? null
-      : () => openLink(Uri.parse(photo.googleMapsUri!)),
-  child: const Text('View on Google Maps'),
+// import 'package:url_launcher/url_launcher.dart';
+
+PlacePhotoView(
+  photo: photo,
+  client: client,
+  height: 200,
+  onOpenLink: (uri) => launchUrl(uri),
 )
 ```
 
-`PlacePhoto.authors` also carries each author's profile link (`uri`) and
-avatar (`photoUri`), which the policies ask you to show when space allows.
+Without `onOpenLink` on those platforms, the link is not shown, the author
+names are plain text, and a debug notice says so once per run. Only `https` and
+`http` links are ever passed on. `PlacePhoto.authors` also carries each
+author's avatar (`photoUri`), which the policies ask you to show when space
+allows.
 
 ### A photo you show yourself
 
 If you download the image another way, `client.fetchPhotoMedia()` returns its
-address, and `PlacesPhotoAttribution` draws the attribution to put beside it:
+address, and `PlacesPhotoAttribution` draws the attribution, with its links,
+to put beside it:
 
 ```dart
-PlacesPhotoAttribution(photo: photo)
+PlacesPhotoAttribution(photo: photo, onOpenLink: (uri) => launchUrl(uri))
 ```
 
 Google does not allow photo names to be cached, and they can expire: always

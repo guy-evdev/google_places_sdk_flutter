@@ -1,5 +1,10 @@
 /// Cross-platform Flutter package for Google Places API (New).
 ///
+/// @docImport 'src/places_client.dart';
+/// @docImport 'src/widgets/place_photo_view.dart';
+/// @docImport 'src/widgets/places_autocomplete_field.dart';
+/// @docImport 'src/widgets/places_autocomplete_overlay.dart';
+///
 /// This library exports:
 /// - request and response models for Places API (New)
 /// - a cross-platform [PlacesClient]
@@ -14,16 +19,20 @@
 /// - localization strings and controller types for UI integration
 ///
 /// On Android, iOS, macOS, Windows, and Linux, the package uses Places API
-/// (New) HTTP requests. On web, it uses the Google Maps JavaScript Places
-/// library.
+/// (New) HTTP requests. On web, including Wasm builds, it uses the Google Maps
+/// JavaScript Places library.
 ///
-/// Start with:
+/// Start with a field:
 /// ```dart
-/// final client = PlacesClient(apiKey: 'your-key');
+/// PlacesAutocompleteField(
+///   apiKey: 'YOUR_API_KEY',
+///   onSelection: (selection) => debugPrint(selection.place?.formattedAddress),
+/// )
 /// ```
 ///
-/// Then create either an inline field or an overlay flow with
-/// [PlacesAutocompleteField] or [PlacesAutocompleteOverlay].
+/// Or await a pick from a dialog or full screen with
+/// [PlacesAutocompleteOverlay.show]. Use [PlacesClient] directly for place
+/// data without a widget.
 library;
 
 export 'src/models/place_models.dart';

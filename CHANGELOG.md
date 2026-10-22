@@ -11,6 +11,12 @@
 * The field's keyboard defaults to `TextInputType.streetAddress`: an address keyboard on Android, word capitalization on Linux.
 * `PlacesAutocompleteController.selectedSelection` is read-only; use `setSelection`, `restoreSelection`, or `clearSelection`.
 * `PlacesPhotoAttribution.prefix` is now a `String?`, `null` unless you set it.
+* Web apps built with `--wasm` now use the Maps JavaScript API like other web builds: the key needs it enabled, and an injected `httpClient`, an `applicationIdentity`, or a circle `locationRestriction` now fails there. See [step 13](MIGRATION.md#13-wasm-web-builds-use-the-maps-javascript-api).
+* `PlacesPhotoAttribution` now ends with a "View on Google Maps" link on web, and renders that link for a photo with no author names.
+
+**Security:**
+
+* Web apps built with `--wasm` now follow `PlacesWebOptions.fallbackPolicy`. Through `0.6.x` they ignored it: a client with an `apiKey` called Google's REST API from the browser with the key, even under `disabled` or `proxyOnly`. `0.6.x` will not be patched; upgrade to `0.7.0`.
 
 **New:**
 
@@ -29,6 +35,7 @@
 * `PlaceField.entrances` and `PlaceField.navigationPoints`, and `PlaceFieldPresets.all` with every field — for exploration, as it always bills at the highest tier.
 * `PlacePhotoView` shows a place photo at the size you give it, with its required author attribution and a `builder` for every state.
 * `PlacesStrings.photoAttributionPrefix` sets the "Photo by" text.
+* Photo attribution links to the photo on Google Maps, as Google requires, and to author profiles; outside the browser pass `onOpenLink`, or no link is shown.
 
 **Fixed:**
 

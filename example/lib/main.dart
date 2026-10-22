@@ -869,6 +869,7 @@ class _ExampleAppState extends State<ExampleApp> {
         overlayTitle: 'Search places',
         distanceUnitMeters: 'm',
         photoAttributionPrefix: 'Photo by',
+        viewOnGoogleMapsText: 'View on Google Maps',
       ),
       DemoLocale.hebrew => const PlacesStrings(
         searchHint: 'חיפוש מקום',
@@ -882,6 +883,7 @@ class _ExampleAppState extends State<ExampleApp> {
         clearLabel: 'נקה חיפוש',
         distanceUnitMeters: 'מ׳',
         photoAttributionPrefix: 'צילום:',
+        viewOnGoogleMapsText: 'הצגה במפות Google',
       ),
       DemoLocale.arabic => const PlacesStrings(
         searchHint: 'ابحث عن مكان',
@@ -895,6 +897,7 @@ class _ExampleAppState extends State<ExampleApp> {
         clearLabel: 'مسح البحث',
         distanceUnitMeters: 'م',
         photoAttributionPrefix: 'تصوير:',
+        viewOnGoogleMapsText: 'العرض على خرائط Google',
       ),
     };
   }

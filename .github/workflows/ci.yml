@@ -78,6 +78,11 @@ jobs:
       - name: Chrome tests
         run: flutter test --platform chrome
 
+      # The same suite compiled to Wasm. Through 0.6.x a Wasm build silently picked the REST
+      # backend and ignored the web fallback policy; nothing ran the tests there to notice.
+      - name: Chrome tests (Wasm)
+        run: flutter test --platform chrome --wasm
+
       # Cheap, and the only thing that catches a new top-level file leaking into the archive.
       - name: Publish validation
         run: flutter pub publish --dry-run

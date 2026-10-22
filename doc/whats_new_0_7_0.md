@@ -21,6 +21,7 @@ and why.
 - [Address forms](#address-forms)
 - [Entrances, navigation points, and every field at once](#entrances-navigation-points-and-every-field-at-once)
 - [Place photos](#place-photos)
+- [Wasm web builds follow the fallback policy](#wasm-web-builds-follow-the-fallback-policy)
 - [Why the `material_ui` migration exists](#why-this-release-exists)
 
 ## Apps on either design library
@@ -437,21 +438,39 @@ and sizing right by hand. The widget does all of it:
 - **Fetching.** One billed Place Photos request when the widget is built, and again only when the
   photo, the client or the requested size changes. A fetch still running is cancelled when the
   widget goes away, and an answer for a photo it no longer shows is dropped.
-- **Attribution.** The author's name is drawn over the bottom of the image. There is no option to
-  hide it: Google requires the author to be credited wherever the photo is shown.
+- **Attribution.** The author's name and a "View on Google Maps" link are drawn over the bottom of
+  the image. There is no option to hide them: Google requires the author to be credited wherever
+  the photo is shown, and the user to be able to open the photo on Google Maps.
 - **Your own look.** `builder` gets the state (`loading`, `loaded`, `error`), the image, the typed
   `PlacesException`, a retry callback, the attribution to place, and the package's `defaultView`.
 
-Two things the widget cannot do for you. Google's policies ask that users can open each photo on
-Google Maps through `PlacePhoto.googleMapsUri`, and the package does not open links — add one, as
-the [recipe](recipes.md#link-to-the-photo-on-google-maps) shows. And the image is downloaded by
-Flutter's image loader straight from the address Google returned: with `PlacesClient.proxy()`, the
-photo's address goes through your proxy, but the image does not. On web the address lookup is a REST
-request, so with `apiKey:` the key is sent from the browser — pass a proxy `client:` to avoid it.
+The links — the photo on Google Maps, and each author's profile when Google returns one — open in
+a new tab on web. On mobile and desktop the package cannot open a link without a plugin, so pass
+`onOpenLink`, for example `(uri) => launchUrl(uri)` with `url_launcher` in your app; without it the
+link is not shown and a debug notice says so once. `PlacesPhotoAttribution` gained the same option,
+and now draws the same link. See the [recipe](recipes.md#link-to-the-photo-on-google-maps).
+
+The image is downloaded by Flutter's image loader straight from the address Google returned: with
+`PlacesClient.proxy()`, the photo's address goes through your proxy, but the image does not. On web
+the address lookup is a REST request, so with `apiKey:` the key is sent from the browser — pass a
+proxy `client:` to avoid it.
 
 "Photo by" is now `PlacesStrings.photoAttributionPrefix`, shared by `PlacePhotoView` and
 `PlacesPhotoAttribution`. `PlacesPhotoAttribution`'s own `prefix` still works and is deprecated,
 for removal in `1.0.0`.
+
+## Wasm web builds follow the fallback policy
+
+An app built with `flutter build web --wasm` used to pick the package's plain REST backend instead
+of its Maps JavaScript one, so `PlacesWebOptions.fallbackPolicy` was never consulted: a client with
+an `apiKey` called Google's REST API from the browser with the key, even under `disabled` or
+`proxyOnly`. Wasm builds now use the same backend as other web builds, and the policy applies. That
+backend also refuses an injected `httpClient`, an `applicationIdentity` and a circle
+`locationRestriction`, as it always has for JavaScript web builds.
+
+The fix is in `0.7.0` only: `0.6.x` will not be patched. A Wasm app needs the **Maps JavaScript
+API** enabled for its key, like any other web app — see
+[step 13 of the migration guide](../MIGRATION.md#13-wasm-web-builds-use-the-maps-javascript-api).
 
 ## Why this release exists
 

@@ -18,7 +18,7 @@ import 'places_strings.dart';
 /// and its text — empty without one — even over text typed without a pick,
 /// and abandons the field's search or pick in progress, ending its billing
 /// session without a details request. A dialog or fullscreen search that is
-/// open at the time is not closed. When no [controller] is supplied this widget
+/// open at the time is not closed. When no `controller` is supplied this widget
 /// owns one and disposes it automatically.
 class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
   /// Creates a Places autocomplete form field.

@@ -1,3 +1,6 @@
+/// @docImport '../places_client_options.dart';
+library;
+
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
@@ -5,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import '../models/place_models.dart';
 import '../places_cancellation_token.dart';
 import '../places_client.dart';
+import 'photo_links.dart';
 import 'places_design_scope.dart';
 import 'places_photo_attribution.dart';
 import 'places_strings.dart';
@@ -68,15 +72,17 @@ class PlacePhotoViewData {
   /// button's `onPressed`, not while building.
   final VoidCallback onRetry;
 
-  /// The photo's author attribution, or `null` when Google returned no author
-  /// names.
+  /// The photo's attribution — the author names and the "View on Google
+  /// Maps" link — or `null` when there is neither (see
+  /// [PlacePhotoView.onOpenLink]).
   ///
-  /// Google requires the author to be credited wherever the photo is shown —
-  /// see the
+  /// Google requires the author to be credited wherever the photo is shown,
+  /// and the user to be able to open the photo on Google Maps — see the
   /// [Places API policies](https://developers.google.com/maps/documentation/places/web-service/policies).
-  /// Place it beside or over [image]. The policies allow leaving it out only
-  /// when space is limited, such as a thumbnail, and the user can open a
-  /// larger version of the photo that carries the full attribution.
+  /// Place it beside or over [image]. The policies allow leaving the author
+  /// names out only when space is limited, such as a thumbnail, and the user
+  /// can open a larger version of the photo that carries the full attribution
+  /// and the Google Maps link.
   final Widget? attribution;
 
   /// The package's own view for this state, to return unchanged or to wrap.
@@ -122,9 +128,11 @@ class PlacePhotoViewData {
 /// download needs the image host to allow cross-origin requests, which
 /// Google's does.
 ///
-/// By default the author attribution is drawn over the bottom of the image.
-/// Use [builder] to change any state's look or to place the attribution
-/// yourself; there is no option to hide it.
+/// By default the attribution is drawn over the bottom of the image: the
+/// author names, and a "View on Google Maps" link to the photo, which Google
+/// requires users to be able to open. Pass [onOpenLink] so the link works on
+/// every platform. Use [builder] to change any state's look or to place the
+/// attribution yourself; there is no option to hide it.
 class PlacePhotoView extends StatefulWidget {
   /// Creates a widget that shows [photo].
   ///
@@ -141,6 +149,7 @@ class PlacePhotoView extends StatefulWidget {
     this.fit = BoxFit.cover,
     this.builder,
     this.strings = const PlacesStrings(),
+    this.onOpenLink,
   }) : assert(
          (client == null) != (apiKey == null),
          'Pass exactly one of client or apiKey.',
@@ -214,9 +223,23 @@ class PlacePhotoView extends StatefulWidget {
   /// attribution, and the package's [PlacePhotoViewData.defaultView].
   final PlacePhotoViewBuilder? builder;
 
-  /// The widget's strings: [PlacesStrings.photoAttributionPrefix] for the
-  /// attribution and [PlacesStrings.retryText] for the retry button.
+  /// The widget's strings: [PlacesStrings.photoAttributionPrefix] and
+  /// [PlacesStrings.viewOnGoogleMapsText] for the attribution, and
+  /// [PlacesStrings.retryText] for the retry button.
   final PlacesStrings strings;
+
+  /// Opens a link the user taps in the attribution: the photo on Google Maps,
+  /// or an author's Google Maps profile.
+  ///
+  /// The package cannot open a link itself on Android, iOS, macOS, Windows or
+  /// Linux, since that needs a plugin, so pass this — for example
+  /// `onOpenLink: (uri) => launchUrl(uri)`, with `url_launcher` in your app.
+  /// It receives only `https` and `http` links.
+  ///
+  /// When it is `null`: on web, a link opens in a new browser tab; on other
+  /// platforms, no link is shown — the author names are plain text — and a
+  /// debug notice is printed once per app run.
+  final ValueChanged<Uri>? onOpenLink;
 
   @override
   State<PlacePhotoView> createState() => _PlacePhotoViewState();
@@ -414,8 +437,9 @@ class _PlacePhotoViewState extends State<PlacePhotoView> {
     Widget? image,
     PlacesException? error,
   }) {
-    final hasAuthors = widget.photo.authors.any(
-      (author) => author.displayName.trim().isNotEmpty,
+    final hasAttribution = photoHasAttribution(
+      widget.photo,
+      photoLinkOpener(widget.onOpenLink, widget.photo),
     );
     final defaultView = switch (status) {
       PlacePhotoStatus.loading => _placeholder(
@@ -433,7 +457,7 @@ class _PlacePhotoViewState extends State<PlacePhotoView> {
         fit: StackFit.passthrough,
         children: <Widget>[
           image!,
-          if (hasAuthors)
+          if (hasAttribution)
             Positioned(
               left: 0,
               right: 0,
@@ -449,6 +473,7 @@ class _PlacePhotoViewState extends State<PlacePhotoView> {
                   child: PlacesPhotoAttribution(
                     photo: widget.photo,
                     strings: widget.strings,
+                    onOpenLink: widget.onOpenLink,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: const Color(0xFFFFFFFF),
                     ),
@@ -471,10 +496,11 @@ class _PlacePhotoViewState extends State<PlacePhotoView> {
         image: image,
         error: error ?? _error,
         onRetry: _retry,
-        attribution: hasAuthors
+        attribution: hasAttribution
             ? PlacesPhotoAttribution(
                 photo: widget.photo,
                 strings: widget.strings,
+                onOpenLink: widget.onOpenLink,
               )
             : null,
         defaultView: defaultView,

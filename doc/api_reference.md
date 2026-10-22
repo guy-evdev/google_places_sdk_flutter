@@ -169,6 +169,7 @@ language supplies them itself — see the
 | `querySuggestionLabel` | `'Query suggestion'` | Screen-reader prefix for a query suggestion. |
 | `distanceUnitMeters` | `'m'` | Suffix of the distance beside a suggestion when `origin` is set. Distances are shown in meters. |
 | `photoAttributionPrefix` | `'Photo by'` | Before the author names that `PlacePhotoView` and `PlacesPhotoAttribution` show. |
+| `viewOnGoogleMapsText` | `'View on Google Maps'` | The link to the photo on Google Maps, after the author names. |
 
 `PlacePhotoView` also uses `retryText`, on its retry button.
 `PlacesPhotoAttribution`'s own `prefix` is deprecated; when set, it still wins
@@ -243,7 +244,8 @@ strips and galleries, see the [recipe](recipes.md#show-place-photos).
 | `maxWidthPx`, `maxHeightPx` | `int?` | `null` | Physical pixels to request, 1–4800. When either is set, they replace the size worked out from `width` and `height`. |
 | `fit` | `BoxFit` | `BoxFit.cover` | How the image fills `width` and `height`. |
 | `builder` | `PlacePhotoViewBuilder?` | `null` | Builds every state in place of the default look. |
-| `strings` | `PlacesStrings` | `PlacesStrings()` | `photoAttributionPrefix` and `retryText`. |
+| `strings` | `PlacesStrings` | `PlacesStrings()` | `photoAttributionPrefix`, `viewOnGoogleMapsText`, and `retryText`. |
+| `onOpenLink` | `ValueChanged<Uri>?` | `null` | Opens the attribution's links: the photo on Google Maps, and an author's profile. Only `https` and `http` links. When `null`, a link opens in a new tab on web; on other platforms no link is shown and a debug notice prints once per run. `PlacesPhotoAttribution` takes the same option. |
 
 With no size at all, the widget requests the photo's own width (`widthPx`),
 or 4800 when that is unknown; Google returns the original when it is smaller.
@@ -261,17 +263,17 @@ failure, and the image with the author names on a dark band across its bottom.
 | `image` | `Widget?` | The image, sized and fitted; only when `loaded`. |
 | `error` | `PlacesException?` | Why it failed. A failed image download is kind `network` with the HTTP `statusCode`; an image that cannot be decoded is kind `unknown` with its type in `metadata`. |
 | `onRetry` | `VoidCallback` | Fetches the photo again. Call it from an event handler, not while building. |
-| `attribution` | `Widget?` | The author names; `null` when Google returned none. Place it with the image. |
+| `attribution` | `Widget?` | The author names and the "View on Google Maps" link; `null` when there is neither. Place it with the image. |
 | `defaultView` | `Widget` | The package's own view for this state. |
 | `strings` | `PlacesStrings` | The widget's strings. |
 
 There is no option to hide the attribution: Google requires the author to be
-credited wherever a photo is shown, and allows leaving it out only on a small
-thumbnail whose larger version carries it. Google's
+credited wherever a photo is shown, and allows leaving the names out only on a
+small thumbnail whose larger version carries them. Google's
 [policies](https://developers.google.com/maps/documentation/places/web-service/policies)
-also ask that users can open each photo on Google Maps through
-`PlacePhoto.googleMapsUri`; the package does not open links, so the app adds
-that link.
+also require that users can always open the photo on Google Maps through
+`PlacePhoto.googleMapsUri`, which the attribution's link does — pass
+`onOpenLink` so it works outside the browser.
 
 Each fetch is one billed Place Photos request. The image itself is
 downloaded by Flutter's image loader directly from the returned address, so it

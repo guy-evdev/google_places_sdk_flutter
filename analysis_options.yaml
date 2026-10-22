@@ -8,14 +8,12 @@ analyzer:
     strict-inference: true
     strict-raw-types: true
 
-# `public_member_api_docs` and `comment_references` are required by this package's documentation
-# rules. Measured 2026-08-02: 251 + 8 findings, 206 of them in lib/src/models/place_models.dart.
-# Enabling them now would fail `flutter analyze` on every push, and suppressing with `// ignore:`
-# is not permitted — so they are enabled as part of the documentation batch, not before.
-# linter:
-#   rules:
-#     - public_member_api_docs
-#     - comment_references
+# Every public member is documented, and every [reference] in a doc comment resolves. Never
+# suppressed with `// ignore:`.
+linter:
+  rules:
+    - public_member_api_docs
+    - comment_references
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options

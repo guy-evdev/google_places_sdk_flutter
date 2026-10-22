@@ -1,3 +1,6 @@
+/// @docImport 'places_autocomplete_field.dart';
+library;
+
 import 'package:flutter/widgets.dart';
 
 /// Localized UI strings used by the package's widgets.
@@ -30,6 +33,7 @@ class PlacesStrings {
     this.querySuggestionLabel = 'Query suggestion',
     this.distanceUnitMeters = 'm',
     this.photoAttributionPrefix = 'Photo by',
+    this.viewOnGoogleMapsText = 'View on Google Maps',
   });
 
   /// Placeholder text shown in the search field.
@@ -81,4 +85,8 @@ class PlacesStrings {
   /// Text placed before a photo's author names, as in "Photo by Ana Lima", by
   /// `PlacePhotoView` and `PlacesPhotoAttribution`.
   final String photoAttributionPrefix;
+
+  /// Text of the link that opens a photo on Google Maps, drawn after the
+  /// author names by `PlacePhotoView` and `PlacesPhotoAttribution`.
+  final String viewOnGoogleMapsText;
 }
