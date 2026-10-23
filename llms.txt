@@ -51,17 +51,14 @@ Run with `flutter run --dart-define=GOOGLE_MAPS_API_KEY=...`.
 - `PlacesAutocompleteOverlay.show(context, ...)` → `Future<PlaceSelection?>`; `null` if dismissed.
 - `PlacePhotoView(photo: photo, apiKey: key, height: 200, onOpenLink: (uri) => launchUrl(uri))`
   — fetches and shows one photo with its required author attribution and "View on Google Maps"
-  link drawn over it. Always pass `onOpenLink` (`url_launcher` in the app): on Android, iOS,
-  macOS, Windows and Linux it is what shows the link Google requires; on web the link opens a new
-  tab without it. Exactly one of `apiKey:` / `client:`.
+  link drawn over it (author names link to their profiles). Always pass `onOpenLink`
+  (`url_launcher` in the app): on Android, iOS, macOS, Windows and Linux it is what shows the link
+  Google requires; on web the link opens a new tab without it. Exactly one of `apiKey:` / `client:`.
   `width`/`height` (logical px) set the requested size × device pixel ratio, capped at 4800;
   `maxWidthPx`/`maxHeightPx` override. `builder: (context, view) => ...` gets `view.status`
   (`PlacePhotoStatus.loading` / `loaded` / `error`), `view.image`, `view.error`
   (`PlacesException`), `view.onRetry`, `view.attribution`, `view.defaultView`. No option hides the
   attribution. Strips and galleries: `ListView` / `PageView` of `PlacePhotoView`s.
-- The attribution links to the photo on Google Maps ("View on Google Maps") and to each author's
-  profile — Google requires the Maps link. On web it opens in a new tab; on mobile and desktop pass
-  `onOpenLink: (uri) => launchUrl(uri)` (`url_launcher` in the app), or no link is shown.
 - `PlacesPhotoAttribution(photo: photo, onOpenLink: ...)` — the attribution alone, beside an image
   you show yourself.
 
@@ -273,6 +270,8 @@ default theme there. A `decoration:` must still be `material_ui`'s `InputDecorat
   `locationBias` and `locationRestriction` fails validation.
 - Enabling the legacy "Places API" instead of "Places API (New)" — requests fail with
   `PERMISSION_DENIED`.
+- Building a field outside the app's `Navigator` (for example in `MaterialApp.builder`) — it needs
+  an `Overlay` above it, in every field mode, and throws without one.
 - Setting `options` or `client` on a `PlacesAutocompleteController` passed to a widget — the
   widget's own parameters and client apply while it uses the controller.
 - A custom UI on `PlacesAutocompleteController` that never calls `resetSession()` when the user

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -1629,40 +1628,33 @@ void main() {
     expect(tester.widget<TextField>(find.byType(TextField)).enabled, isFalse);
   });
 
-  testWidgets(
-    'error state exposes a localized retry action',
-    (tester) async {
-      final backend = _RetryBackend();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: PlacesAutocompleteField(
-              client: PlacesClient.testing(apiKey: 'test', backend: backend),
-              strings: const PlacesStrings(retryText: 'Try again'),
-            ),
+  testWidgets('error state exposes a localized retry action', (tester) async {
+    final backend = _RetryBackend();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlacesAutocompleteField(
+            client: PlacesClient.testing(apiKey: 'test', backend: backend),
+            strings: const PlacesStrings(retryText: 'Try again'),
           ),
         ),
-      );
+      ),
+    );
 
-      await tester.enterText(find.byType(TextField), 'coffee');
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump();
-      expect(backend.attempts, 1);
-      backend.failFirstAttempt();
-      await tester.pump();
-      expect(find.text('Try again'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'coffee');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(backend.attempts, 1);
+    backend.failFirstAttempt();
+    await tester.pump();
+    expect(find.text('Try again'), findsOneWidget);
 
-      await tester.tap(find.text('Try again'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
 
-      expect(backend.attempts, 2);
-      expect(find.text('Coffee Lab'), findsOneWidget);
-    },
-    // Synthetic Future errors are reported as uncaught by the browser test
-    // harness before the widget consumes them. The real Chrome UI path is
-    // covered by the remaining field tests; retry behavior is covered on VM.
-    skip: kIsWeb,
-  );
+    expect(backend.attempts, 2);
+    expect(find.text('Coffee Lab'), findsOneWidget);
+  });
 
   testWidgets('dialog and Google attribution use localized semantics', (
     tester,

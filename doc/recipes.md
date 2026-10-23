@@ -863,10 +863,8 @@ if (place?.photos case [final photo, ...])
 
 The widget fetches the photo, shows a progress indicator meanwhile and a retry
 button if it fails, and draws the author's name and a "View on Google Maps"
-link over the bottom of the image. Google requires that link. On Android, iOS,
-macOS, Windows and Linux, `onOpenLink` is what shows it — the package cannot
-open a link there without a plugin, so here `url_launcher`, added to your app,
-opens it. On web it opens in a new tab even without `onOpenLink`. See
+link over the bottom of the image. Google requires that link, and on mobile and
+desktop `onOpenLink` is what shows it — see
 [Link to the photo on Google Maps](#link-to-the-photo-on-google-maps).
 `PlaceField.photos` is an Essentials (IDs Only) field, so it does not raise the
 details tier; each photo shown is one billed Place Photos request.
@@ -1105,11 +1103,10 @@ HTTP client injection is unsupported on web.
 
 ## Common widget options
 
-The same names work on `PlacesAutocompleteField`, `PlacesAutocompleteFormField`,
-and `PlacesAutocompleteOverlay.show()`, except the two marked inline only. The
-[API reference](api_reference.md#widget-defaults) lists every option, including
-`TextField`'s own options — every one a one-line search field can use, from `keyboardType`
-and `inputFormatters` to the cursor and spell-check options — which are passed to the default
+The options most apps set. They work on `PlacesAutocompleteField`,
+`PlacesAutocompleteFormField`, and `PlacesAutocompleteOverlay.show()`. The
+[API reference](api_reference.md#widget-defaults) lists every option and its
+default, including `TextField`'s own options, which are passed to the default
 field.
 
 | Option | Default | Use when |
@@ -1122,19 +1119,10 @@ field.
 | `includedPrimaryTypes` | empty | You want types such as `restaurant` or `PlaceTypePresets.cities`. |
 | `locationBias` | `null` | You prefer results near an area. |
 | `locationRestriction` | `null` | You only want results inside an area. |
-| `origin` | `null` | You want a distance beside each suggestion. |
 | `fetchPlaceDetailsOnSelection` | `true` | Set `false` when only the place ID is needed. |
 | `selectionFields` | `address` | You need more than coordinates and an address. |
-| `fetchTimeZoneOnSelection` | `false` | The selection needs Time Zone API data. |
-| `includeQueryPredictions` | `false` | You also accept suggested search phrases. Not on web through Maps JavaScript. |
-| `maxSuggestions` | `5` | You want fewer than Google's five suggestions. |
 | `minInputLength` | `1` | You want fewer billed requests: no search until this many characters. |
 | `debounceDuration` | 300 ms | You want fewer billed requests: a longer pause before each search. |
-| `keyboardType` | `streetAddress` | You want another keyboard. The default changes it on Android and Linux only. |
-| `includeFutureOpeningBusinesses` | `false` | You also want places that have not opened yet. |
-| `unfocusOnSelection` | `true` | Inline only. Set `false` to keep focus in the field after a pick. |
-| `suggestionsViewOpenDirection` | `mostSpace` | Inline only. The suggestions should always open `down` or `up`. |
-| `showPoweredByGoogle` | `true` | The package should render Google attribution. |
 
 `locationBias` and `locationRestriction` cannot be used together; see
 [Limit results to an area](#limit-results-to-an-area). `strings` changes the

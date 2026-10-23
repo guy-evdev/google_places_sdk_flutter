@@ -2902,11 +2902,12 @@ class AutocompleteRequest {
   /// ```dart
   /// includedPrimaryTypes: <String>['restaurant']
   /// includedPrimaryTypes: <String>['cafe', 'bakery']
-  /// includedPrimaryTypes: <String>['(cities)']
+  /// includedPrimaryTypes: PlaceTypePresets.cities
   /// ```
   ///
   /// Keep these values as raw strings because Google’s supported type list is
-  /// large and may evolve over time.
+  /// large and may evolve over time; [PlaceTypePresets] names the common
+  /// ones.
   ///
   /// Official reference:
   /// https://developers.google.com/maps/documentation/places/web-service/place-autocomplete#includedPrimaryTypes
@@ -3275,9 +3276,7 @@ class TextSearchRequest {
         code: 'invalid_page_size',
       );
     }
-    // ignore: deprecated_member_use_from_same_package
     if (maxResultCount != null &&
-        // ignore: deprecated_member_use_from_same_package
         (maxResultCount! < 1 || maxResultCount! > 20)) {
       throw const PlacesException.validation(
         'maxResultCount must be between 1 and 20.',
@@ -3342,9 +3341,7 @@ class TextSearchRequest {
       // Google ignores maxResultCount when pageSize is present, and the Maps
       // JavaScript path already drops it. Omit it so both transports send the
       // same request.
-      // ignore: deprecated_member_use_from_same_package
       if (pageSize == null && maxResultCount != null)
-        // ignore: deprecated_member_use_from_same_package
         'maxResultCount': maxResultCount,
       if (minRating != null) 'minRating': minRating,
       if (openNow != null) 'openNow': openNow,

@@ -76,10 +76,16 @@ Every Places operation authenticates with the `X-Goog-Api-Key` header. No API
 key is ever added to a request path or query string, and a regression test
 asserts this across every operation.
 
-The single exception is the Google Time Zone API, which offers no header
-authentication and requires `key` as a query parameter. Applications that treat
-URLs as sensitive should route Time Zone through a proxy `timeZoneEndpoint`,
-which removes the key from the client entirely.
+There are two exceptions, both because Google offers no other way, and the
+tests assert each one so they stay visible:
+
+- The Google Time Zone API has no header authentication and requires `key` as
+  a query parameter. Applications that treat URLs as sensitive should route
+  Time Zone through a proxy `timeZoneEndpoint`, which removes the key from the
+  client entirely.
+- On web, the Maps JavaScript API loads from a script address that carries
+  the key. Use a browser key restricted to your app's websites, as Google
+  recommends for that API; a keyless proxy client never loads it.
 
 > **Fixed in 0.6.1.** Versions `0.5.0`–`0.6.0` also appended `key` to the photo
 > media URL, where proxy logs, CDN logs, and browser history could record it. If
@@ -257,6 +263,18 @@ const options = PlacesClientOptions(
 | Nearby Search | Places REST | Primary | Fallback | Available |
 | Place Photo media | Places REST | Not exposed | Required without proxy | Available |
 | Time Zone | Time Zone REST | Not exposed | Required without proxy | With `timeZoneEndpoint` |
+
+The web columns apply to JavaScript and Wasm builds alike.
+
+## Version 0.7 compatibility notices
+
+- **0.7.0:** Wasm web builds (`flutter build web --wasm`) use the web backend
+  and follow `PlacesWebOptions.fallbackPolicy`. Through `0.6.x` they used the
+  REST backend instead, so a client with an `apiKey` called Google's REST API
+  from the browser with the key, even under `disabled` or `proxyOnly`. `0.6.x`
+  will not be patched. A Wasm app now needs the Maps JavaScript API enabled
+  for its key; see
+  [step 13 of the migration guide](../MIGRATION.md#13-wasm-web-builds-use-the-maps-javascript-api).
 
 ## Version 0.6 compatibility notices
 

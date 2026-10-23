@@ -44,6 +44,12 @@ enum PlacesAutocompleteFieldMode {
 /// Pass either [apiKey], and the field manages its own [PlacesClient], or a
 /// [client] you own.
 ///
+/// The field needs an [Overlay] above it, in every [fieldMode]: it keeps its
+/// suggestion layer there even when the search opens elsewhere. Every screen,
+/// dialog, and sheet under the app's [Navigator] has one. A field built
+/// outside it — in `MaterialApp.builder`, for example — throws, as a plain
+/// text field there does as soon as it is focused.
+///
 /// Example:
 /// ```dart
 /// PlacesAutocompleteField(
@@ -288,7 +294,7 @@ class PlacesAutocompleteField extends StatefulWidget {
   /// ```dart
   /// includedPrimaryTypes: const <String>['restaurant']
   /// includedPrimaryTypes: const <String>['cafe', 'bakery']
-  /// includedPrimaryTypes: const <String>['(cities)']
+  /// includedPrimaryTypes: PlaceTypePresets.cities
   /// ```
   ///
   /// See Google’s supported type documentation:
@@ -314,7 +320,8 @@ class PlacesAutocompleteField extends StatefulWidget {
   /// Google prices sessions. With the default [PlaceFieldPresets.address] it is
   /// billed as Place Details Essentials, along with the session's first 12
   /// autocomplete requests. Set this to `false` to receive only the suggestion
-  /// and skip that request.
+  /// and skip that request — unless [fetchTimeZoneOnSelection] is on, which
+  /// needs the place's coordinates and so still makes it.
   final bool fetchPlaceDetailsOnSelection;
 
   /// Whether a selected suggestion should also resolve time-zone metadata.

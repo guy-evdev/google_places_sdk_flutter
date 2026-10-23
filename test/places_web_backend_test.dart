@@ -190,6 +190,20 @@ void main() {
     });
   });
 
+  test('the Maps JavaScript loader is the other operation that keys a URI', () {
+    // Google loads the library only from a script address with the key in it.
+    // Asserted explicitly, like the Time Zone API, so the exception stays
+    // visible rather than becoming a habit.
+    final uri = mapsJavaScriptUri(
+      'browser-key',
+      PlacesWebVersionChannel.quarterly,
+    );
+
+    expect(uri.host, 'maps.googleapis.com');
+    expect(uri.queryParameters['key'], 'browser-key');
+    expect(uri.queryParameters['v'], 'quarterly');
+  });
+
   test('keyless web proxy returns query suggestions over REST', () async {
     final backend = PlacesWebBackend(
       apiKey: '',

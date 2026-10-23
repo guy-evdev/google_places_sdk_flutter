@@ -430,9 +430,7 @@ class PlacesWebBackend implements PlacesBackend {
         if (request.locationRestriction != null)
           'locationRestriction': request.locationRestriction!.area.toWebJson(),
         if (request.pageSize != null) 'maxResultCount': request.pageSize,
-        // ignore: deprecated_member_use_from_same_package
         if (request.pageSize == null && request.maxResultCount != null)
-          // ignore: deprecated_member_use_from_same_package
           'maxResultCount': request.maxResultCount,
         if (request.priceLevels.isNotEmpty)
           'priceLevels': request.priceLevels
@@ -654,17 +652,10 @@ class PlacesWebBackend implements PlacesBackend {
       await _waitForImportLibrary();
       return;
     }
-    final scriptUri =
-        Uri.https('maps.googleapis.com', '/maps/api/js', <String, String>{
-          'key': apiKey,
-          'loading': 'async',
-          'libraries': 'places',
-          'v': options.web.versionChannel.name,
-        });
     final script = web.HTMLScriptElement()
       ..id = _mapsScriptId
       ..async = true
-      ..src = scriptUri.toString();
+      ..src = mapsJavaScriptUri(apiKey, options.web.versionChannel).toString();
     final cspNonce = options.web.cspNonce;
     if (cspNonce != null) {
       script.nonce = cspNonce;
@@ -1157,7 +1148,6 @@ class PlacesWebBackend implements PlacesBackend {
 
   void _ensureHttpAllowed(PlacesOperation operation) {
     switch (options.web.fallbackPolicy) {
-      // ignore: deprecated_member_use_from_same_package
       case PlacesWebFallbackPolicy.direct:
         return;
       case PlacesWebFallbackPolicy.proxyOnly:
@@ -1336,6 +1326,19 @@ Map<String, Object?> webAutocompleteRequest(AutocompleteRequest request) =>
       if (request.includeFutureOpeningBusinesses)
         'futureOpeningBusinessesIncluded': true,
     };
+
+/// The address the Maps JavaScript API loads from. It carries [apiKey]: one of
+/// the two places a credential appears in a URL, because Google offers no
+/// other way to load the library. The key should be a browser key restricted
+/// to the app's websites.
+@visibleForTesting
+Uri mapsJavaScriptUri(String apiKey, PlacesWebVersionChannel channel) =>
+    Uri.https('maps.googleapis.com', '/maps/api/js', <String, String>{
+      'key': apiKey,
+      'loading': 'async',
+      'libraries': 'places',
+      'v': channel.name,
+    });
 
 /// Whether a Maps JavaScript failure means "this field set is unsupported",
 /// which is the only case the HTTP fallback is meant to cover.

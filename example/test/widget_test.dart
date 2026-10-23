@@ -630,4 +630,44 @@ void main() {
     expect(field.selectionFields, isNot(contains(PlaceField.photos)));
     await client.close();
   });
+
+  testWidgets('custom rows come from suggestionItemBuilder; the status line '
+      'follows the controller', (tester) async {
+    final backend = _RecordingBackend()
+      ..suggestions = const <PlaceSuggestion>[
+        PlaceSuggestion(
+          placeId: 'place-1',
+          placeResourceName: 'places/place-1',
+          fullText: StructuredText(text: 'Coffee Lab, Main Street'),
+          primaryText: StructuredText(text: 'Coffee Lab'),
+          secondaryText: StructuredText(text: 'Main Street'),
+        ),
+      ];
+    final client = _clientFor(backend);
+    await tester.pumpWidget(ExampleApp(client: client));
+    expect(find.textContaining('Controller status'), findsNothing);
+
+    await _openConfiguration(tester);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('configuration-advanced')),
+    );
+    await tester.pumpAndSettle();
+    await _toggleConfigurationSwitch(tester, 'Custom suggestion rows');
+    await _applyConfiguration(tester);
+
+    expect(find.text('Custom rows'), findsOneWidget, reason: 'summary chip');
+    expect(find.text('Controller status: no search'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'cof');
+    await tester.pump();
+    expect(find.text('Controller status: loading'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    expect(find.text('Controller status: results'), findsOneWidget);
+    expect(find.byIcon(Icons.location_on_outlined), findsOneWidget);
+
+    await tester.tap(find.text('Coffee Lab'));
+    await tester.pumpAndSettle();
+    expect(find.text('Controller status: no search'), findsOneWidget);
+    await client.close();
+  });
 }

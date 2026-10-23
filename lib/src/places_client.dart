@@ -25,7 +25,8 @@ class PlacesClient {
     this.proxyConfiguration,
     @Deprecated(
       'Use proxyConfiguration with Uri endpoints, or PlacesClient.proxy(). '
-      'The string proxyBaseUrl parameter is deprecated in 0.6.0.',
+      'The string proxyBaseUrl parameter is deprecated in 0.6.0 and will be '
+      'removed in 1.0.0.',
     )
     this.proxyBaseUrl,
     this.timeZoneBaseUrl,
@@ -59,7 +60,6 @@ class PlacesClient {
          timeZoneEndpoint: timeZoneEndpoint,
          authentication: authentication,
        ),
-       // ignore: deprecated_member_use_from_same_package
        proxyBaseUrl = null,
        timeZoneBaseUrl = null,
        _backend = createPlacesBackend(
@@ -102,10 +102,11 @@ class PlacesClient {
   /// Optional legacy proxy base URL for Places HTTP requests.
   ///
   /// New code should use [proxyConfiguration] or [PlacesClient.proxy]. Google
-  /// credentials are not forwarded to this endpoint in `0.6.0`.
+  /// credentials are never forwarded to this endpoint.
   @Deprecated(
     'Use proxyConfiguration with Uri endpoints, or PlacesClient.proxy(). '
-    'This string property is deprecated in 0.6.0.',
+    'This string property is deprecated in 0.6.0 and will be removed in '
+    '1.0.0.',
   )
   final String? proxyBaseUrl;
 

@@ -124,8 +124,8 @@ enum PlacesWebFallbackPolicy {
   /// Allows direct client-side Google REST calls when no proxy is configured.
   ///
   /// This compatibility policy is deprecated because web-service credentials
-  /// cannot be kept secret in client applications. It remains the default only
-  /// for the `0.6.x` release line.
+  /// cannot be kept secret in client applications. It remains the default
+  /// through `0.x` and is scheduled to stop being the default in `1.0.0`.
   @Deprecated(
     'Direct client-side REST fallback is insecure and is deprecated in 0.6.0. '
     'Use PlacesWebFallbackPolicy.proxyOnly with an authenticated proxy.',
@@ -147,7 +147,6 @@ class PlacesWebOptions {
     this.versionChannel = PlacesWebVersionChannel.weekly,
     this.cspNonce,
     this.initializationTimeout = const Duration(seconds: 10),
-    // ignore: deprecated_member_use_from_same_package
     this.fallbackPolicy = PlacesWebFallbackPolicy.direct,
   });
 

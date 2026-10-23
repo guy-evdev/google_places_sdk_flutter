@@ -163,10 +163,8 @@ expensive field:
 | Your own set of `PlaceField` values | exactly what you list, from all 80 fields | the highest among them |
 | `PlaceFieldPresets.all` | every field — for exploring the data and for admin tools | Enterprise + Atmosphere, always |
 
-`PlaceFieldPresets.all` is not for production: it always bills at the highest tier, returns the
-largest responses, and grows when a package version adds fields. On web it takes the HTTP path,
-because the Maps JavaScript backend does not have every field: the web fallback policy must allow
-it, and that details request is not part of the autocomplete session.
+`PlaceFieldPresets.all` is not for production;
+[the API reference](doc/api_reference.md#place-field-presets) says why.
 
 To keep the parsed address, add to the default rather than replacing it:
 
@@ -338,29 +336,11 @@ Three builders let you supply the field, each row, or the whole suggestion area.
 `minInputLength` and `debounceDuration` send fewer billed requests, and the widgets take
 `TextField`'s own options, such as `keyboardType` and `inputFormatters`.
 `PlacePhotoView` shows a place's photos with their required attribution.
-`PlacesClient` requests fewer fields by default. The supported floor rises to Flutter `>=3.44.0` and Dart `>=3.12.0`. See
-[MIGRATION.md](MIGRATION.md#070) for the defaults that changed.
+`PlacesClient` requests fewer fields by default. See [What's new in 0.7.0](doc/whats_new_0_7_0.md)
+for details and examples, and [MIGRATION.md](MIGRATION.md#070) for the defaults that changed.
 
-Version `0.6.1` is a bug-fix release. Dialog and fullscreen modes now honor the
-field's `decoration`, `suggestionBuilder`, `showPoweredByGoogle`, `onClearField`,
-and `enabled`; Retry works on web; and the new `origin` option makes Google
-return a distance for each suggestion, which the widget renders.
-
-It also contains a security fix: photo media no longer sends the API key as a
-URL query parameter. **Rotate any key used with `fetchPhotoMedia` on
-`0.5.0`–`0.6.0`.**
-
-Version `0.6.0` added Text Search pagination, cancellation, typed errors, richer
-Place data, complete Form reset behavior, photo attribution helpers, and safer
-proxy and web options. There are no public API removals or required source
-migrations in either release. Text Search `maxResultCount`, string
-`proxyBaseUrl`, and direct browser REST fallback are deprecated, with
-replacements available now.
-
-See [What's new in 0.7.0](doc/whats_new_0_7_0.md),
-[What's new in 0.6.1](doc/whats_new_0_6_1.md), and
-[What's new in 0.6.0](doc/whats_new_0_6_0.md) for examples, compatibility
-notices, and the extended feature summaries.
+Earlier releases: [What's new in 0.6.1](doc/whats_new_0_6_1.md) and
+[What's new in 0.6.0](doc/whats_new_0_6_0.md).
 
 ## More documentation
 

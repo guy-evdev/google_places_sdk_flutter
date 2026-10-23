@@ -201,7 +201,6 @@ void main() {
       const request = TextSearchRequest(
         textQuery: 'coffee',
         pageSize: 10,
-        // ignore: deprecated_member_use_from_same_package
         maxResultCount: 5,
       );
 
@@ -219,11 +218,7 @@ void main() {
     });
 
     test('still sends deprecated maxResultCount when pageSize is absent', () {
-      const request = TextSearchRequest(
-        textQuery: 'coffee',
-        // ignore: deprecated_member_use_from_same_package
-        maxResultCount: 5,
-      );
+      const request = TextSearchRequest(textQuery: 'coffee', maxResultCount: 5);
 
       final json = request.toRestJson();
 

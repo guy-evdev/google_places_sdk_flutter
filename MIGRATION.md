@@ -16,15 +16,17 @@ and an address, and `PlacesClient` requests fewer fields when you pass none.
 | Still uses `package:flutter/material.dart` | Steps 1, 4, and 5; step 3 if you pass `decoration:` |
 | Reads `PlacesAutocompleteField.client` or `PlacesAutocompleteOverlay.client` | Step 7 |
 | Calls `PlacesClient` for details or search without passing `fields:` | Step 8 |
-| Has an inline field with a control just below it | Step 9 |
+| Has an inline field with a control just below it, or builds a field outside the app's `Navigator` | Step 9 |
 | Wants the plain text keyboard on Android | Step 10 |
 | Assigns `PlacesAutocompleteController.selectedSelection` | Step 11 |
 | Reads `PlacesPhotoAttribution.prefix` | Step 12 |
-| Builds for web with `flutter build web --wasm` | Step 13 |
+| Builds for web with `flutter build web --wasm`, or passes a circle `locationRestriction` on web | Step 13 |
 
-### 1. Raise your SDK floor
+### 1. Use Flutter 3.44 or later
 
-`material_ui` requires Dart `^3.12.0` and Flutter `>=3.44.0`, so this package now does too.
+`material_ui` requires Flutter `3.44.0` and Dart `3.12.0` or later, so this package now does too.
+Pub checks that against the Flutter SDK you build with, so upgrading Flutter is the only required
+step. Raising your app's own `environment:` to match is optional; it records the new minimum:
 
 ```yaml
 # Before
@@ -105,6 +107,10 @@ PlacesAutocompleteField(
 
 To style the field without migrating, wrap it in `material_ui`'s `Theme`. To get your app's own
 theme on it, migrate the app (step 2).
+
+In such an app, each Places widget — and the field's long-press menu — reloads your app's
+localization delegates when it appears. A delegate whose `load` is asynchronous leaves it blank
+until it has loaded.
 
 ### 4. Place details now load on selection
 
@@ -264,6 +270,11 @@ Column(
 To keep inline suggestions below the field even when there is more room above it, pass
 `suggestionsViewOpenDirection: OptionsViewOpenDirection.down`.
 
+The field now needs an `Overlay` above it, in every field mode. Every screen, dialog, and sheet
+under your app's `Navigator` has one. A field placed outside it — in `MaterialApp.builder`, for
+example — now throws "No Overlay widget found", as a plain `TextField` there already does as soon
+as it is focused.
+
 ### 10. The keyboard is for street addresses
 
 The widgets now ask for `TextInputType.streetAddress`. On Android that shows a keyboard suited to
@@ -329,7 +340,10 @@ fallback policy applies. In the Google Cloud console:
 Until it is enabled, the browser console shows `ApiNotActivatedMapError` and no suggestions load.
 
 The web backend also refuses three things the REST backend accepted, so a Wasm build that used them
-now fails with a `PlacesException`:
+now fails with a `PlacesException`. One of them reaches JavaScript web builds too: a circle
+`locationRestriction` for autocomplete through the Maps JavaScript API, which accepts only a
+rectangle there, used to be sent anyway and now fails with a `validation` error. A keyless proxy
+client sends autocomplete over REST on the web, where a circle still works.
 
 ```dart
 // Before — accepted by 0.6.x Wasm builds

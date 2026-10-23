@@ -794,35 +794,38 @@ void main() {
     }
   });
 
-  test('the Time Zone API is the only operation that keys the URI', () async {
-    // Google's Time Zone API has no header authentication, so this one is
-    // unavoidable. It is asserted explicitly so the exception stays visible.
-    late Uri sentUri;
-    final backend = PlacesHttpBackend(
-      apiKey: 'api-key',
-      httpClient: MockClient((request) async {
-        sentUri = request.url;
-        return http.Response(
-          jsonEncode(<String, Object?>{
-            'status': 'OK',
-            'dstOffset': 0,
-            'rawOffset': 0,
-            'timeZoneId': 'UTC',
-            'timeZoneName': 'Coordinated Universal Time',
-          }),
-          200,
-        );
-      }),
-    );
+  test(
+    'the Time Zone API is the only REST operation that keys the URI',
+    () async {
+      // Google's Time Zone API has no header authentication, so this one is
+      // unavoidable. It is asserted explicitly so the exception stays visible.
+      late Uri sentUri;
+      final backend = PlacesHttpBackend(
+        apiKey: 'api-key',
+        httpClient: MockClient((request) async {
+          sentUri = request.url;
+          return http.Response(
+            jsonEncode(<String, Object?>{
+              'status': 'OK',
+              'dstOffset': 0,
+              'rawOffset': 0,
+              'timeZoneId': 'UTC',
+              'timeZoneName': 'Coordinated Universal Time',
+            }),
+            200,
+          );
+        }),
+      );
 
-    await backend.fetchTimeZone(
-      const TimeZoneRequest(
-        location: PlaceCoordinates(latitude: 1, longitude: 2),
-      ),
-    );
+      await backend.fetchTimeZone(
+        const TimeZoneRequest(
+          location: PlaceCoordinates(latitude: 1, longitude: 2),
+        ),
+      );
 
-    expect(sentUri.queryParameters['key'], 'api-key');
-  });
+      expect(sentUri.queryParameters['key'], 'api-key');
+    },
+  );
 
   test('a custom timeZoneBaseUrl keeps its own query parameters', () async {
     late Uri sentUri;

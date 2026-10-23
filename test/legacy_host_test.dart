@@ -2,9 +2,16 @@
 // package's widgets in an app that has not migrated to material_ui, and prove
 // they build there with no app code. The import is prefixed so every
 // unprefixed Material name below is material_ui's.
+//
+// Flutter 3.50 deprecates package:flutter/material.dart, which this file must
+// import. Nothing it uses is deprecated before that, so on the supported
+// releases the next line suppresses nothing.
 // ignore_for_file: deprecated_member_use
-import 'package:flutter/foundation.dart' show SynchronousFuture, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show SynchronousFuture, ValueListenable, ValueNotifier, kIsWeb;
 import 'package:flutter/material.dart' as legacy;
+import 'package:flutter_localizations/flutter_localizations.dart'
+    as legacy_l10n;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
 import 'package:google_places_sdk_flutter/src/internal/backend.dart';
@@ -74,6 +81,77 @@ Future<void> _searchAndSelect(WidgetTester tester, Finder scope) async {
   await tester.tap(find.text('Coffee Lab'));
   await tester.pumpAndSettle();
 }
+
+/// Each surface the package draws in a legacy app: how to build it, and how
+/// to open it, returning the widgets inside to read the direction from.
+typedef _Surface = ({
+  Widget Function() build,
+  Future<List<Finder>> Function(WidgetTester tester) open,
+});
+
+const _photo = PlacePhoto(
+  name: 'places/place-1/photos/photo-1',
+  authors: <PlacePhotoAuthorAttribution>[
+    PlacePhotoAuthorAttribution(displayName: 'A. Photographer'),
+  ],
+);
+
+Future<List<Finder>> _openSearch(
+  WidgetTester tester, {
+  bool launcher = false,
+}) async {
+  if (launcher) {
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+  }
+  final scope = find.byType(
+    launcher ? PlacesAutocompleteOverlay : PlacesAutocompleteField,
+  );
+  final field = find.descendant(of: scope, matching: find.byType(TextField));
+  await tester.enterText(field, 'cof');
+  await tester.pump(const Duration(milliseconds: 350));
+  await tester.pumpAndSettle();
+  return <Finder>[field, find.text('Coffee Lab')];
+}
+
+final _surfaces = <String, _Surface>{
+  for (final mode in PlacesAutocompleteFieldMode.values)
+    '${mode.name} field': (
+      build: () => PlacesAutocompleteField(client: _client(), fieldMode: mode),
+      open: (tester) => _openSearch(
+        tester,
+        launcher: mode != PlacesAutocompleteFieldMode.inline,
+      ),
+    ),
+  'PlacePhotoView': (
+    // The fake backend has no photo support, so the fetch fails at once.
+    build: () => PlacePhotoView(photo: _photo, client: _client(), width: 100),
+    open: (tester) async {
+      await tester.pump();
+      return <Finder>[find.text('Retry')];
+    },
+  ),
+  'PlacesPhotoAttribution': (
+    build: () => const PlacesPhotoAttribution(photo: _photo),
+    open: (tester) async => <Finder>[find.textContaining('A. Photographer')],
+  ),
+};
+
+/// A legacy app on [locale], localized as flutter_localizations does it.
+Widget _localizedLegacyApp(ValueListenable<Locale> locale, Widget body) =>
+    ValueListenableBuilder<Locale>(
+      valueListenable: locale,
+      builder: (context, value, _) => legacy.MaterialApp(
+        locale: value,
+        supportedLocales: const <Locale>[Locale('en'), Locale('he')],
+        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+          legacy_l10n.GlobalMaterialLocalizations.delegate,
+          legacy_l10n.GlobalWidgetsLocalizations.delegate,
+          legacy_l10n.GlobalCupertinoLocalizations.delegate,
+        ],
+        home: legacy.Scaffold(body: body),
+      ),
+    );
 
 // debugPrint must be restored inside the test body, before flutter_test
 // checks its foundation invariants.
@@ -461,6 +539,62 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(selection?.placeId, 'place-1');
+    });
+  }
+
+  // The scope's Localizations sets its own locale's text direction; the app's
+  // direction must still win, as it does in a material_ui app.
+  for (final MapEntry(key: name, value: surface) in _surfaces.entries) {
+    testWidgets('$name follows a direction the app sets itself', (
+      tester,
+    ) async {
+      // Right to left on an English locale, then switched while running.
+      final direction = ValueNotifier<TextDirection>(TextDirection.rtl);
+      addTearDown(direction.dispose);
+      await tester.pumpWidget(
+        legacy.MaterialApp(
+          builder: (context, child) => ValueListenableBuilder<TextDirection>(
+            valueListenable: direction,
+            builder: (context, value, _) =>
+                Directionality(textDirection: value, child: child!),
+          ),
+          home: legacy.Scaffold(body: surface.build()),
+        ),
+      );
+      final probes = await surface.open(tester);
+
+      for (final probe in probes) {
+        expect(Directionality.of(tester.element(probe)), TextDirection.rtl);
+      }
+      direction.value = TextDirection.ltr;
+      await tester.pump();
+      for (final probe in probes) {
+        expect(Directionality.of(tester.element(probe)), TextDirection.ltr);
+      }
+      expect(tester.takeException(), isNull);
+    });
+
+    // Localizations.override follows the locale on its own, so this guards the
+    // runtime path rather than the re-wrap; the test above proves that.
+    testWidgets('$name follows a locale switched while the app runs', (
+      tester,
+    ) async {
+      final locale = ValueNotifier<Locale>(const Locale('en'));
+      addTearDown(locale.dispose);
+      await tester.pumpWidget(_localizedLegacyApp(locale, surface.build()));
+      final probes = await surface.open(tester);
+
+      for (final (language, direction) in <(String, TextDirection)>[
+        ('he', TextDirection.rtl),
+        ('en', TextDirection.ltr),
+      ]) {
+        locale.value = Locale(language);
+        await tester.pump(); // One frame: the new direction is already there.
+        for (final probe in probes) {
+          expect(Directionality.of(tester.element(probe)), direction);
+        }
+      }
+      expect(tester.takeException(), isNull);
     });
   }
 }

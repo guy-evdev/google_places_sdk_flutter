@@ -967,7 +967,6 @@ void main() {
         _app(
           const PlacesPhotoAttribution(
             photo: _photo,
-            // ignore: deprecated_member_use_from_same_package
             prefix: 'Image:',
             strings: PlacesStrings(photoAttributionPrefix: 'Foto:'),
           ),

@@ -22,7 +22,10 @@ and why.
 - [Entrances, navigation points, and every field at once](#entrances-navigation-points-and-every-field-at-once)
 - [Place photos](#place-photos)
 - [Wasm web builds follow the fallback policy](#wasm-web-builds-follow-the-fallback-policy)
-- [Why the `material_ui` migration exists](#why-this-release-exists)
+- [Web autocomplete fixes](#web-autocomplete-fixes)
+- [Why the `material_ui` migration](#why-the-material_ui-migration)
+- [Dependencies](#dependencies)
+- [Versioning](#versioning)
 
 ## Apps on either design library
 
@@ -45,7 +48,9 @@ dart fix --apply --code=migrate_design_widgets
 That covers the field, the form field, the long-press text menu, dialog and fullscreen modes,
 `PlacesAutocompleteOverlay.show()` called from an unmigrated screen, and `PlacesPhotoAttribution`.
 An app locale that `material_ui` does not translate falls back to English labels rather than
-failing. The one thing such an app must
+failing. Each Places widget — and the field's long-press menu — reloads the app's localization
+delegates when it appears, so a delegate whose `load` is asynchronous leaves it blank until it has
+loaded. The one thing such an app must
 change is a `decoration:`, which has to be `material_ui`'s `InputDecoration` — see
 [MIGRATION.md](../MIGRATION.md#070).
 
@@ -245,6 +250,9 @@ PlacesAutocompleteField(
   reachable only through a `PlacesAutocompleteController`; when you leave it unset, the
   controller's value, 300 ms by default, still applies.
 
+Fixed on the way: in dialog and fullscreen field modes, a `debounceDuration` set on the field's
+controller never reached the search, which always waited 300 ms. It now applies.
+
 ## `TextField` options and inline placement
 
 The widgets take `TextField`'s own options, under `TextField`'s names and with its defaults, so
@@ -290,11 +298,6 @@ in `suggestionsViewBuilder`; the
 `includeFutureOpeningBusinesses`, which includes places that have not opened yet, joins the widgets'
 search options. And `PlaceSelection.fromPlace` turns a place fetched by its saved ID into a form
 field's `initialValue`; see [Start from a saved place](recipes.md#start-from-a-saved-place).
-
-Fixed on the way: on the web, a circle `locationRestriction` for autocomplete through the Maps
-JavaScript API — which accepts only a rectangle there — was sent anyway, where Google could reject
-it with an unclear error or leave the search unrestricted. It now fails with a `validation` error
-that says so.
 
 ## Your own search UI with the controller
 
@@ -466,8 +469,8 @@ An app built with `flutter build web --wasm` used to pick the package's plain RE
 of its Maps JavaScript one, so `PlacesWebOptions.fallbackPolicy` was never consulted: a client with
 an `apiKey` called Google's REST API from the browser with the key, even under `disabled` or
 `proxyOnly`. Wasm builds now use the same backend as other web builds, and the policy applies. That
-backend also refuses an injected `httpClient`, an `applicationIdentity` and a circle
-`locationRestriction`, as it always has for JavaScript web builds.
+backend also refuses an injected `httpClient` and an `applicationIdentity`, as it always has for
+JavaScript web builds, and now a circle autocomplete `locationRestriction` too.
 
 The fix is in `0.7.0` only: `0.6.x` will not be patched. A Wasm app needs the **Maps JavaScript
 API** enabled for its key, like any other web app — see
@@ -486,104 +489,33 @@ because that API has no query suggestions. There the option is now ignored and o
 suggested. A web client with a proxy and no API key sends autocomplete over REST, and does get
 them.
 
-## Why this release exists
+A circle `locationRestriction` for autocomplete through the Maps JavaScript API — which accepts
+only a rectangle there — was sent anyway, where Google could reject it with an unclear error or
+leave the search unrestricted. It now fails with a `validation` error that says so; see
+[step 13 of the migration guide](../MIGRATION.md#13-wasm-web-builds-use-the-maps-javascript-api).
+
+## Why the `material_ui` migration
 
 Flutter `3.47` published `material_ui` and `cupertino_ui` `1.0`, decoupling the Material and
-Cupertino design systems from the core SDK. The in-framework libraries still ship, and Flutter
-provides `MaterialUiCompatibilityBridge` so that unmigrated dependencies keep working.
+Cupertino design systems from the core SDK. The in-framework libraries still ship, and Flutter's
+`MaterialUiCompatibilityBridge` keeps unmigrated dependencies working — except where a dependency
+has an in-framework type in its public API. This package did: four public parameters took an
+`InputDecoration`. So once an app ran Flutter's own migration command,
+`dart fix --apply --code=migrate_design_widgets`, its `InputDecoration` was `material_ui`'s, this
+package still expected the in-framework one, and nothing short of reverting the migration made them
+match.
 
-The bridge has one documented limit: it cannot reconcile a type mismatch when a dependency exposes
-an in-framework type in its **public API signature**. This package did exactly that — `InputDecoration`
-appears in four public parameters. So the moment you ran Flutter's own migration command on your
-app:
+The class names are unchanged; only the library they come from moved. The four parameters and the
+import are [step 2 of the migration guide](../MIGRATION.md#2-in-a-material_ui-app-take-inputdecoration-from-material_ui),
+and a hand-built `localizationsDelegates` list is
+[step 6](../MIGRATION.md#6-if-you-use-localization-delegates). Every other public type in this
+package comes from `package:flutter/widgets.dart`, `painting`, `services`, or `foundation`, and none
+of those moved.
 
-```shell
-dart fix --apply --code=migrate_design_widgets
-```
-
-…your app's `InputDecoration` became `material_ui`'s, this package's stayed in-framework, and the
-two no longer matched. There was no partial degradation and no workaround short of reverting your
-own migration. That is why this jumped ahead of the widget milestone that was next in line.
-
-## What changed in your code
-
-The class names are identical. Only the library they come from moved.
-
-```dart
-// Before
-import 'package:flutter/material.dart';
-import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
-
-PlacesAutocompleteField(
-  client: client,
-  decoration: const InputDecoration(
-    labelText: 'Choose a place',
-    border: OutlineInputBorder(),
-  ),
-  onSelection: (selection) => debugPrint(selection.displayText),
-);
-
-// After
-import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
-import 'package:material_ui/material_ui.dart';
-
-PlacesAutocompleteField(
-  client: client,
-  decoration: const InputDecoration(
-    labelText: 'Choose a place',
-    border: OutlineInputBorder(),
-  ),
-  onSelection: (selection) => debugPrint(selection.displayText),
-);
-```
-
-The four public surfaces that take an `InputDecoration`:
-
-| Surface | Parameter |
-| --- | --- |
-| `PlacesAutocompleteField` | `decoration` |
-| `PlacesAutocompleteOverlay` | `decoration` |
-| `PlacesAutocompleteOverlay.show()` | `decoration:` |
-| `PlacesAutocompleteFormField` | `decoration:` |
-
-Every other public type in this package comes from `package:flutter/widgets.dart`,
-`painting`, `services`, or `foundation` — `TextEditingController`, `FocusNode`, `TextStyle`,
-`Widget`, `FormField`, `AutovalidateMode` — and none of those moved. Nothing else in the public API
-is affected.
-
-## Why the Flutter floor moved to 3.44.0
-
-`material_ui` `1.0.0` declares `sdk: ^3.12.0` and `flutter: ">=3.44.0"`, so this package cannot
-promise less. The floor went from Flutter `3.35.0` to `3.44.0` — nine minor versions — and that is
-the real cost of this release.
-
-The floor is `3.44.0` rather than `3.47.0` deliberately. Flutter `3.44.0` ships Dart `3.12.0`,
-which is exactly `material_ui`'s minimum, so `>=3.44.0` is a measured floor rather than a guess.
-Stable went from `3.44` to `3.47.0` with no `3.45` or `3.46` in between, so flooring at `3.47.0`
-would have dropped the entire `3.44.x` line for no benefit. `material_ui` was verified to resolve, analyze,
-and pass the full test suite on Flutter `3.44.0` exactly, not merely on a newer `3.44` patch.
-
-## Localization delegates
-
-If your app builds a `localizationsDelegates` list by hand, `GlobalMaterialLocalizations` now comes
-from `material_ui`, and the new `GlobalMaterialLocalizations.delegates` collapses the usual three
-entries into one:
-
-```dart
-// Before
-localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
-  GlobalMaterialLocalizations.delegate,
-  GlobalWidgetsLocalizations.delegate,
-  GlobalCupertinoLocalizations.delegate,
-],
-
-// After
-localizationsDelegates: GlobalMaterialLocalizations.delegates,
-```
-
-The example app dropped its direct `flutter_localizations` dependency as a result; `material_ui`
-depends on it, so it is still in the graph. Broader localization work is a later release, not this
-one.
+The Flutter floor rose from `3.35.0` to `3.44.0` because `material_ui` `1.0.0` requires Flutter
+`3.44.0` and Dart `3.12.0`; this package was tested on Flutter `3.44.0` itself, not only on a newer
+`3.44` patch. Stable went from `3.44` to `3.47` with nothing between, so a `3.47.0` floor would have
+dropped the whole `3.44` line for nothing. See [step 1](../MIGRATION.md#1-use-flutter-344-or-later).
 
 ## Dependencies
 
@@ -606,7 +538,6 @@ Flutter's guide tells package authors to treat this as a major version bump. Und
 minor bump **is** the major bump: `^0.6.1` does not resolve to `0.7.0`, so existing consumers are
 not upgraded without opting in. No `1.0.0` is implied.
 
-This release also breaks the project's usual rule that public signatures stay source-compatible
-through `0.x`. That was a deliberate call. The alternative was not "no break" — it was "silently
-broken for every user who follows Flutter's migration instructions, with no version number saying
-so".
+Some public signatures change, which a `0.x` release would otherwise avoid. The alternative was
+not "no break": it was a package silently broken for every app that follows Flutter's migration
+instructions, with no version number saying so.

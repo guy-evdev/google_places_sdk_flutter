@@ -66,6 +66,10 @@ class PlacesDesignScope extends StatelessWidget {
       final dark = iconColor != null && iconColor.computeLuminance() > 0.5;
       scoped = Theme(data: dark ? _darkTheme : _lightTheme, child: scoped);
     }
+    // Localizations sets its locale's text direction, which would replace a
+    // direction the app set itself with a Directionality. Reading it here also
+    // rebuilds the scope in the frame the app's direction changes.
+    final direction = Directionality.maybeOf(context);
     // ponytail: Localizations.override reloads the app's own delegates in a new
     // Localizations, which renders nothing until they load. Synchronous
     // delegates (the global ones, gen-l10n) load in the same frame; an app
@@ -76,7 +80,9 @@ class PlacesDesignScope extends StatelessWidget {
         ...GlobalMaterialLocalizations.delegates,
         _AnyLocaleMaterialLocalizationsDelegate(),
       ],
-      child: scoped,
+      child: direction == null
+          ? scoped
+          : Directionality(textDirection: direction, child: scoped),
     );
   }
 

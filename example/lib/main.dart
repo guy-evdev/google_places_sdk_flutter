@@ -106,6 +106,7 @@ class DemoConfiguration {
     this.includeQueryPredictions = false,
     this.showDistanceFromOrigin = false,
     this.showPhotos = true,
+    this.customRows = false,
     this.pageSize = 5,
   });
 
@@ -124,6 +125,7 @@ class DemoConfiguration {
   final bool includeQueryPredictions;
   final bool showDistanceFromOrigin;
   final bool showPhotos;
+  final bool customRows;
   final int pageSize;
 
   /// Origin handed to the autocomplete widgets, or `null` when the demo is
@@ -139,6 +141,7 @@ class DemoConfiguration {
     bool? includeQueryPredictions,
     bool? showDistanceFromOrigin,
     bool? showPhotos,
+    bool? customRows,
     int? pageSize,
   }) {
     return DemoConfiguration(
@@ -152,6 +155,7 @@ class DemoConfiguration {
       showDistanceFromOrigin:
           showDistanceFromOrigin ?? this.showDistanceFromOrigin,
       showPhotos: showPhotos ?? this.showPhotos,
+      customRows: customRows ?? this.customRows,
       pageSize: pageSize ?? this.pageSize,
     );
   }
@@ -200,6 +204,9 @@ class _ExampleAppState extends State<ExampleApp> {
   bool get _includeQueryPredictions => _configuration.includeQueryPredictions;
 
   PlaceCoordinates? get _origin => _configuration.origin;
+
+  PlacesSuggestionItemBuilder? get _suggestionItemBuilder =>
+      _configuration.customRows ? _customSuggestionRow : null;
 
   /// The details fields, with `PlaceField.photos` only when the photo demo is
   /// on — without it, `place.photos` comes back empty.
@@ -328,6 +335,7 @@ class _ExampleAppState extends State<ExampleApp> {
             selectionFields: _detailsFields,
             fieldMode: _fieldMode,
             includeQueryPredictions: _includeQueryPredictions,
+            suggestionItemBuilder: _suggestionItemBuilder,
             onSelection: (selection) {
               setState(() {
                 _selection = selection;
@@ -354,6 +362,11 @@ class _ExampleAppState extends State<ExampleApp> {
               });
             },
           ),
+          // A dialog or fullscreen field searches with a controller of its
+          // own, so this one has a status to show only inline.
+          if (_configuration.customRows &&
+              _fieldMode == PlacesAutocompleteFieldMode.inline)
+            _ControllerStatus(controller: _controller),
           const SizedBox(height: 24),
         ],
         if (_widgetType == WidgetType.formField) ...<Widget>[
@@ -373,6 +386,7 @@ class _ExampleAppState extends State<ExampleApp> {
               fetchTimeZoneOnSelection: _fetchTimeZoneOnSelection,
               selectionFields: _detailsFields,
               includeQueryPredictions: _includeQueryPredictions,
+              suggestionItemBuilder: _suggestionItemBuilder,
               validator: (selection) => selection == null
                   ? 'Choose a place before submitting.'
                   : null,
@@ -401,6 +415,8 @@ class _ExampleAppState extends State<ExampleApp> {
               },
             ),
           ),
+          if (_configuration.customRows)
+            _ControllerStatus(controller: _controller),
           const SizedBox(height: 12),
           Wrap(
             spacing: 12,
@@ -589,6 +605,7 @@ class _ExampleAppState extends State<ExampleApp> {
         if (_configuration.showPhotos) PlaceField.photos,
       },
       includeQueryPredictions: _includeQueryPredictions,
+      suggestionItemBuilder: _suggestionItemBuilder,
       onQuerySelection: (selection) {
         setState(() {
           _selection = null;
@@ -978,6 +995,11 @@ class _ConfigurationSummary extends StatelessWidget {
                     label: Text('Photos'),
                     visualDensity: VisualDensity.compact,
                   ),
+                if (configuration.customRows)
+                  const Chip(
+                    label: Text('Custom rows'),
+                    visualDensity: VisualDensity.compact,
+                  ),
               ],
             ),
           ],
@@ -1175,6 +1197,19 @@ class _ConfigurationSheetState extends State<_ConfigurationSheet> {
                         () => _draft = _draft.copyWith(showPhotos: value),
                       ),
                     ),
+                    SwitchListTile(
+                      key: const ValueKey<String>('configuration-custom-rows'),
+                      contentPadding: EdgeInsets.zero,
+                      value: _draft.customRows,
+                      title: const Text('Custom suggestion rows'),
+                      subtitle: const Text(
+                        'Builds each row with suggestionItemBuilder, and shows '
+                        "an inline field controller's status under it.",
+                      ),
+                      onChanged: (value) => setState(
+                        () => _draft = _draft.copyWith(customRows: value),
+                      ),
+                    ),
                     if (_draft.textSearchMode == TextSearchMode.paged)
                       DropdownButtonFormField<int>(
                         key: const ValueKey<String>('configuration-page-size'),
@@ -1225,6 +1260,55 @@ class _ConfigurationSheetState extends State<_ConfigurationSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The "Custom suggestion rows" demo: each row built by
+/// `suggestionItemBuilder`, with an icon for the kind of suggestion and the
+/// keyboard highlight in the theme's focus colour.
+Widget _customSuggestionRow(
+  BuildContext context,
+  PlacesSuggestionItemData item,
+) {
+  final (icon, title, subtitle) = switch (item.suggestion) {
+    final PlaceSuggestion place => (
+      Icons.location_on_outlined,
+      place.primaryText.text,
+      place.secondaryText?.text,
+    ),
+    final QuerySuggestion query => (
+      Icons.manage_search,
+      query.displayText,
+      null,
+    ),
+  };
+  return ListTile(
+    leading: Icon(icon),
+    title: Text(title),
+    subtitle: subtitle == null ? null : Text(subtitle),
+    tileColor: item.highlighted ? Theme.of(context).focusColor : null,
+    onTap: item.onSelected,
+  );
+}
+
+/// What a custom search UI reads from the controller: the search's status.
+class _ControllerStatus extends StatelessWidget {
+  const _ControllerStatus({required this.controller});
+
+  final PlacesAutocompleteController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) => Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text(
+          'Controller status: ${controller.status?.name ?? 'no search'}',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
       ),
     );
   }
