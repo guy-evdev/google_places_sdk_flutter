@@ -1,5 +1,7 @@
 ## 0.7.0
 
+### October 26, 2026
+
 **Breaking changes:**
 
 * Requires Flutter `3.44.0` and Dart `3.12.0` or later.
