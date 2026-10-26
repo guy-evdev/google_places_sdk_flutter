@@ -40,6 +40,32 @@ The application sends its own short-lived authentication to the proxy. The
 proxy verifies that authentication and adds the restricted Google credential
 only when it calls Google.
 
+### What the authentication callback receives
+
+`authentication` is called before **every** proxy request, so it can return a
+fresh or rotated token each time. It receives a `PlacesProxyRequest`:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `operation` | `PlacesOperation` | Which call this is — `autocomplete`, `placeDetails`, `photoMedia`, `timeZone`, `textSearch`, or `nearbySearch`. |
+| `method` | `String` | The HTTP method, uppercase. |
+| `uri` | `Uri` | The final proxy URI. It can contain request parameters, so do not log it. |
+
+Return the headers to add, for example to scope a token by operation:
+
+```dart
+authentication: (request) async => <String, String>{
+  'Authorization': 'Bearer ${await tokens.forOperation(request.operation)}',
+},
+```
+
+The callback is subject to `requestTimeout` and to cancellation. If it throws,
+the request fails with a `PlacesException` of kind `proxy`. Returning `Content-Type`,
+`Content-Length`, `Host`, `X-Goog-Api-Key`, `X-Goog-FieldMask`, or
+`X-Goog-User-Project` — or a header with a line break — fails the request with
+a `configuration` error instead of sending it. `PlacesProxyRequest.toString()`
+redacts the URI.
+
 The package never adds `key` or `X-Goog-Api-Key` to a proxy request. Endpoints
 must use HTTPS, except for loopback development, and cannot contain credentials,
 query parameters, or fragments.
@@ -50,14 +76,28 @@ Every Places operation authenticates with the `X-Goog-Api-Key` header. No API
 key is ever added to a request path or query string, and a regression test
 asserts this across every operation.
 
-The single exception is the Google Time Zone API, which offers no header
-authentication and requires `key` as a query parameter. Applications that treat
-URLs as sensitive should route Time Zone through a proxy `timeZoneEndpoint`,
-which removes the key from the client entirely.
+There are two exceptions, both because Google offers no other way, and the
+tests assert each one so they stay visible:
+
+- The Google Time Zone API has no header authentication and requires `key` as
+  a query parameter. Applications that treat URLs as sensitive should route
+  Time Zone through a proxy `timeZoneEndpoint`, which removes the key from the
+  client entirely.
+- On web, the Maps JavaScript API loads from a script address that carries
+  the key. Use a browser key restricted to your app's websites, as Google
+  recommends for that API; a keyless proxy client never loads it.
 
 > **Fixed in 0.6.1.** Versions `0.5.0`–`0.6.0` also appended `key` to the photo
 > media URL, where proxy logs, CDN logs, and browser history could record it. If
 > an application called `fetchPhotoMedia` on those versions, rotate that API key.
+
+### Photo images do not pass through the proxy
+
+`fetchPhotoMedia` — and `PlacePhotoView`, which calls it — goes through the
+proxy like every other operation, and returns the photo's address. The image
+itself is then downloaded by Flutter's image loader directly from that address,
+with no API key and without passing through the proxy. An application that uses the proxy to control where its traffic goes
+should allow that host, or not show photos.
 
 ### Proxy responsibilities
 
@@ -105,7 +145,7 @@ final client = PlacesClient(
 for HTTP work. `disabled` turns off direct and proxy HTTP operations.
 
 Direct browser REST fallback is deprecated because a browser cannot keep a
-web-service key secret. It remains the `0.6.x` compatibility default and is
+web-service key secret. It remains the `0.x` compatibility default and is
 scheduled to stop being the default in `1.0.0`.
 
 ## Direct Android and iOS REST fallback
@@ -184,8 +224,8 @@ Place Photos and Time Zone are HTTP operations on every platform. Prefer the
 authenticated proxy path when an untrusted client would otherwise carry a
 web-service key.
 
-When displaying a photo, render every returned author attribution. The simplest
-Flutter implementation is:
+When displaying a photo, render every returned author attribution.
+`PlacePhotoView` does this for you; for an image you show yourself, use:
 
 ```dart
 PlacesPhotoAttribution(photo: photo)
@@ -224,6 +264,18 @@ const options = PlacesClientOptions(
 | Place Photo media | Places REST | Not exposed | Required without proxy | Available |
 | Time Zone | Time Zone REST | Not exposed | Required without proxy | With `timeZoneEndpoint` |
 
+The web columns apply to JavaScript and Wasm builds alike.
+
+## Version 0.7 compatibility notices
+
+- **0.7.0:** Wasm web builds (`flutter build web --wasm`) use the web backend
+  and follow `PlacesWebOptions.fallbackPolicy`. Through `0.6.x` they used the
+  REST backend instead, so a client with an `apiKey` called Google's REST API
+  from the browser with the key, even under `disabled` or `proxyOnly`. `0.6.x`
+  will not be patched. A Wasm app now needs the Maps JavaScript API enabled
+  for its key; see
+  [step 13 of the migration guide](../MIGRATION.md#13-wasm-web-builds-use-the-maps-javascript-api).
+
 ## Version 0.6 compatibility notices
 
 - **0.6.1:** photo media no longer sends the API key as a URL query parameter.
@@ -233,7 +285,7 @@ const options = PlacesClientOptions(
 - Proxy requests no longer receive a Google API key from the application. An
   existing proxy that expected `key` or `X-Goog-Api-Key` must add its own
   server-side credential.
-- Direct browser REST fallback is deprecated but remains the `0.6.x` default.
+- Direct browser REST fallback is deprecated but remains the `0.x` default.
 
 See [What's new in 0.6.0](whats_new_0_6_0.md) for replacement examples and the
 complete release summary, and [What's new in 0.6.1](whats_new_0_6_1.md) for the

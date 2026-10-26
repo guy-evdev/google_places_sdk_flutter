@@ -1,10 +1,15 @@
 # google_places_sdk_flutter example
 
-This app demonstrates inline, Form/reset, dialog, and fullscreen autocomplete;
-place and query suggestions; details and time-zone enrichment; localized RTL
-UI; paged Text Search and the current stable Place resource fields; and the
-suggestion distances and launcher-mode customization added in package version
-`0.6.1`.
+This app demonstrates the package's widgets in every mode — inline, in a `Form`
+with reset, in a dialog, and fullscreen — with place and query suggestions, the
+coordinates and parsed address a pick returns, place photos, time-zone lookups,
+suggestion distances, custom suggestion rows, a right-to-left UI, and paged
+Text Search.
+
+As of package version `0.7.0` the app is built on
+[`material_ui`](https://pub.dev/packages/material_ui) rather than
+`package:flutter/material.dart`, and its localization delegates come from
+`GlobalMaterialLocalizations.delegates`. It requires Flutter `>=3.44.0` and Dart `>=3.12.0`.
 
 Run it with a Google Maps Platform key:
 
@@ -43,9 +48,28 @@ Every widget mode uses the same `decoration`, so switching between Text Field,
 Dialog, and Fullscreen shows the label and prefix icon in all three. Before
 `0.6.1` the dialog and fullscreen launchers silently dropped it.
 
-The advanced configuration section contains optional Place Details, Time Zone,
-query-prediction, distance, and page-size controls. These are kept out of the
-main flow so the simplest widget and Text Search examples remain easy to follow.
+The advanced configuration section turns Place Details (on by default, as in
+the package), Time Zone, query predictions, distances, photos, and custom
+suggestion rows on and off, and sets the Text Search page size. These are kept
+out of the main flow so the simplest widget and Text Search examples remain
+easy to follow.
+
+After a pick, the **Coordinates and address** card lists the place's location
+and the address getters the README's "What you get back" shows: `streetAddress`,
+`unit`, `city`, `administrativeArea`, `postalCode`, `country`, and
+`countryShort`.
+
+**Show place photos** (on by default) adds `PlaceField.photos` to the details
+request and shows the photos in a strip of `PlacePhotoView`s. Each photo shown
+is one billed Place Photos request. The strip passes
+`onOpenLink: (uri) => launchUrl(uri)`, which is why the example — and only the
+example — depends on `url_launcher`: on mobile and desktop it is what opens the
+"View on Google Maps" link Google requires. The package itself takes no plugin
+dependency.
+
+**Custom suggestion rows** builds each suggestion with `suggestionItemBuilder`,
+in every mode, and under an inline field shows the field controller's `status`
+— loading, results, empty, or error — as it changes.
 
 **Show distance from an origin** sends `origin` with each autocomplete request,
 so Google returns a distance for every suggestion and the widget renders it. The

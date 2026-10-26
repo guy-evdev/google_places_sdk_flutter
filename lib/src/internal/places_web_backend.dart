@@ -17,7 +17,10 @@ import 'error_handling.dart';
 import 'place_field_mapping.dart';
 import 'proxy_transport.dart';
 
+/// Places backend for web builds, using the Google Maps JavaScript library and HTTP.
 class PlacesWebBackend implements PlacesBackend {
+  /// Creates the backend; throws a configuration error for conflicting or unsupported
+  /// options.
   PlacesWebBackend({
     required this.apiKey,
     this.proxyConfiguration,
@@ -55,10 +58,20 @@ class PlacesWebBackend implements PlacesBackend {
       'suggestions.placePrediction.distanceMeters,'
       'suggestions.placePrediction.types';
 
+  /// The Google API key.
   final String apiKey;
+
+  /// Proxy configuration, mutually exclusive with [proxyBaseUrl].
   final PlacesProxyConfiguration? proxyConfiguration;
+
+  /// Base URL replacing the default Places endpoint, mutually exclusive with
+  /// [proxyConfiguration].
   final String? proxyBaseUrl;
+
+  /// Overrides the default Time Zone endpoint.
   final String? timeZoneBaseUrl;
+
+  /// Client options this backend was created with.
   final PlacesClientOptions options;
   final http.Client _httpClient;
   final AutocompleteSessionCache<JSObject, JSObject> _autocompleteSessions =
@@ -101,6 +114,16 @@ class PlacesWebBackend implements PlacesBackend {
       return _autocompleteSuggestionsOverHttp(
         request,
         cancellationToken: cancellationToken,
+      );
+    }
+    // REST accepts a circle; the Maps JavaScript API takes only bounds. Fail
+    // rather than send a restriction it would reject or ignore.
+    if (request.locationRestriction?.area is CircleArea) {
+      throw const PlacesException.validation(
+        'Through the Maps JavaScript API, an autocomplete '
+        'locationRestriction must be a rectangle.',
+        operation: PlacesOperation.autocomplete,
+        code: 'invalid_location_restriction_shape',
       );
     }
     return _runJavaScript(
@@ -153,11 +176,6 @@ class PlacesWebBackend implements PlacesBackend {
             sessionToken: cachePredictions ? sessionToken : null,
           ),
         );
-        continue;
-      }
-      final queryPrediction = suggestion.getProperty('queryPrediction'.toJS);
-      if (queryPrediction != null) {
-        items.add(_queryPredictionToSuggestion(queryPrediction as JSObject));
       }
     }
     return items;
@@ -412,9 +430,7 @@ class PlacesWebBackend implements PlacesBackend {
         if (request.locationRestriction != null)
           'locationRestriction': request.locationRestriction!.area.toWebJson(),
         if (request.pageSize != null) 'maxResultCount': request.pageSize,
-        // ignore: deprecated_member_use_from_same_package
         if (request.pageSize == null && request.maxResultCount != null)
-          // ignore: deprecated_member_use_from_same_package
           'maxResultCount': request.maxResultCount,
         if (request.priceLevels.isNotEmpty)
           'priceLevels': request.priceLevels
@@ -636,17 +652,10 @@ class PlacesWebBackend implements PlacesBackend {
       await _waitForImportLibrary();
       return;
     }
-    final scriptUri =
-        Uri.https('maps.googleapis.com', '/maps/api/js', <String, String>{
-          'key': apiKey,
-          'loading': 'async',
-          'libraries': 'places',
-          'v': options.web.versionChannel.name,
-        });
     final script = web.HTMLScriptElement()
       ..id = _mapsScriptId
       ..async = true
-      ..src = scriptUri.toString();
+      ..src = mapsJavaScriptUri(apiKey, options.web.versionChannel).toString();
     final cspNonce = options.web.cspNonce;
     if (cspNonce != null) {
       script.nonce = cspNonce;
@@ -697,25 +706,7 @@ class PlacesWebBackend implements PlacesBackend {
   }) {
     request.validate();
     return <String, Object?>{
-          'input': request.input,
-          if (request.languageCode != null) 'language': request.languageCode,
-          if (request.regionCode != null) 'region': request.regionCode,
-          if (request.inputOffset != null) 'inputOffset': request.inputOffset,
-          if (request.origin != null) 'origin': request.origin!.toWebJson(),
-          if (request.locationBias != null)
-            'locationBias': request.locationBias!.area.toWebJson(),
-          if (request.locationRestriction != null)
-            'locationRestriction': request.locationRestriction!.area
-                .toWebJson(),
-          if (request.includedPrimaryTypes.isNotEmpty)
-            'includedPrimaryTypes': request.includedPrimaryTypes,
-          if (request.includedRegionCodes.isNotEmpty)
-            'includedRegionCodes': request.includedRegionCodes,
-          if (request.includePureServiceAreaBusinesses)
-            'pureServiceAreaBusinessesIncluded': true,
-          if (request.includeFutureOpeningBusinesses)
-            'futureOpeningBusinessesIncluded': true,
-          if (request.includeQueryPredictions) 'includeQueryPredictions': true,
+          ...webAutocompleteRequest(request),
           if (request.sessionToken != null)
             'sessionToken': _sessionTokenFor(
               request.sessionToken!,
@@ -781,17 +772,6 @@ class PlacesWebBackend implements PlacesBackend {
             'place':
                 ((prediction.getProperty('place'.toJS) as JSString?)?.toDart),
           },
-    );
-  }
-
-  QuerySuggestion _queryPredictionToSuggestion(JSObject prediction) {
-    final text = _structuredTextFromJs(prediction.getProperty('text'.toJS));
-    return QuerySuggestion(
-      fullText: text,
-      matches: text.matches,
-      rawData:
-          _dartify(prediction as JSAny?) as Map<String, Object?>? ??
-          <String, Object?>{'text': text.text},
     );
   }
 
@@ -1168,7 +1148,6 @@ class PlacesWebBackend implements PlacesBackend {
 
   void _ensureHttpAllowed(PlacesOperation operation) {
     switch (options.web.fallbackPolicy) {
-      // ignore: deprecated_member_use_from_same_package
       case PlacesWebFallbackPolicy.direct:
         return;
       case PlacesWebFallbackPolicy.proxyOnly:
@@ -1316,6 +1295,50 @@ class PlacesWebBackend implements PlacesBackend {
     return value;
   }
 }
+
+/// The Maps JavaScript form of an autocomplete [request], without its session
+/// token.
+///
+/// It leaves out two things the REST body carries, because Maps JavaScript
+/// rejects them: an `inputOffset` equal to the input's length — REST's own
+/// default, so leaving it out changes nothing — and `includeQueryPredictions`,
+/// which Maps JavaScript does not have.
+@visibleForTesting
+Map<String, Object?> webAutocompleteRequest(AutocompleteRequest request) =>
+    <String, Object?>{
+      'input': request.input,
+      if (request.languageCode != null) 'language': request.languageCode,
+      if (request.regionCode != null) 'region': request.regionCode,
+      if (request.inputOffset != null &&
+          request.inputOffset != request.input.runes.length)
+        'inputOffset': request.inputOffset,
+      if (request.origin != null) 'origin': request.origin!.toWebJson(),
+      if (request.locationBias != null)
+        'locationBias': request.locationBias!.area.toWebJson(),
+      if (request.locationRestriction != null)
+        'locationRestriction': request.locationRestriction!.area.toWebJson(),
+      if (request.includedPrimaryTypes.isNotEmpty)
+        'includedPrimaryTypes': request.includedPrimaryTypes,
+      if (request.includedRegionCodes.isNotEmpty)
+        'includedRegionCodes': request.includedRegionCodes,
+      if (request.includePureServiceAreaBusinesses)
+        'pureServiceAreaBusinessesIncluded': true,
+      if (request.includeFutureOpeningBusinesses)
+        'futureOpeningBusinessesIncluded': true,
+    };
+
+/// The address the Maps JavaScript API loads from. It carries [apiKey]: one of
+/// the two places a credential appears in a URL, because Google offers no
+/// other way to load the library. The key should be a browser key restricted
+/// to the app's websites.
+@visibleForTesting
+Uri mapsJavaScriptUri(String apiKey, PlacesWebVersionChannel channel) =>
+    Uri.https('maps.googleapis.com', '/maps/api/js', <String, String>{
+      'key': apiKey,
+      'loading': 'async',
+      'libraries': 'places',
+      'v': channel.name,
+    });
 
 /// Whether a Maps JavaScript failure means "this field set is unsupported",
 /// which is the only case the HTTP fallback is meant to cover.

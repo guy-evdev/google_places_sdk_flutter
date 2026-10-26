@@ -3,13 +3,13 @@
 .github/
 .idea/
 .vscode/
-AGENTS.md
 build/
 coverage/
 doc/api/
-doc/documentation_style.md
-roadmap.md
-roadmap_history.md
+CLAUDE.md
+RELEASE_WORKFLOW.md
+ROADMAP.md
+ROADMAP_HISTORY.md
 pubspec.lock
 example/.dart_tool/
 example/build/
@@ -18,3 +18,5 @@ example/ios/Flutter/ephemeral/
 example/pubspec.lock
 *.iml
 **/.DS_Store
+# The README loads it from raw.githubusercontent.com; the archive copy is never used.
+assets/readme/example.gif

@@ -4,6 +4,32 @@ import 'package:google_places_sdk_flutter/src/internal/place_field_mapping.dart'
 
 void main() {
   group('AutocompleteRequest', () {
+    // Literal values, so an edit to a preset cannot silently change what is
+    // sent to Google.
+    test('the type presets are valid and sent as Google type names', () {
+      final presets = <List<String>, List<String>>{
+        PlaceTypePresets.cities: <String>['(cities)'],
+        PlaceTypePresets.regions: <String>['(regions)'],
+        PlaceTypePresets.postalCode: <String>['postal_code'],
+        PlaceTypePresets.address: <String>[
+          'street_address',
+          'premise',
+          'subpremise',
+        ],
+        PlaceTypePresets.establishment: <String>['establishment'],
+        // The combination the dartdoc shows.
+        <String>[...PlaceTypePresets.address, ...PlaceTypePresets.postalCode]:
+            <String>['street_address', 'premise', 'subpremise', 'postal_code'],
+      };
+      for (final MapEntry(key: preset, value: wire) in presets.entries) {
+        final request = AutocompleteRequest(
+          input: 'main',
+          includedPrimaryTypes: preset,
+        )..validate();
+        expect(request.toRestJson()['includedPrimaryTypes'], wire);
+      }
+    });
+
     test('serializes the new API request shape', () {
       final request = AutocompleteRequest(
         input: 'coffee',
@@ -175,7 +201,6 @@ void main() {
       const request = TextSearchRequest(
         textQuery: 'coffee',
         pageSize: 10,
-        // ignore: deprecated_member_use_from_same_package
         maxResultCount: 5,
       );
 
@@ -193,11 +218,7 @@ void main() {
     });
 
     test('still sends deprecated maxResultCount when pageSize is absent', () {
-      const request = TextSearchRequest(
-        textQuery: 'coffee',
-        // ignore: deprecated_member_use_from_same_package
-        maxResultCount: 5,
-      );
+      const request = TextSearchRequest(textQuery: 'coffee', maxResultCount: 5);
 
       final json = request.toRestJson();
 
@@ -548,6 +569,21 @@ void main() {
           },
         ],
       },
+      'entrances': <Map<String, Object?>>[
+        <String, Object?>{
+          'location': <String, Object?>{'latitude': 40.71, 'longitude': -74.01},
+          'tags': <String>['PREFERRED'],
+        },
+      ],
+      'navigationPoints': <Map<String, Object?>>[
+        <String, Object?>{
+          'navigationPointToken': 'np-1',
+          'displayName': <String, Object?>{'text': 'Gate B'},
+          'location': <String, Object?>{'latitude': 40.72, 'longitude': -74.02},
+          'travelModes': <String>['WALK'],
+          'usages': <String>['DROPOFF'],
+        },
+      ],
     });
 
     expect(place.adrFormatAddress, contains('1 Main St'));
@@ -578,6 +614,16 @@ void main() {
     expect(place.transitStation?.displayName?.text, 'Central Station');
     expect(place.transitStation?.agencies.single.lines.single.id, 'A');
     expect(place.transitStation?.stops.single.location?.latitude, 40.7);
+    expect(place.entrances.single['tags'], <String>['PREFERRED']);
+    expect(place.navigationPoints.single['navigationPointToken'], 'np-1');
+    expect(
+      () => (place.entrances.single['tags']! as List<Object?>).add('x'),
+      throwsUnsupportedError,
+    );
+    expect(
+      () => place.navigationPoints.add(<String, Object?>{}),
+      throwsUnsupportedError,
+    );
 
     expect(
       () => place.attributions.add(const PlaceAttribution(provider: 'x')),
@@ -699,6 +745,8 @@ void main() {
       PlaceField.pureServiceAreaBusiness,
       PlaceField.movedPlace,
       PlaceField.movedPlaceId,
+      PlaceField.entrances,
+      PlaceField.navigationPoints,
     };
 
     final detailsRequest = PlaceDetailsRequest(
@@ -719,6 +767,74 @@ void main() {
       fields.map((field) => field.searchMaskPath).join(','),
     );
   });
+
+  test('location areas compare by value', () {
+    const center = PlaceCoordinates(latitude: 1, longitude: 2);
+    const high = PlaceCoordinates(latitude: 3, longitude: 4);
+    expect(
+      LocationBias.circle(center: center, radiusMeters: 5),
+      LocationBias.circle(center: center, radiusMeters: 5),
+    );
+    expect(
+      LocationBias.circle(center: center, radiusMeters: 5),
+      isNot(LocationBias.circle(center: center, radiusMeters: 6)),
+    );
+    expect(
+      LocationRestriction.rectangle(low: center, high: high),
+      LocationRestriction.rectangle(low: center, high: high),
+    );
+    expect(
+      LocationRestriction.rectangle(low: center, high: high).hashCode,
+      LocationRestriction.rectangle(low: center, high: high).hashCode,
+    );
+    expect(
+      LocationRestriction.rectangle(low: center, high: high),
+      isNot(LocationRestriction.circle(center: center, radiusMeters: 5)),
+    );
+    expect(
+      LocationBias.circle(center: center, radiusMeters: 5),
+      isNot(LocationRestriction.circle(center: center, radiusMeters: 5)),
+    );
+  });
+
+  test(
+    'the all preset holds every PlaceField and is valid on every operation',
+    () {
+      expect(PlaceFieldPresets.all, PlaceField.values.toSet());
+      expect(PlaceFieldPresets.all, contains(PlaceField.entrances));
+      expect(PlaceFieldPresets.all, contains(PlaceField.navigationPoints));
+      expect(
+        () => PlaceFieldPresets.all.add(PlaceField.id),
+        throwsUnsupportedError,
+      );
+
+      final allNames = PlaceField.values.map((field) => field.apiName);
+      expect(
+        PlaceDetailsRequest(
+          placeId: 'place-1',
+          fields: PlaceFieldPresets.all,
+        ).detailsFieldMask.split(','),
+        allNames,
+      );
+      expect(
+        TextSearchRequest(
+          textQuery: 'coffee',
+          fields: PlaceFieldPresets.all,
+        ).searchFieldMask.split(','),
+        allNames.map((name) => 'places.$name'),
+      );
+      expect(
+        NearbySearchRequest(
+          locationRestriction: LocationRestriction.circle(
+            center: const PlaceCoordinates(latitude: 32.08, longitude: 34.78),
+            radiusMeters: 500,
+          ),
+          fields: PlaceFieldPresets.all,
+        ).searchFieldMask.split(','),
+        allNames.map((name) => 'places.$name'),
+      );
+    },
+  );
 
   test('maps REST field names to current Maps JavaScript Place properties', () {
     expect(webPlaceFieldName(PlaceField.openingDate), 'futureOpeningDate');
@@ -857,5 +973,160 @@ void main() {
       () => TimeZoneRequest.fromPlace(const PlaceData(id: 'place-1')),
       throwsA(isA<PlacesException>()),
     );
+  });
+
+  group('richer address getters', () {
+    PlaceData address(
+      String formattedAddress,
+      Map<String, String> components, {
+      Map<String, String> shortText = const <String, String>{},
+    }) => PlaceData.fromJson(<String, Object?>{
+      'id': 'place-1',
+      'formattedAddress': formattedAddress,
+      'addressComponents': <Map<String, Object?>>[
+        for (final entry in components.entries)
+          <String, Object?>{
+            'longText': entry.value,
+            'shortText': shortText[entry.key] ?? entry.value,
+            'types': <String>[entry.key],
+          },
+      ],
+    });
+
+    test('a US address', () {
+      final place = address(
+        '151 Broadway Apt 4B, New York, NY 10007-1234, USA',
+        <String, String>{
+          'subpremise': '4B',
+          'street_number': '151',
+          'route': 'Broadway',
+          'neighborhood': 'Financial District',
+          'locality': 'New York',
+          'administrative_area_level_2': 'New York County',
+          'administrative_area_level_1': 'New York',
+          'postal_code': '10007',
+          'postal_code_suffix': '1234',
+        },
+        shortText: const <String, String>{
+          'locality': 'NYC',
+          'neighborhood': 'FiDi',
+          'administrative_area_level_2': 'NY County',
+        },
+      );
+
+      expect(place.streetAddress, '151 Broadway');
+      expect(place.unit, '4B');
+      expect(place.neighborhood, 'Financial District');
+      expect(place.neighborhoodShort, 'FiDi');
+      expect(place.city, 'New York');
+      expect(place.cityShort, 'NYC');
+      expect(place.county, 'New York County');
+      expect(place.countyShort, 'NY County');
+      expect(place.postalCodeSuffix, '1234');
+    });
+
+    test('a UK address with no locality takes the city from postal_town', () {
+      final place =
+          address('10 Downing St, London SW1A 2AA, UK', <String, String>{
+            'street_number': '10',
+            'route': 'Downing Street',
+            'postal_town': 'London',
+            'postal_code': 'SW1A 2AA',
+          });
+
+      expect(place.locality, isNull);
+      expect(place.city, 'London');
+      expect(place.streetAddress, '10 Downing Street');
+    });
+
+    test('the street line follows the order of formattedAddress', () {
+      final place = address(
+        'Unter den Linden 77, 10117 Berlin, Germany',
+        <String, String>{
+          'route': 'Unter den Linden',
+          'street_number': '77',
+          'locality': 'Berlin',
+        },
+      );
+
+      expect(place.streetAddress, 'Unter den Linden 77');
+    });
+
+    test('the street line also matches the short route form', () {
+      final place = address(
+        'C. de Alcalá 42, 28014 Madrid, Spain',
+        <String, String>{'route': 'Calle de Alcalá', 'street_number': '42'},
+        shortText: const <String, String>{'route': 'C. de Alcalá'},
+      );
+
+      expect(place.streetAddress, 'Calle de Alcalá 42');
+    });
+
+    test('the street line is whichever part exists', () {
+      expect(
+        address('Broadway', <String, String>{
+          'route': 'Broadway',
+        }).streetAddress,
+        'Broadway',
+      );
+      expect(address('', <String, String>{}).streetAddress, isNull);
+    });
+
+    test('city falls back through sublocality and admin area level 3', () {
+      expect(
+        address('', <String, String>{
+          'sublocality_level_1': 'Brooklyn',
+          'administrative_area_level_3': 'Kings',
+        }).city,
+        'Brooklyn',
+      );
+      expect(
+        address('', <String, String>{
+          'administrative_area_level_3': 'Kings',
+        }).city,
+        'Kings',
+      );
+      expect(address('', <String, String>{}).city, isNull);
+      expect(
+        PlaceData.fromJson(const <String, Object?>{
+          'id': 'place-1',
+          'postalAddress': <String, Object?>{'locality': 'Lyon'},
+        }).city,
+        'Lyon',
+      );
+    });
+  });
+
+  group('PlaceSelection.fromPlace', () {
+    test('shows the formatted address, then the name, then the ID', () {
+      const id = 'ChIJ-saved';
+      final full = PlaceSelection.fromPlace(
+        const PlaceData(
+          id: id,
+          resourceName: 'places/ChIJ-saved',
+          displayName: LocalizedText(text: 'Coffee Lab'),
+          formattedAddress: '1 Main Street, Springfield',
+        ),
+      );
+      expect(full.displayText, '1 Main Street, Springfield');
+      expect(full.suggestion.primaryText.text, 'Coffee Lab');
+      expect(full.placeId, id);
+      expect(full.suggestion.placeResourceName, 'places/ChIJ-saved');
+      expect(full.sessionToken, isNull);
+      expect(full.hasResolvedPlace, isTrue);
+
+      final named = PlaceSelection.fromPlace(
+        const PlaceData(
+          id: id,
+          displayName: LocalizedText(text: 'Coffee Lab'),
+        ),
+      );
+      expect(named.displayText, 'Coffee Lab');
+      expect(named.suggestion.placeResourceName, 'places/ChIJ-saved');
+
+      final bare = PlaceSelection.fromPlace(const PlaceData(id: id));
+      expect(bare.displayText, id);
+      expect(bare.suggestion.primaryText.text, id);
+    });
   });
 }

@@ -4,6 +4,8 @@ import 'backend.dart';
 import 'places_http_backend.dart';
 import '../places_client_options.dart';
 
+/// Creates the HTTP backend; an injected [httpClient] is used only when it is an
+/// `http.Client`.
 PlacesBackend createPlacesBackend({
   required String apiKey,
   PlacesProxyConfiguration? proxyConfiguration,

@@ -86,6 +86,154 @@ void main() {
     },
   );
 
+  group('autocomplete circle restriction', () {
+    final circle = LocationRestriction.circle(
+      center: const PlaceCoordinates(latitude: 32.08, longitude: 34.78),
+      radiusMeters: 1000,
+    );
+
+    test('fails before the Maps JavaScript API is called', () async {
+      var httpCalls = 0;
+      final backend = PlacesWebBackend(
+        apiKey: 'browser-key',
+        httpClient: MockClient((request) async {
+          httpCalls++;
+          return http.Response('{}', 200);
+        }),
+      );
+
+      await expectLater(
+        () => backend.autocompleteSuggestions(
+          AutocompleteRequest(input: 'coffee', locationRestriction: circle),
+        ),
+        throwsA(
+          isA<PlacesException>()
+              .having((error) => error.kind, 'kind', PlacesErrorKind.validation)
+              .having(
+                (error) => error.code,
+                'code',
+                'invalid_location_restriction_shape',
+              ),
+        ),
+      );
+      expect(httpCalls, 0);
+      await backend.close();
+    });
+
+    test('is sent over REST, where it is valid', () async {
+      late http.Request sentRequest;
+      final backend = PlacesWebBackend(
+        apiKey: '',
+        proxyConfiguration: PlacesProxyConfiguration(
+          placesEndpoint: Uri.parse('https://proxy.example.test/places/v1'),
+        ),
+        httpClient: MockClient((request) async {
+          sentRequest = request;
+          return http.Response('{"suggestions":[]}', 200);
+        }),
+      );
+
+      await backend.autocompleteSuggestions(
+        AutocompleteRequest(input: 'coffee', locationRestriction: circle),
+      );
+
+      final body = jsonDecode(sentRequest.body) as Map<String, Object?>;
+      expect(
+        (body['locationRestriction']! as Map<String, Object?>)['circle'],
+        isNotNull,
+      );
+      await backend.close();
+    });
+  });
+
+  group('Maps JavaScript autocomplete request', () {
+    // Maps JavaScript rejects this with "'inputOffset' should be less than
+    // 'input.length'"; REST treats it as the default. The widget sends it
+    // whenever the cursor is at the end, so this was every keystroke.
+    test('leaves out an inputOffset at the end of the input', () {
+      expect(
+        webAutocompleteRequest(
+          const AutocompleteRequest(input: 'Empire', inputOffset: 6),
+        ),
+        isNot(contains('inputOffset')),
+      );
+    });
+
+    test('measures the end in Unicode characters, not UTF-16 units', () {
+      expect(
+        webAutocompleteRequest(
+          const AutocompleteRequest(input: '😀ab', inputOffset: 3),
+        ),
+        isNot(contains('inputOffset')),
+      );
+    });
+
+    test('keeps an inputOffset inside the input', () {
+      expect(
+        webAutocompleteRequest(
+          const AutocompleteRequest(input: 'Empire', inputOffset: 3),
+        )['inputOffset'],
+        3,
+      );
+    });
+
+    test('never asks for query predictions, which it does not have', () {
+      expect(
+        webAutocompleteRequest(
+          const AutocompleteRequest(
+            input: 'coffee',
+            includeQueryPredictions: true,
+          ),
+        ),
+        isNot(contains('includeQueryPredictions')),
+      );
+    });
+  });
+
+  test('the Maps JavaScript loader is the other operation that keys a URI', () {
+    // Google loads the library only from a script address with the key in it.
+    // Asserted explicitly, like the Time Zone API, so the exception stays
+    // visible rather than becoming a habit.
+    final uri = mapsJavaScriptUri(
+      'browser-key',
+      PlacesWebVersionChannel.quarterly,
+    );
+
+    expect(uri.host, 'maps.googleapis.com');
+    expect(uri.queryParameters['key'], 'browser-key');
+    expect(uri.queryParameters['v'], 'quarterly');
+  });
+
+  test('keyless web proxy returns query suggestions over REST', () async {
+    final backend = PlacesWebBackend(
+      apiKey: '',
+      proxyConfiguration: PlacesProxyConfiguration(
+        placesEndpoint: Uri.parse('https://proxy.example.test/places/v1'),
+      ),
+      httpClient: MockClient(
+        (request) async => http.Response(
+          jsonEncode(<String, Object?>{
+            'suggestions': <Object?>[
+              <String, Object?>{
+                'queryPrediction': <String, Object?>{
+                  'text': <String, Object?>{'text': 'coffee near me'},
+                },
+              },
+            ],
+          }),
+          200,
+        ),
+      ),
+    );
+
+    final suggestions = await backend.autocompleteSuggestions(
+      const AutocompleteRequest(input: 'coffee', includeQueryPredictions: true),
+    );
+
+    expect(suggestions.single, isA<QuerySuggestion>());
+    await backend.close();
+  });
+
   test('proxy-only web policy rejects direct HTTP operations', () async {
     final backend = PlacesWebBackend(
       apiKey: 'browser-key',

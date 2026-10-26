@@ -194,7 +194,7 @@ path — a first GPS fix can take several seconds, and autocomplete should never
 wait on it.
 
 The full walkthrough is in the
-[README](../README.md#using-the-devices-location-as-the-origin). A built-in
+[recipes](recipes.md#using-the-devices-location-as-the-origin). A built-in
 resolver that owns the timing and caching for you is planned for a future version. the
 package will still never acquire location itself.
 

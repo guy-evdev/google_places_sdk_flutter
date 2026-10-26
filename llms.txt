@@ -1,0 +1,298 @@
+# google_places_sdk_flutter
+
+> Address autocomplete for Flutter on Google Places API (New). A text field (or a dialog/fullscreen
+> search) that returns the picked place's coordinates and parsed address, plus a typed client for
+> Place Details, Text Search, Nearby Search, Place Photos, and Time Zone. Pure Dart, no plugin, all
+> six Flutter platforms including Wasm. New-API only: there is no legacy Places API support.
+
+## Install
+
+```shell
+flutter pub add google_places_sdk_flutter
+```
+
+Requires Flutter >=3.44.0, Dart >=3.12.0. Enable "Places API (New)" (and, for web, "Maps
+JavaScript API") on a Google Cloud project with billing. Do not add `material_ui` to an app just
+for this package — it is this package's own dependency — unless the app passes `decoration:`. Import only:
+
+```dart
+import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
+```
+
+## Smallest working code
+
+```dart
+// A field on the page:
+PlacesAutocompleteField(
+  apiKey: const String.fromEnvironment('GOOGLE_MAPS_API_KEY'),
+  onSelection: (PlaceSelection selection) {
+    final place = selection.place; // filled in by default
+    debugPrint('${place?.location} ${place?.formattedAddress}');
+  },
+)
+
+// Or an awaitable picker:
+final PlaceSelection? selection = await PlacesAutocompleteOverlay.show(
+  context,
+  apiKey: const String.fromEnvironment('GOOGLE_MAPS_API_KEY'),
+  mode: PlacesAutocompleteOverlayMode.dialog, // or .fullscreen
+);
+```
+
+Run with `flutter run --dart-define=GOOGLE_MAPS_API_KEY=...`.
+
+## Widgets
+
+- `PlacesAutocompleteField` — inline field; `fieldMode:` `inline` (default), `dialog`, `fullscreen`.
+- `PlacesAutocompleteFormField` — the same inside a `Form`; standard `validator`, `onSaved`,
+  `initialValue`, `autovalidateMode`, `forceErrorText`, `errorBuilder`, `restorationId`. To start
+  from a saved place: store its place ID, then
+  `initialValue: PlaceSelection.fromPlace(await client.fetchPlaceById(savedId))`.
+- `PlacesAutocompleteOverlay.show(context, ...)` → `Future<PlaceSelection?>`; `null` if dismissed.
+- `PlacePhotoView(photo: photo, apiKey: key, height: 200, onOpenLink: (uri) => launchUrl(uri))`
+  — fetches and shows one photo with its required author attribution and "View on Google Maps"
+  link drawn over it (author names link to their profiles). Always pass `onOpenLink`
+  (`url_launcher` in the app): on Android, iOS, macOS, Windows and Linux it is what shows the link
+  Google requires; on web the link opens a new tab without it. Exactly one of `apiKey:` / `client:`.
+  `width`/`height` (logical px) set the requested size × device pixel ratio, capped at 4800;
+  `maxWidthPx`/`maxHeightPx` override. `builder: (context, view) => ...` gets `view.status`
+  (`PlacePhotoStatus.loading` / `loaded` / `error`), `view.image`, `view.error`
+  (`PlacesException`), `view.onRetry`, `view.attribution`, `view.defaultView`. No option hides the
+  attribution. Strips and galleries: `ListView` / `PageView` of `PlacePhotoView`s.
+- `PlacesPhotoAttribution(photo: photo, onOpenLink: ...)` — the attribution alone, beside an image
+  you show yourself.
+
+All four autocomplete surfaces (field, form field, overlay widget, `show()`) take **exactly one** of `apiKey:` (widget owns, replaces, and
+closes its client) or `client:` (caller owns a `PlacesClient`). Use `client:` to share a client,
+for `PlacesClient.proxy(...)`, or for an Android/iOS app-restricted key, which needs
+`PlacesClientOptions(applicationIdentity: PlacesApplicationIdentity.android(pkg, sha1))` or
+`.ios(bundleId)` — a client made from `apiKey:` sends no identity.
+
+Common options (same names on all surfaces): `languageCode`, `regionCode`, `origin`
+(`PlaceCoordinates`, makes Google return straight-line distances), `locationBias` /
+`locationRestriction` (mutually exclusive), `includedPrimaryTypes` (e.g. `['restaurant']`, or
+`PlaceTypePresets.cities` / `.regions` / `.postalCode` / `.address` / `.establishment`),
+`includedRegionCodes`, `includeQueryPredictions` + `onQuerySelection` / `searchOnQuerySelection`
+(default `false`; `true` searches again for a picked query), `fetchPlaceDetailsOnSelection` (default
+`true`), `selectionFields` (default `PlaceFieldPresets.address`), `fetchTimeZoneOnSelection`
+(default `false`), `maxSuggestions` (max 5), `decoration` (`material_ui`'s `InputDecoration`),
+`strings` (`PlacesStrings`), `fieldBuilder` / `suggestionItemBuilder` / `suggestionsViewBuilder`
+(below), `onError`, `onClearField` (clear button, or typing over a pick), `enabled`,
+`showPoweredByGoogle`, `includeFutureOpeningBusinesses`, `minInputLength` (default 1; no billed
+request below it), `debounceDuration` (`null` uses the controller's, 300 ms), `autofocus` (field
+widgets only), `controller` (`PlacesAutocompleteController`: text, focus, session, selection,
+`debounceDuration`; a widget's parameters and client apply while it uses one).
+Inline field widgets only: `unfocusOnSelection` (default `true`), `suggestionsViewOpenDirection`
+(`OptionsViewOpenDirection.mostSpace` / `.down` / `.up`).
+
+`TextField` options, under `TextField`'s names and defaults, passed to the default field on
+every surface: every `TextField` parameter except `controller`, `focusNode`, `decoration`,
+`enabled`, `autofocus` (the widget's own) and `readOnly`, `canRequestFocus`, `obscureText`,
+`obscuringCharacter`, `maxLines`, `minLines`, `expands`, `restorationId`, `toolbarOptions`,
+`scribbleEnabled`. `keyboardType` defaults to `TextInputType.streetAddress`. `onChanged`, `onTap`,
+`onTapOutside`, `onTapUpOutside` run alongside the widget's own handling; `scrollController`,
+`undoController`, `statesController` attach to the search field, not a launcher.
+
+Widget text: `strings: const PlacesStrings(searchHint: ..., loadingText: ..., noResultsText: ...,
+errorText: ..., retryText: ..., poweredByGoogleLabel: ..., overlayTitle: ..., closeLabel: ...,
+clearLabel: ..., placeSuggestionLabel: ..., querySuggestionLabel: ..., distanceUnitMeters: ...,
+photoAttributionPrefix: ..., viewOnGoogleMapsText: ...)`.
+Every default is English and the package does not pick strings from the app's locale yet, so a
+non-English app passes them all. `languageCode` sets Google's result language, not the widget's
+text. The photo widgets take the same `strings:` for "Photo by" (`photoAttributionPrefix`) and
+"View on Google Maps" (`viewOnGoogleMapsText`).
+
+Builders — each gets one data object and reaches every mode:
+
+```dart
+suggestionItemBuilder: (context, PlacesSuggestionItemData item) => switch (item.suggestion) {
+  final PlaceSuggestion place => ListTile(title: Text(place.primaryText.text), onTap: item.onSelected),
+  final QuerySuggestion query => ListTile(title: Text(query.displayText), onTap: item.onSelected),
+}, // item.highlighted: keyboard highlight
+suggestionsViewBuilder: (context, PlacesSuggestionsViewData view) => switch (view.status) {
+  PlacesSuggestionsStatus.error => Card(child: ListTile(title: Text('Failed: ${view.error?.kind.name}'), onTap: view.onRetry)),
+  _ => view.defaultView, // loading, results, empty: the package's own
+}, // also view.items (built rows — use them), view.attribution, view.suggestions
+fieldBuilder: (context, PlacesFieldData field) => CupertinoSearchTextField(
+  controller: field.controller, focusNode: field.focusNode,
+  onChanged: field.onChanged, // required: starts the search
+  onTap: field.onTap, onSuffixTap: field.onClear ?? () {}, enabled: field.enabled,
+), // also field.readOnly, autofocus, selectionLoading (no progress bar drawn), errorText, strings
+```
+
+A `Theme` around the field with `listTileTheme` set restyles the default rows without a builder, in
+every mode (a `ListTileTheme` widget only reaches inline mode). `suggestionBuilder`
+(title only) is deprecated — use `suggestionItemBuilder`; the two cannot be combined. A legacy
+`package:flutter/material.dart` `TextField` returned from `fieldBuilder` needs a `Material` from that
+library around it in dialog and fullscreen modes.
+
+Areas:
+
+```dart
+locationBias: LocationBias.circle(center: const PlaceCoordinates(latitude: 51.5, longitude: -0.12), radiusMeters: 20000),
+locationRestriction: LocationRestriction.rectangle(low: southWest, high: northEast),
+```
+
+Radius at most 50000 m. Shapes accepted: autocomplete (widgets, `autocomplete()`) — both, except
+through Maps JavaScript (the web default), where `locationRestriction` must be a rectangle; `TextSearchRequest.locationRestriction` —
+rectangle only; `NearbySearchRequest.locationRestriction` — circle only, required.
+
+## Your own search UI
+
+`PlacesAutocompleteController` runs the search without a widget; you draw the field and rows.
+
+```dart
+final controller = PlacesAutocompleteController(
+  apiKey: 'YOUR_API_KEY', // or client: (never closed by the controller)
+  options: const PlacesAutocompleteOptions(regionCode: 'us'), // the widgets' names and defaults
+);
+TextField(
+  controller: controller.textController,
+  focusNode: controller.focusNode,
+  onChanged: (_) => controller.search(), // debounced, minInputLength applies
+);
+ListenableBuilder(
+  listenable: controller, // status, suggestions, error, highlightIndex, selectionLoading
+  builder: (context, _) => Column(children: [
+    for (final s in controller.suggestions)
+      ListTile(title: Text(s.displayText), onTap: () => controller.select(s)),
+  ]),
+);
+// select() fetches PlaceFieldPresets.address and ends the session; returns the PlaceSelection.
+// User left without picking: controller.resetSession(). dispose() ends the session too.
+```
+
+## What a selection carries
+
+`PlaceSelection`: `placeId`, `displayText`, `suggestion` (`PlaceSuggestion`: `primaryText`,
+`secondaryText`, `distanceMeters`), `place` (`PlaceData?`), `timeZone`, `sessionToken`.
+
+`PlaceData` address getters: `streetAddress`, `streetNumber`, `route`, `unit`, `neighborhood`,
+`city` (falls back `locality` → `postal_town` → `sublocality_level_1` →
+`administrative_area_level_3`), `locality`, `county`, `administrativeArea`, `postalCode`,
+`postalCodeSuffix`, `country`, `countryShort` (ISO code); most have a `...Short` variant. Also `location`,
+`formattedAddress`, `shortFormattedAddress`, `addressComponents` (`List<PlaceAddressComponent>`:
+`longText`, `shortText`, `types` — read it for formats the getters do not fit). `postalAddress`
+(`PlacePostalAddress`) needs `PlaceField.postalAddress`, which is not in the default.
+
+Fill an address form: set your other fields in `onSelection` and empty them in `onClearField`:
+
+```dart
+PlacesAutocompleteFormField(
+  apiKey: apiKey,
+  includedPrimaryTypes: PlaceTypePresets.address,
+  onSelection: (selection) => city.text = selection.place?.city ?? '',
+  onClearField: city.clear,
+)
+```
+
+Time zone, two ways: `PlaceField.timeZone` → `place.timeZone?.id` (`PlaceTimeZone`, IANA id) and
+`PlaceField.utcOffsetMinutes` → `place.utcOffsetMinutes` (current offset), both Pro; or
+`fetchTimeZoneOnSelection: true` → `selection.timeZone` (`PlaceTimeZoneData`: `timeZoneId`,
+`timeZoneName`, `rawOffset`, `dstOffset`, `timestamp`), from the separately billed Time Zone API,
+at `selectionTimeZoneAt` (default now).
+
+## Field presets and billing
+
+- `PlaceFieldPresets.address` — default for widget `selectionFields`, `PlaceDetailsRequest`, and
+  `fetchPlaceById`: `id`, `formattedAddress`, `shortFormattedAddress`, `location`,
+  `addressComponents` — all Place Details **Essentials**.
+- `PlaceFieldPresets.minimal` — default for `TextSearchRequest` and `NearbySearchRequest`: `id`,
+  `displayName`, `formattedAddress`, `location` — **Pro**.
+- `.recommended` adds `rating` (Enterprise) but has no `addressComponents`, so `city` and the
+  other parsed getters are `null`; `.rich` adds `reviews` (Enterprise + Atmosphere). To add fields,
+  spread `address` into a larger set.
+  Google bills a request at its highest-tier field. Passing `fields:` overrides any default.
+- `PlaceFieldPresets.all` is every `PlaceField`, for exploring the data and admin tools only: it
+  always bills Enterprise + Atmosphere, grows between package versions, and takes the HTTP path on
+  web. Never use it for production autocomplete.
+- `PlaceField.entrances` and `navigationPoints` (Pro) are JSON views on `PlaceData`; not available
+  through the Maps JavaScript backend, so on web they fall back to HTTP (the fallback policy must
+  allow it).
+- `PlaceField.timeZone` and `utcOffsetMinutes` are Pro. `fetchTimeZoneOnSelection: true` instead
+  calls the separately billed Time Zone API.
+- A details request above Essentials that ends an autocomplete session (the widgets' does) is billed
+  at Enterprise + Atmosphere.
+- `displayName` is not in the default; the picked name is `selection.suggestion.primaryText.text`.
+- Photos are not in the default: add `PlaceField.photos` to `selectionFields`, or
+  `place.photos` is empty. Each photo a `PlacePhotoView` shows, and each `client.fetchPhotoMedia`
+  call, is one billed Place Photos request.
+- The widgets manage autocomplete session tokens and end the session with the details request.
+
+## Client
+
+```dart
+final client = PlacesClient(apiKey: key); // close() when done
+final suggestions = await client.autocomplete(AutocompleteRequest(input: 'cof', sessionToken: token));
+final place = await client.fetchPlace(PlaceDetailsRequest(placeId: id, sessionToken: token)); // address fields
+final results = await client.searchText(const TextSearchRequest(textQuery: 'coffee', pageSize: 10)); // minimal fields
+final page = await client.searchTextPage(...); // nextPageToken
+final nearby = await client.searchNearby(NearbySearchRequest(...));
+final media = await client.fetchPhotoMedia(PhotoMediaRequest(...));
+final zone = await client.fetchTimeZoneForPlace(place);
+```
+
+Every operation takes an optional `cancellationToken: PlacesCancellationToken()`. Failures are
+`PlacesException` with `kind` (`PlacesErrorKind`), `statusCode`, `code` (Google's status, e.g.
+`PERMISSION_DENIED`), `retryable`, `message`. `PlacesErrorKind` values: `validation` (never sent),
+`configuration`, `network`, `timeout`, `cancellation`, `http`, `googleApi`, `proxy`, `javascript`
+(web), `unknown`.
+
+`PlacesClient.proxy(placesEndpoint: ..., authentication: (PlacesProxyRequest request) async =>
+{'Authorization': ...})` — the callback runs before every proxy request and receives
+`operation`, `method`, and `uri` (do not log the URI). It may not return `Content-Type`,
+`Content-Length`, `Host`, `X-Goog-Api-Key`, `X-Goog-FieldMask`, or `X-Goog-User-Project`.
+
+## Apps not yet on material_ui
+
+Apps still on `package:flutter/material.dart` need no extra code; the widgets use `material_ui`'s
+default theme there. A `decoration:` must still be `material_ui`'s `InputDecoration`
+(`import 'package:material_ui/material_ui.dart' as mui;`).
+
+## Mistakes to avoid
+
+- Passing both `apiKey:` and `client:`, or neither — a debug assertion fails.
+- Reading `place.displayName`, `rating`, or `photos` without requesting them — they are `null` or
+  empty. Add them to `selectionFields` / `fields`.
+- Using `apiKey:` with an Android- or iOS-restricted key — Google rejects it; pass a `client:` with
+  `applicationIdentity`.
+- Building `decoration:` from `package:flutter/material.dart`'s `InputDecoration` — it must be
+  `material_ui`'s.
+- A `fieldBuilder` field that never calls `field.onChanged` — nothing is searched.
+- Expecting `keyboardType`, `inputFormatters` or the other `TextField` options to reach a
+  `fieldBuilder` field — they configure the default field only; set them on your own.
+- Building rows inside `suggestionsViewBuilder` instead of using `view.items` — keyboard
+  highlighting then cannot keep the highlighted row in view.
+- Expecting query suggestions on web through Maps JavaScript (the web default) —
+  `includeQueryPredictions` is ignored there and only places come back.
+- Passing `LocationRestriction.circle(...)` to autocomplete through Maps JavaScript (web), or to
+  `TextSearchRequest` — it fails with a `validation` error; use `.rectangle(...)`. Setting both
+  `locationBias` and `locationRestriction` fails validation.
+- Enabling the legacy "Places API" instead of "Places API (New)" — requests fail with
+  `PERMISSION_DENIED`.
+- Building a field outside the app's `Navigator` (for example in `MaterialApp.builder`) — it needs
+  an `Overlay` above it, in every field mode, and throws without one.
+- Setting `options` or `client` on a `PlacesAutocompleteController` passed to a widget — the
+  widget's own parameters and client apply while it uses the controller.
+- A custom UI on `PlacesAutocompleteController` that never calls `resetSession()` when the user
+  leaves without picking — that session is not ended until `dispose()`.
+- Assigning `controller.selectedSelection` — it is read-only since `0.7.0`; use `setSelection`,
+  `restoreSelection`, or `clearSelection`.
+- Calling `fetchPhotoMedia` and `Image.network` by hand instead of `PlacePhotoView` — and then
+  dropping the author attribution Google requires.
+- Storing `PlacePhoto.name` to show later — Google does not allow caching it, and it expires.
+- Expecting the photo image to pass through a `PlacesClient.proxy` proxy — only the photo's
+  address does; the image is downloaded straight from Google.
+- Leaving out `onOpenLink` in a mobile or desktop app — the "View on Google Maps" link Google
+  requires is then not shown. Do not add `url_launcher` to anything but the app.
+- `PlacesPhotoAttribution(prefix: ...)` — deprecated; use
+  `strings: PlacesStrings(photoAttributionPrefix: ...)`.
+
+## Links
+
+- [README](https://github.com/guy-evdev/google_places_sdk_flutter/blob/main/README.md)
+- [Recipes](https://github.com/guy-evdev/google_places_sdk_flutter/blob/main/doc/recipes.md)
+- [API reference and defaults](https://github.com/guy-evdev/google_places_sdk_flutter/blob/main/doc/api_reference.md)
+- [Generated API docs](https://pub.dev/documentation/google_places_sdk_flutter/latest/)
+- [Security and transports](https://github.com/guy-evdev/google_places_sdk_flutter/blob/main/doc/security_and_transports.md)
+- [Migration guide](https://github.com/guy-evdev/google_places_sdk_flutter/blob/main/MIGRATION.md)

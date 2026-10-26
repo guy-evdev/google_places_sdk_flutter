@@ -3,6 +3,8 @@ import 'places_web_backend.dart';
 import '../models/place_models.dart';
 import '../places_client_options.dart';
 
+/// Creates the web backend; throws a configuration error if an [httpClient] is
+/// injected.
 PlacesBackend createPlacesBackend({
   required String apiKey,
   PlacesProxyConfiguration? proxyConfiguration,

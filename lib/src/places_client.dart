@@ -25,7 +25,8 @@ class PlacesClient {
     this.proxyConfiguration,
     @Deprecated(
       'Use proxyConfiguration with Uri endpoints, or PlacesClient.proxy(). '
-      'The string proxyBaseUrl parameter is deprecated in 0.6.0.',
+      'The string proxyBaseUrl parameter is deprecated in 0.6.0 and will be '
+      'removed in 1.0.0.',
     )
     this.proxyBaseUrl,
     this.timeZoneBaseUrl,
@@ -59,7 +60,6 @@ class PlacesClient {
          timeZoneEndpoint: timeZoneEndpoint,
          authentication: authentication,
        ),
-       // ignore: deprecated_member_use_from_same_package
        proxyBaseUrl = null,
        timeZoneBaseUrl = null,
        _backend = createPlacesBackend(
@@ -86,12 +86,12 @@ class PlacesClient {
   /// [PlacesClient] constructor, which works on every platform except web.
   PlacesClient.testing({
     required this.apiKey,
-    required PlacesBackend backend,
+    required this._backend,
     this.proxyConfiguration,
     this.proxyBaseUrl,
     this.timeZoneBaseUrl,
     this.options = const PlacesClientOptions(),
-  }) : _backend = backend;
+  });
 
   /// Google Maps Platform API key used for Places and Time Zone requests.
   final String apiKey;
@@ -102,10 +102,11 @@ class PlacesClient {
   /// Optional legacy proxy base URL for Places HTTP requests.
   ///
   /// New code should use [proxyConfiguration] or [PlacesClient.proxy]. Google
-  /// credentials are not forwarded to this endpoint in `0.6.0`.
+  /// credentials are never forwarded to this endpoint.
   @Deprecated(
     'Use proxyConfiguration with Uri endpoints, or PlacesClient.proxy(). '
-    'This string property is deprecated in 0.6.0.',
+    'This string property is deprecated in 0.6.0 and will be removed in '
+    '1.0.0.',
   )
   final String? proxyBaseUrl;
 
@@ -125,7 +126,8 @@ class PlacesClient {
   /// Fetches autocomplete place and query suggestions for the supplied request.
   ///
   /// To receive [QuerySuggestion] values, set
-  /// [AutocompleteRequest.includeQueryPredictions] to `true`.
+  /// [AutocompleteRequest.includeQueryPredictions] to `true`. On web through
+  /// the Maps JavaScript API there are none; see that flag.
   Future<List<AutocompleteSuggestion>> autocompleteSuggestions(
     AutocompleteRequest request, {
     PlacesCancellationToken? cancellationToken,
@@ -143,7 +145,7 @@ class PlacesClient {
   Future<void> endAutocompleteSession(AutocompleteSessionToken token) =>
       _backend.endAutocompleteSession(token);
 
-  /// Resolves a place id into rich place details.
+  /// Resolves a place id into place details.
   ///
   /// This is the canonical standalone place-details API for the package.
   Future<PlaceData> fetchPlace(
@@ -157,13 +159,14 @@ class PlacesClient {
     PlacesCancellationToken? cancellationToken,
   }) => _backend.fetchPhotoMedia(request, cancellationToken: cancellationToken);
 
-  /// Resolves a place id into rich place details without requiring a suggestion.
+  /// Resolves a place id into place details without requiring a suggestion.
   ///
   /// This is a convenience wrapper around [fetchPlace] for place-id-first
-  /// workflows.
+  /// workflows. [fields] defaults to [PlaceFieldPresets.address], billed as
+  /// Place Details Essentials.
   Future<PlaceData> fetchPlaceById(
     String placeId, {
-    Set<PlaceField> fields = PlaceFieldPresets.recommended,
+    Set<PlaceField> fields = PlaceFieldPresets.address,
     String? languageCode,
     String? regionCode,
     AutocompleteSessionToken? sessionToken,

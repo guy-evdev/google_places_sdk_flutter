@@ -9,7 +9,10 @@ import 'backend.dart';
 import 'error_handling.dart';
 import 'proxy_transport.dart';
 
+/// Places backend over HTTP, using an `http.Client`.
 class PlacesHttpBackend implements PlacesBackend {
+  /// Creates the backend; throws a configuration error for conflicting or unsupported
+  /// options.
   PlacesHttpBackend({
     required this.apiKey,
     this.proxyConfiguration,
@@ -36,10 +39,20 @@ class PlacesHttpBackend implements PlacesBackend {
   static const _defaultTimeZoneBaseUrl =
       'https://maps.googleapis.com/maps/api/timezone/json';
 
+  /// The Google API key.
   final String apiKey;
+
+  /// Proxy configuration, mutually exclusive with [proxyBaseUrl].
   final PlacesProxyConfiguration? proxyConfiguration;
+
+  /// Base URL replacing the default Places endpoint, mutually exclusive with
+  /// [proxyConfiguration].
   final String? proxyBaseUrl;
+
+  /// Overrides the default Time Zone endpoint.
   final String? timeZoneBaseUrl;
+
+  /// Client options this backend was created with.
   final PlacesClientOptions options;
   final http.Client _httpClient;
   final bool _ownsHttpClient;

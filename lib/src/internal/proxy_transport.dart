@@ -3,6 +3,8 @@ import '../places_client_options.dart';
 import '../places_cancellation_token.dart';
 import 'error_handling.dart';
 
+/// Returns the validated proxy authentication headers for [request], or none when
+/// no provider is configured.
 Future<Map<String, String>> proxyAuthenticationHeaders(
   PlacesProxyConfiguration? configuration,
   PlacesProxyRequest request,

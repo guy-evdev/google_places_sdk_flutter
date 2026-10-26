@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 const _apiKey = String.fromEnvironment('GOOGLE_MAPS_API_KEY');
 const _proxyPlacesUrl = String.fromEnvironment('PLACES_PROXY_URL');
@@ -41,6 +41,19 @@ const _exampleDetailsFields = <PlaceField>{
   PlaceField.timeZone,
   PlaceField.transitStation,
 };
+
+/// The README's "What you get back" getters that the place has, one per line.
+List<String> _addressLines(PlaceData place) => <String>[
+  if (place.location case final location?)
+    'location: ${location.latitude}, ${location.longitude}',
+  if (place.streetAddress case final value?) 'streetAddress: $value',
+  if (place.unit case final value?) 'unit: $value',
+  if (place.city case final value?) 'city: $value',
+  if (place.administrativeArea case final value?) 'administrativeArea: $value',
+  if (place.postalCode case final value?) 'postalCode: $value',
+  if (place.country case final value?) 'country: $value',
+  if (place.countryShort case final value?) 'countryShort: $value',
+];
 
 void main() {
   runApp(const ExampleApp());
@@ -92,6 +105,8 @@ class DemoConfiguration {
     this.fetchTimeZone = false,
     this.includeQueryPredictions = false,
     this.showDistanceFromOrigin = false,
+    this.showPhotos = true,
+    this.customRows = false,
     this.pageSize = 5,
   });
 
@@ -109,6 +124,8 @@ class DemoConfiguration {
   final bool fetchTimeZone;
   final bool includeQueryPredictions;
   final bool showDistanceFromOrigin;
+  final bool showPhotos;
+  final bool customRows;
   final int pageSize;
 
   /// Origin handed to the autocomplete widgets, or `null` when the demo is
@@ -123,6 +140,8 @@ class DemoConfiguration {
     bool? fetchTimeZone,
     bool? includeQueryPredictions,
     bool? showDistanceFromOrigin,
+    bool? showPhotos,
+    bool? customRows,
     int? pageSize,
   }) {
     return DemoConfiguration(
@@ -135,6 +154,8 @@ class DemoConfiguration {
           includeQueryPredictions ?? this.includeQueryPredictions,
       showDistanceFromOrigin:
           showDistanceFromOrigin ?? this.showDistanceFromOrigin,
+      showPhotos: showPhotos ?? this.showPhotos,
+      customRows: customRows ?? this.customRows,
       pageSize: pageSize ?? this.pageSize,
     );
   }
@@ -184,6 +205,15 @@ class _ExampleAppState extends State<ExampleApp> {
 
   PlaceCoordinates? get _origin => _configuration.origin;
 
+  PlacesSuggestionItemBuilder? get _suggestionItemBuilder =>
+      _configuration.customRows ? _customSuggestionRow : null;
+
+  /// The details fields, with `PlaceField.photos` only when the photo demo is
+  /// on — without it, `place.photos` comes back empty.
+  Set<PlaceField> get _detailsFields => _configuration.showPhotos
+      ? _exampleDetailsFields
+      : _exampleDetailsFields.difference(const <PlaceField>{PlaceField.photos});
+
   /// Decoration shared by every widget mode, so the demo shows that dialog and
   /// fullscreen launchers honour field customization too.
   InputDecoration get _fieldDecoration => const InputDecoration(
@@ -219,11 +249,7 @@ class _ExampleAppState extends State<ExampleApp> {
       supportedLocales: DemoLocale.values
           .map((locale) => locale.locale)
           .toList(),
-      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       builder: (context, child) => Directionality(
         textDirection: _demoLocale.isRtl
             ? TextDirection.rtl
@@ -306,9 +332,10 @@ class _ExampleAppState extends State<ExampleApp> {
             origin: _origin,
             fetchPlaceDetailsOnSelection: _fetchPlaceDetails,
             fetchTimeZoneOnSelection: _fetchTimeZoneOnSelection,
-            selectionFields: _exampleDetailsFields,
+            selectionFields: _detailsFields,
             fieldMode: _fieldMode,
             includeQueryPredictions: _includeQueryPredictions,
+            suggestionItemBuilder: _suggestionItemBuilder,
             onSelection: (selection) {
               setState(() {
                 _selection = selection;
@@ -335,6 +362,11 @@ class _ExampleAppState extends State<ExampleApp> {
               });
             },
           ),
+          // A dialog or fullscreen field searches with a controller of its
+          // own, so this one has a status to show only inline.
+          if (_configuration.customRows &&
+              _fieldMode == PlacesAutocompleteFieldMode.inline)
+            _ControllerStatus(controller: _controller),
           const SizedBox(height: 24),
         ],
         if (_widgetType == WidgetType.formField) ...<Widget>[
@@ -352,8 +384,9 @@ class _ExampleAppState extends State<ExampleApp> {
               origin: _origin,
               fetchPlaceDetailsOnSelection: _fetchPlaceDetails,
               fetchTimeZoneOnSelection: _fetchTimeZoneOnSelection,
-              selectionFields: _exampleDetailsFields,
+              selectionFields: _detailsFields,
               includeQueryPredictions: _includeQueryPredictions,
+              suggestionItemBuilder: _suggestionItemBuilder,
               validator: (selection) => selection == null
                   ? 'Choose a place before submitting.'
                   : null,
@@ -382,6 +415,8 @@ class _ExampleAppState extends State<ExampleApp> {
               },
             ),
           ),
+          if (_configuration.customRows)
+            _ControllerStatus(controller: _controller),
           const SizedBox(height: 12),
           Wrap(
             spacing: 12,
@@ -439,33 +474,14 @@ class _ExampleAppState extends State<ExampleApp> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  if (_selection!.place!.route != null ||
-                      _selection!.place!.streetNumber != null ||
-                      _selection!.place!.locality != null ||
-                      _selection!.place!.administrativeArea != null ||
-                      _selection!.place!.postalCode != null ||
-                      _selection!.place!.country != null) ...<Widget>[
+                  if (_addressLines(_selection!.place!) case final lines
+                      when lines.isNotEmpty) ...<Widget>[
                     Text(
-                      'Typed address fields',
+                      'Coordinates and address',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
-                    if (_selection!.place!.route != null)
-                      Text('route: ${_selection!.place!.route}'),
-                    if (_selection!.place!.streetNumber != null)
-                      Text('streetNumber: ${_selection!.place!.streetNumber}'),
-                    if (_selection!.place!.locality != null)
-                      Text('locality: ${_selection!.place!.locality}'),
-                    if (_selection!.place!.administrativeArea != null)
-                      Text(
-                        'administrativeArea: ${_selection!.place!.administrativeArea}',
-                      ),
-                    if (_selection!.place!.postalCode != null)
-                      Text('postalCode: ${_selection!.place!.postalCode}'),
-                    if (_selection!.place!.country != null)
-                      Text('country: ${_selection!.place!.country}'),
-                    if (_selection!.place!.countryCode != null)
-                      Text('countryCode: ${_selection!.place!.countryCode}'),
+                    for (final line in lines) Text(line),
                     const SizedBox(height: 16),
                   ],
                   if (_selection!.place!.googleMapsTypeLabel != null ||
@@ -513,6 +529,20 @@ class _ExampleAppState extends State<ExampleApp> {
                         'Attribution: '
                         '${_selection!.place!.attributions.map((item) => item.provider).join(', ')}',
                       ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (_configuration.showPhotos &&
+                      _selection!.place!.photos.isNotEmpty) ...<Widget>[
+                    Text(
+                      'Photos',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    _PhotoStrip(
+                      photos: _selection!.place!.photos,
+                      client: _client,
+                      strings: strings,
+                    ),
                     const SizedBox(height: 16),
                   ],
                   SelectableText(prettyJson(_selection!.place!.rawData)),
@@ -568,10 +598,14 @@ class _ExampleAppState extends State<ExampleApp> {
       origin: _origin,
       fetchPlaceDetailsOnSelection: _fetchPlaceDetails,
       fetchTimeZoneOnSelection: _fetchTimeZoneOnSelection,
-      selectionFields: mode == PlacesAutocompleteOverlayMode.dialog
-          ? PlaceFieldPresets.recommended
-          : PlaceFieldPresets.minimal,
+      selectionFields: <PlaceField>{
+        ...mode == PlacesAutocompleteOverlayMode.dialog
+            ? PlaceFieldPresets.recommended
+            : PlaceFieldPresets.minimal,
+        if (_configuration.showPhotos) PlaceField.photos,
+      },
       includeQueryPredictions: _includeQueryPredictions,
+      suggestionItemBuilder: _suggestionItemBuilder,
       onQuerySelection: (selection) {
         setState(() {
           _selection = null;
@@ -846,6 +880,8 @@ class _ExampleAppState extends State<ExampleApp> {
         searchHint: 'Search for a place',
         overlayTitle: 'Search places',
         distanceUnitMeters: 'm',
+        photoAttributionPrefix: 'Photo by',
+        viewOnGoogleMapsText: 'View on Google Maps',
       ),
       DemoLocale.hebrew => const PlacesStrings(
         searchHint: 'חיפוש מקום',
@@ -858,6 +894,8 @@ class _ExampleAppState extends State<ExampleApp> {
         closeLabel: 'סגור',
         clearLabel: 'נקה חיפוש',
         distanceUnitMeters: 'מ׳',
+        photoAttributionPrefix: 'צילום:',
+        viewOnGoogleMapsText: 'הצגה במפות Google',
       ),
       DemoLocale.arabic => const PlacesStrings(
         searchHint: 'ابحث عن مكان',
@@ -870,6 +908,8 @@ class _ExampleAppState extends State<ExampleApp> {
         closeLabel: 'إغلاق',
         clearLabel: 'مسح البحث',
         distanceUnitMeters: 'م',
+        photoAttributionPrefix: 'تصوير:',
+        viewOnGoogleMapsText: 'العرض على خرائط Google',
       ),
     };
   }
@@ -948,6 +988,16 @@ class _ConfigurationSummary extends StatelessWidget {
                 if (configuration.showDistanceFromOrigin)
                   const Chip(
                     label: Text('Distance from origin'),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                if (configuration.showPhotos)
+                  const Chip(
+                    label: Text('Photos'),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                if (configuration.customRows)
+                  const Chip(
+                    label: Text('Custom rows'),
                     visualDensity: VisualDensity.compact,
                   ),
               ],
@@ -1133,6 +1183,33 @@ class _ConfigurationSheetState extends State<_ConfigurationSheet> {
                         ),
                       ),
                     ),
+                    SwitchListTile(
+                      key: const ValueKey<String>('configuration-photos'),
+                      contentPadding: EdgeInsets.zero,
+                      value: _draft.showPhotos,
+                      title: const Text('Show place photos'),
+                      subtitle: const Text(
+                        'Adds PlaceField.photos to the details request and '
+                        'shows them with PlacePhotoView. Each photo shown is '
+                        'one billed request.',
+                      ),
+                      onChanged: (value) => setState(
+                        () => _draft = _draft.copyWith(showPhotos: value),
+                      ),
+                    ),
+                    SwitchListTile(
+                      key: const ValueKey<String>('configuration-custom-rows'),
+                      contentPadding: EdgeInsets.zero,
+                      value: _draft.customRows,
+                      title: const Text('Custom suggestion rows'),
+                      subtitle: const Text(
+                        'Builds each row with suggestionItemBuilder, and shows '
+                        "an inline field controller's status under it.",
+                      ),
+                      onChanged: (value) => setState(
+                        () => _draft = _draft.copyWith(customRows: value),
+                      ),
+                    ),
                     if (_draft.textSearchMode == TextSearchMode.paged)
                       DropdownButtonFormField<int>(
                         key: const ValueKey<String>('configuration-page-size'),
@@ -1183,6 +1260,112 @@ class _ConfigurationSheetState extends State<_ConfigurationSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The "Custom suggestion rows" demo: each row built by
+/// `suggestionItemBuilder`, with an icon for the kind of suggestion and the
+/// keyboard highlight in the theme's focus colour.
+Widget _customSuggestionRow(
+  BuildContext context,
+  PlacesSuggestionItemData item,
+) {
+  final (icon, title, subtitle) = switch (item.suggestion) {
+    final PlaceSuggestion place => (
+      Icons.location_on_outlined,
+      place.primaryText.text,
+      place.secondaryText?.text,
+    ),
+    final QuerySuggestion query => (
+      Icons.manage_search,
+      query.displayText,
+      null,
+    ),
+  };
+  return ListTile(
+    leading: Icon(icon),
+    title: Text(title),
+    subtitle: subtitle == null ? null : Text(subtitle),
+    tileColor: item.highlighted ? Theme.of(context).focusColor : null,
+    onTap: item.onSelected,
+  );
+}
+
+/// What a custom search UI reads from the controller: the search's status.
+class _ControllerStatus extends StatelessWidget {
+  const _ControllerStatus({required this.controller});
+
+  final PlacesAutocompleteController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) => Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text(
+          'Controller status: ${controller.status?.name ?? 'no search'}',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ),
+    );
+  }
+}
+
+/// A horizontal strip of the place's photos — a composition of
+/// [PlacePhotoView]s, since the package has no gallery widget.
+class _PhotoStrip extends StatelessWidget {
+  const _PhotoStrip({
+    required this.photos,
+    required this.client,
+    required this.strings,
+  });
+
+  final List<PlacePhoto> photos;
+  final PlacesClient client;
+  final PlacesStrings strings;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 120,
+      child: ListView.separated(
+        key: const ValueKey<String>('photo-strip'),
+        scrollDirection: Axis.horizontal,
+        itemCount: photos.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 8),
+        itemBuilder: (context, index) => ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: PlacePhotoView(
+            photo: photos[index],
+            client: client,
+            width: 160,
+            height: 120,
+            strings: strings,
+            // Opens "View on Google Maps" and author profiles. Google requires
+            // the Maps link; outside the browser it is shown only with this.
+            onOpenLink: (uri) => launchUrl(uri),
+            // The default views show loading and draw the attribution; a
+            // failure shows the typed error's kind beside the retry button.
+            builder: (context, photo) => switch (photo.status) {
+              PlacePhotoStatus.error => SizedBox(
+                width: 160,
+                height: 120,
+                child: Center(
+                  child: TextButton(
+                    onPressed: photo.onRetry,
+                    child: Text(
+                      '${photo.error?.kind.name} · ${photo.strings.retryText}',
+                    ),
+                  ),
+                ),
+              ),
+              _ => photo.defaultView,
+            },
+          ),
+        ),
       ),
     );
   }

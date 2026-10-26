@@ -1,21 +1,38 @@
-import 'package:flutter/material.dart';
+import 'dart:ui' as ui;
+
+import 'package:flutter/gestures.dart' show DragStartBehavior;
+import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../models/place_models.dart';
 import '../places_client.dart';
-import 'places_autocomplete_controller.dart';
+import 'places_autocomplete_builders.dart';
 import 'places_autocomplete_field.dart';
+import 'places_design_scope.dart';
 import 'places_strings.dart';
 
 /// FormField wrapper around [PlacesAutocompleteField].
 ///
 /// The selected [PlaceSelection] participates in validation, saving,
-/// restoration, and [FormState.reset]. When no [controller] is supplied this
-/// widget owns one and disposes it automatically.
+/// restoration, and [FormState.reset]. A reset puts back the `initialValue`
+/// and its text — empty without one — even over text typed without a pick,
+/// and abandons the field's search or pick in progress, ending its billing
+/// session without a details request. A dialog or fullscreen search that is
+/// open at the time is not closed. When no `controller` is supplied this widget
+/// owns one and disposes it automatically.
 class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
   /// Creates a Places autocomplete form field.
+  ///
+  /// Exactly one of `client` and `apiKey` must be supplied; see
+  /// [PlacesAutocompleteField.client] and [PlacesAutocompleteField.apiKey].
+  ///
+  /// It takes the same `TextField` options as the field; see
+  /// [PlacesAutocompleteField.new]. `restorationId` is the form field's own,
+  /// as for any [FormField].
   PlacesAutocompleteFormField({
     super.key,
-    required PlacesClient client,
+    PlacesClient? client,
+    String? apiKey,
     PlacesAutocompleteController? controller,
     InputDecoration? decoration,
     PlacesStrings strings = const PlacesStrings(),
@@ -27,9 +44,10 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
     List<String> includedPrimaryTypes = const <String>[],
     List<String> includedRegionCodes = const <String>[],
     bool includePureServiceAreaBusinesses = false,
-    bool fetchPlaceDetailsOnSelection = false,
+    bool includeFutureOpeningBusinesses = false,
+    bool fetchPlaceDetailsOnSelection = true,
     bool fetchTimeZoneOnSelection = false,
-    Set<PlaceField> selectionFields = PlaceFieldPresets.recommended,
+    Set<PlaceField> selectionFields = PlaceFieldPresets.address,
     String? selectionLanguageCode,
     String? selectionRegionCode,
     DateTime? selectionTimeZoneAt,
@@ -39,11 +57,82 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
     VoidCallback? onClearField,
     ValueChanged<Object>? onError,
     int maxSuggestions = 5,
+    int minInputLength = 1,
+    Duration? debounceDuration,
     super.enabled = true,
     bool autofocus = false,
+    bool unfocusOnSelection = true,
+    OptionsViewOpenDirection suggestionsViewOpenDirection =
+        OptionsViewOpenDirection.mostSpace,
     bool showPoweredByGoogle = true,
     bool includeQueryPredictions = false,
     ValueChanged<QuerySuggestion>? onQuerySelection,
+    bool searchOnQuerySelection = false,
+    TextInputType keyboardType = TextInputType.streetAddress,
+    TextInputAction? textInputAction,
+    TextCapitalization textCapitalization = TextCapitalization.none,
+    TextStyle? style,
+    StrutStyle? strutStyle,
+    TextAlign textAlign = TextAlign.start,
+    TextAlignVertical? textAlignVertical,
+    TextDirection? textDirection,
+    bool? showCursor,
+    bool? autocorrect,
+    SmartDashesType? smartDashesType,
+    SmartQuotesType? smartQuotesType,
+    bool enableSuggestions = true,
+    int? maxLength,
+    MaxLengthEnforcement? maxLengthEnforcement,
+    ValueChanged<String>? onChanged,
+    VoidCallback? onEditingComplete,
+    ValueChanged<String>? onSubmitted,
+    AppPrivateCommandCallback? onAppPrivateCommand,
+    List<TextInputFormatter>? inputFormatters,
+    bool? ignorePointers,
+    double cursorWidth = 2.0,
+    double? cursorHeight,
+    Radius? cursorRadius,
+    bool? cursorOpacityAnimates,
+    Color? cursorColor,
+    Color? cursorErrorColor,
+    ui.BoxHeightStyle? selectionHeightStyle,
+    ui.BoxWidthStyle? selectionWidthStyle,
+    Brightness? keyboardAppearance,
+    EdgeInsets scrollPadding = const EdgeInsets.all(20),
+    DragStartBehavior dragStartBehavior = DragStartBehavior.start,
+    bool? enableInteractiveSelection,
+    bool? selectAllOnFocus,
+    TextSelectionControls? selectionControls,
+    GestureTapCallback? onTap,
+    bool onTapAlwaysCalled = false,
+    TapRegionCallback? onTapOutside,
+    TapRegionUpCallback? onTapUpOutside,
+    MouseCursor? mouseCursor,
+    InputCounterWidgetBuilder? buildCounter,
+    ScrollController? scrollController,
+    ScrollPhysics? scrollPhysics,
+    Iterable<String>? autofillHints = const <String>[],
+    ContentInsertionConfiguration? contentInsertionConfiguration,
+    Clip clipBehavior = Clip.hardEdge,
+    bool stylusHandwritingEnabled =
+        EditableText.defaultStylusHandwritingEnabled,
+    bool enableIMEPersonalizedLearning = true,
+    bool? enableInlinePrediction,
+    EditableTextContextMenuBuilder? contextMenuBuilder =
+        PlacesDesignScope.defaultContextMenuBuilder,
+    SpellCheckConfiguration? spellCheckConfiguration,
+    TextMagnifierConfiguration? magnifierConfiguration,
+    List<Locale>? hintLocales,
+    Object groupId = EditableText,
+    UndoHistoryController? undoController,
+    WidgetStatesController? statesController,
+    PlacesFieldBuilder? fieldBuilder,
+    PlacesSuggestionItemBuilder? suggestionItemBuilder,
+    PlacesSuggestionsViewBuilder? suggestionsViewBuilder,
+    @Deprecated(
+      'Use suggestionItemBuilder, which builds the whole row. '
+      'suggestionBuilder is deprecated in 0.7.0 and will be removed in 1.0.0.',
+    )
     Widget Function(BuildContext context, PlaceSuggestion suggestion)?
     suggestionBuilder,
     super.validator,
@@ -54,21 +143,38 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
     super.forceErrorText,
     super.errorBuilder,
     super.restorationId,
-  }) : super(
+  }) : assert(
+         (client == null) != (apiKey == null),
+         'Pass exactly one of client or apiKey.',
+       ),
+       assert(
+         suggestionBuilder == null || suggestionItemBuilder == null,
+         'Pass suggestionItemBuilder or the deprecated suggestionBuilder, '
+         'not both.',
+       ),
+       assert(minInputLength >= 1, 'minInputLength must be at least 1.'),
+       super(
          builder: (FormFieldState<PlaceSelection?> field) {
+           final state = field as _PlacesAutocompleteFormFieldState;
            final errorText = field.errorText;
+           // A custom field gets the message as PlacesFieldData.errorText;
+           // errorBuilder styles the default field's error only.
+           final buildsError = errorBuilder != null && fieldBuilder == null;
            final effectiveDecoration = (decoration ?? const InputDecoration())
                .copyWith(
-                 errorText: errorBuilder == null ? errorText : null,
-                 error: errorBuilder != null && errorText != null
+                 errorText: buildsError ? null : errorText,
+                 error: buildsError && errorText != null
                      ? errorBuilder(field.context, errorText)
                      : null,
                );
            return _ControllerBinding(
              externalController: controller,
              value: field.value,
+             resets: state._resets,
+             onController: (controller) => state._controller = controller,
              builder: (effectiveController) => PlacesAutocompleteField(
                client: client,
+               apiKey: apiKey,
                controller: effectiveController,
                decoration: effectiveDecoration,
                strings: strings,
@@ -81,6 +187,7 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
                includedRegionCodes: includedRegionCodes,
                includePureServiceAreaBusinesses:
                    includePureServiceAreaBusinesses,
+               includeFutureOpeningBusinesses: includeFutureOpeningBusinesses,
                fetchPlaceDetailsOnSelection: fetchPlaceDetailsOnSelection,
                fetchTimeZoneOnSelection: fetchTimeZoneOnSelection,
                selectionFields: selectionFields,
@@ -99,27 +206,115 @@ class PlacesAutocompleteFormField extends FormField<PlaceSelection?> {
                },
                onError: onError,
                maxSuggestions: maxSuggestions,
+               minInputLength: minInputLength,
+               debounceDuration: debounceDuration,
                enabled: enabled,
                autofocus: autofocus,
+               unfocusOnSelection: unfocusOnSelection,
+               suggestionsViewOpenDirection: suggestionsViewOpenDirection,
                showPoweredByGoogle: showPoweredByGoogle,
                includeQueryPredictions: includeQueryPredictions,
                onQuerySelection: onQuerySelection,
+               searchOnQuerySelection: searchOnQuerySelection,
+               keyboardType: keyboardType,
+               textInputAction: textInputAction,
+               textCapitalization: textCapitalization,
+               style: style,
+               strutStyle: strutStyle,
+               textAlign: textAlign,
+               textAlignVertical: textAlignVertical,
+               textDirection: textDirection,
+               showCursor: showCursor,
+               autocorrect: autocorrect,
+               smartDashesType: smartDashesType,
+               smartQuotesType: smartQuotesType,
+               enableSuggestions: enableSuggestions,
+               maxLength: maxLength,
+               maxLengthEnforcement: maxLengthEnforcement,
+               onChanged: onChanged,
+               onEditingComplete: onEditingComplete,
+               onSubmitted: onSubmitted,
+               onAppPrivateCommand: onAppPrivateCommand,
+               inputFormatters: inputFormatters,
+               ignorePointers: ignorePointers,
+               cursorWidth: cursorWidth,
+               cursorHeight: cursorHeight,
+               cursorRadius: cursorRadius,
+               cursorOpacityAnimates: cursorOpacityAnimates,
+               cursorColor: cursorColor,
+               cursorErrorColor: cursorErrorColor,
+               selectionHeightStyle: selectionHeightStyle,
+               selectionWidthStyle: selectionWidthStyle,
+               keyboardAppearance: keyboardAppearance,
+               scrollPadding: scrollPadding,
+               dragStartBehavior: dragStartBehavior,
+               enableInteractiveSelection: enableInteractiveSelection,
+               selectAllOnFocus: selectAllOnFocus,
+               selectionControls: selectionControls,
+               onTap: onTap,
+               onTapAlwaysCalled: onTapAlwaysCalled,
+               onTapOutside: onTapOutside,
+               onTapUpOutside: onTapUpOutside,
+               mouseCursor: mouseCursor,
+               buildCounter: buildCounter,
+               scrollController: scrollController,
+               scrollPhysics: scrollPhysics,
+               autofillHints: autofillHints,
+               contentInsertionConfiguration: contentInsertionConfiguration,
+               clipBehavior: clipBehavior,
+               stylusHandwritingEnabled: stylusHandwritingEnabled,
+               enableIMEPersonalizedLearning: enableIMEPersonalizedLearning,
+               enableInlinePrediction: enableInlinePrediction,
+               contextMenuBuilder: contextMenuBuilder,
+               spellCheckConfiguration: spellCheckConfiguration,
+               magnifierConfiguration: magnifierConfiguration,
+               hintLocales: hintLocales,
+               groupId: groupId,
+               undoController: undoController,
+               statesController: statesController,
+               fieldBuilder: fieldBuilder,
+               suggestionItemBuilder: suggestionItemBuilder,
+               suggestionsViewBuilder: suggestionsViewBuilder,
                suggestionBuilder: suggestionBuilder,
              ),
            );
          },
        );
+
+  @override
+  FormFieldState<PlaceSelection?> createState() =>
+      _PlacesAutocompleteFormFieldState();
+}
+
+class _PlacesAutocompleteFormFieldState
+    extends FormFieldState<PlaceSelection?> {
+  // The controller the field uses, and how many times the form was reset.
+  PlacesAutocompleteController? _controller;
+  int _resets = 0;
+
+  @override
+  void reset() {
+    // Outside a build, so listeners hear it now: the pending search, any
+    // request, and a loading pick stop here, before another can start.
+    _controller?.resetSession();
+    _resets++;
+    super.reset();
+  }
 }
 
 class _ControllerBinding extends StatefulWidget {
   const _ControllerBinding({
     required this.externalController,
     required this.value,
+    required this.resets,
+    required this.onController,
     required this.builder,
   });
 
   final PlacesAutocompleteController? externalController;
   final PlaceSelection? value;
+  final int resets;
+  final ValueChanged<PlacesAutocompleteController> onController;
   final Widget Function(PlacesAutocompleteController controller) builder;
 
   @override
@@ -154,7 +349,11 @@ class _ControllerBindingState extends State<_ControllerBinding> {
       _scheduleRestoreSelection(_controller, widget.value);
       return;
     }
-    if (!identical(oldWidget.value, widget.value) ||
+    // Only a value the controller does not already hold: when the user types
+    // over a pick, the controller clears its selection and the form follows,
+    // and restoring that null would wipe what they typed. A reset restores
+    // regardless, so it also replaces text typed without a pick.
+    if (widget.resets != oldWidget.resets ||
         !identical(_controller.selectedSelection, widget.value)) {
       _scheduleRestoreSelection(_controller, widget.value);
     }
@@ -183,5 +382,8 @@ class _ControllerBindingState extends State<_ControllerBinding> {
   }
 
   @override
-  Widget build(BuildContext context) => widget.builder(_controller);
+  Widget build(BuildContext context) {
+    widget.onController(_controller);
+    return widget.builder(_controller);
+  }
 }

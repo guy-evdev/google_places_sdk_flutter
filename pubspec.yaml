@@ -1,38 +1,43 @@
 name: google_places_sdk_flutter
-description: "Cross-platform Google Places autocomplete widgets and clients built on Places API (New)."
-version: 0.6.1
+description: "Google Places autocomplete for address and location search: a TextField, form field or search dialog that returns coordinates and a parsed address. Places API (New)."
+version: 0.7.0
 homepage: https://github.com/guy-evdev/google_places_sdk_flutter
 repository: https://github.com/guy-evdev/google_places_sdk_flutter
 issue_tracker: https://github.com/guy-evdev/google_places_sdk_flutter/issues
 topics:
-  - flutter
-  - autocomplete
-  - google-maps
+  - google-places
   - places
   - address
+  - autocomplete
+  - google-maps
 
 screenshots:
-  - description: 'Inline text field mode with the embedded autocomplete experience.'
+  - description: 'Inline mode: suggestions in a card anchored to the search field.'
     path: assets/readme/text_field_mode.png
-  - description: 'Dialog launcher mode using the overlay search experience.'
+  - description: 'Dialog mode: the search opens in a dialog.'
     path: assets/readme/dialog_mode.png
-  - description: 'Fullscreen launcher mode for dedicated place search.'
+  - description: 'Fullscreen mode: the search opens on its own page.'
     path: assets/readme/fullscreen_mode.png
-  - description: 'Rich place details shown after selection.'
+  - description: 'A picked place: coordinates, a parsed address and photos.'
     path: assets/readme/rich_result.png
 
 environment:
-  sdk: ">=3.9.0 <4.0.0"
-  flutter: ">=3.35.0"
+  sdk: ">=3.12.0 <4.0.0"
+  flutter: ">=3.44.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  http: ^1.6.0
-  web: ^1.1.1
+  http: ^1.5.0
+  material_ui: ^1.0.0
+  web: ^1.0.0
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  # A legacy app's own localizations, for the right-to-left tests in
+  # test/legacy_host_test.dart.
+  flutter_localizations:
     sdk: flutter
   flutter_lints: ^6.0.0
 

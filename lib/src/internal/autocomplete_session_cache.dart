@@ -2,6 +2,8 @@ import 'dart:collection';
 
 /// Bounded, expiring cache for transport-specific autocomplete session state.
 class AutocompleteSessionCache<TToken, TPrediction> {
+  /// Creates a cache bounded by [maxSessions], [maxPredictionsPerSession] and
+  /// [inactivityTimeout]; [now] overrides the clock for tests.
   AutocompleteSessionCache({
     this.maxSessions = 32,
     this.maxPredictionsPerSession = 5,
@@ -9,8 +11,13 @@ class AutocompleteSessionCache<TToken, TPrediction> {
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
 
+  /// Most sessions kept; the least recently used is evicted beyond this.
   final int maxSessions;
+
+  /// Most predictions kept per session; the oldest is evicted beyond this.
   final int maxPredictionsPerSession;
+
+  /// How long a session may go untouched before it is pruned.
   final Duration inactivityTimeout;
   final DateTime Function() _now;
   final LinkedHashMap<String, _AutocompleteSessionEntry<TToken, TPrediction>>

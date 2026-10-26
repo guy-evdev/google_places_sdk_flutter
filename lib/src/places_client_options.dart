@@ -51,6 +51,9 @@ class PlacesApplicationIdentity {
 
   bool get _isAndroid => androidPackageName != null;
 
+  /// Throws a [PlacesException] of kind [PlacesErrorKind.configuration] when
+  /// the package name, certificate fingerprint, or bundle identifier is not
+  /// in a valid format. Called before any request is sent with this identity.
   void validate() {
     if (_isAndroid) {
       final packageName = androidPackageName!;
@@ -76,6 +79,10 @@ class PlacesApplicationIdentity {
     }
   }
 
+  /// The request headers that identify the app to Google:
+  /// `X-Android-Package` and `X-Android-Cert`, or `X-Ios-Bundle-Identifier`.
+  ///
+  /// Throws as [validate] does when the identity is not valid.
   Map<String, String> get headers {
     validate();
     if (_isAndroid) {
@@ -117,8 +124,8 @@ enum PlacesWebFallbackPolicy {
   /// Allows direct client-side Google REST calls when no proxy is configured.
   ///
   /// This compatibility policy is deprecated because web-service credentials
-  /// cannot be kept secret in client applications. It remains the default only
-  /// for the `0.6.x` release line.
+  /// cannot be kept secret in client applications. It remains the default
+  /// through `0.x` and is scheduled to stop being the default in `1.0.0`.
   @Deprecated(
     'Direct client-side REST fallback is insecure and is deprecated in 0.6.0. '
     'Use PlacesWebFallbackPolicy.proxyOnly with an authenticated proxy.',
@@ -135,11 +142,11 @@ enum PlacesWebFallbackPolicy {
 @immutable
 /// Browser-specific loading and HTTP fallback behavior.
 class PlacesWebOptions {
+  /// Creates browser options; every default works without configuration.
   const PlacesWebOptions({
     this.versionChannel = PlacesWebVersionChannel.weekly,
     this.cspNonce,
     this.initializationTimeout = const Duration(seconds: 10),
-    // ignore: deprecated_member_use_from_same_package
     this.fallbackPolicy = PlacesWebFallbackPolicy.direct,
   });
 
@@ -157,6 +164,8 @@ class PlacesWebOptions {
   /// Policy for REST operations and JavaScript-to-HTTP fallback.
   final PlacesWebFallbackPolicy fallbackPolicy;
 
+  /// Throws a [PlacesException] of kind [PlacesErrorKind.configuration] when
+  /// [initializationTimeout] is not positive or [cspNonce] is empty.
   void validate() {
     if (initializationTimeout <= Duration.zero) {
       throw const PlacesException.configuration(
@@ -178,6 +187,7 @@ class PlacesWebOptions {
 /// Describes a request before proxy authentication headers are requested.
 @immutable
 class PlacesProxyRequest {
+  /// Creates the description of one proxied request.
   const PlacesProxyRequest({
     required this.operation,
     required this.method,
@@ -206,6 +216,7 @@ typedef PlacesProxyAuthenticationProvider =
 @immutable
 /// Keyless proxy endpoints and their client-to-proxy authentication hook.
 class PlacesProxyConfiguration {
+  /// Creates a keyless proxy configuration.
   const PlacesProxyConfiguration({
     required this.placesEndpoint,
     this.timeZoneEndpoint,
@@ -221,6 +232,10 @@ class PlacesProxyConfiguration {
   /// Optional per-request client-to-proxy authentication provider.
   final PlacesProxyAuthenticationProvider? authentication;
 
+  /// Throws a [PlacesException] of kind [PlacesErrorKind.configuration] when
+  /// an endpoint is not an absolute `https` URI (`http` is allowed only for
+  /// `localhost`, `127.0.0.1` and `::1`), or carries credentials, a query, or
+  /// a fragment.
   void validate() {
     _validateProxyEndpoint(placesEndpoint, name: 'placesEndpoint');
     final timeZoneEndpoint = this.timeZoneEndpoint;
@@ -239,6 +254,7 @@ class PlacesProxyConfiguration {
 @immutable
 /// Cross-platform behavioral options for `PlacesClient`.
 class PlacesClientOptions {
+  /// Creates client options; every default works without configuration.
   const PlacesClientOptions({
     this.requestTimeout = const Duration(seconds: 15),
     this.httpClientOwnership = PlacesHttpClientOwnership.caller,

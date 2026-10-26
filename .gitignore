@@ -24,11 +24,11 @@ example/**/*.iml
 example/**/.DS_Store
 example/ios/Flutter/ephemeral/
 
-# Local maintainer files
-/roadmap.md
-/roadmap_history.md
-/doc/documentation_style.md
-/AGENTS.md
+# Local maintainer files (flutter-package template)
+/CLAUDE.md
+/RELEASE_WORKFLOW.md
+/ROADMAP.md
+/ROADMAP_HISTORY.md
 
 # FVM Version Cache
 .fvm/

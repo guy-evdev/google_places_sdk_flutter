@@ -1,3 +1,44 @@
+## 0.7.0
+
+### October 26, 2026
+
+**Breaking changes:**
+
+* Requires Flutter `3.44.0` and Dart `3.12.0` or later.
+* `decoration:` takes [`material_ui`](https://pub.dev/packages/material_ui)'s `InputDecoration`. Apps still on `package:flutter/material.dart` need no other change.
+* Picking a place now loads its coordinates and address by default, and `PlacesClient` requests fewer fields when you pass none.
+* Inline suggestions float over the page instead of pushing it down.
+* Wasm web builds use the Maps JavaScript API, like other web builds.
+* A few smaller API changes. [Migrating to 0.7.0](MIGRATION.md#070) covers every step, with before/after code.
+
+**Security:**
+
+* Wasm web builds now follow `PlacesWebOptions.fallbackPolicy`. `0.6.x` ignored it and will not be patched.
+
+**New:**
+
+* `apiKey:` on the widgets — no client to create or close.
+* Builders for the field, each row and the suggestion area, and `PlacesAutocompleteController` for a search UI of your own.
+* `PlacePhotoView` shows place photos with their required attribution.
+* `minInputLength` and `debounceDuration` to send fewer billed requests, and the `TextField` options on the widgets.
+* Address getters such as `city` and `streetAddress`, and `PlaceTypePresets` for common place types.
+
+**Fixed:**
+
+* On web, autocomplete no longer fails on nearly every keystroke.
+* Rebuilding a widget no longer ends the user's search and billing session.
+* Form field and dialog fixes: typing after a pick, `FormState.reset()`, and clearing inside the search.
+
+**Deprecated:**
+
+* `suggestionBuilder` and `PlacesPhotoAttribution.prefix`, for removal in `1.0.0`.
+
+**Compatibility:**
+
+* Wider `http` and `web` ranges, and a new `material_ui` dependency.
+
+See [What's new in 0.7.0](doc/whats_new_0_7_0.md) for details and examples.
+
 ## 0.6.1
 
 ### July 27, 2026
