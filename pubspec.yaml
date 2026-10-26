@@ -1,15 +1,15 @@
 name: google_places_sdk_flutter
-description: "Address autocomplete TextField for Google Places API (New) that returns coordinates and a parsed address. Pure Dart on every Flutter platform, Wasm-ready."
+description: "Google Places autocomplete for address and location search: a TextField, form field or search dialog that returns coordinates and a parsed address. Places API (New)."
 version: 0.7.0
 homepage: https://github.com/guy-evdev/google_places_sdk_flutter
 repository: https://github.com/guy-evdev/google_places_sdk_flutter
 issue_tracker: https://github.com/guy-evdev/google_places_sdk_flutter/issues
 topics:
-  - flutter
-  - autocomplete
-  - google-maps
+  - google-places
   - places
   - address
+  - autocomplete
+  - google-maps
 
 screenshots:
   - description: 'Inline mode: suggestions in a card anchored to the search field.'
