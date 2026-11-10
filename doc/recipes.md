@@ -142,39 +142,68 @@ screens do, and opens as a regular page, so the system back gesture closes it.
 
 ## Change or translate the widget's text
 
-Every piece of text the widgets show comes from `PlacesStrings`. Pass your own
-to `strings:`:
+The widgets' text follows your app's language in English, Hebrew, Arabic,
+Russian, French, German, Spanish and Portuguese. If your app lists the
+language in `supportedLocales`, there is nothing to do. A
+regional locale uses its language (`fr-CA` gets French) and any other language
+gets English. Hebrew and Arabic read right-to-left because your app does.
+
+To show the widgets in a language other than the app's:
 
 ```dart
 PlacesAutocompleteField(
   apiKey: apiKey,
-  strings: const PlacesStrings(
-    searchHint: 'Rechercher un lieu',
-    loadingText: 'Chargement des lieux…',
-    noResultsText: 'Aucun lieu correspondant.',
-    errorText: 'Impossible de charger les lieux.',
-    retryText: 'Réessayer',
-    poweredByGoogleLabel: 'Fourni par Google',
-    overlayTitle: 'Rechercher des lieux',
-    closeLabel: 'Fermer',
-    clearLabel: 'Effacer la recherche',
-    placeSuggestionLabel: 'Suggestion de lieu',
-    querySuggestionLabel: 'Suggestion de recherche',
-    distanceUnitMeters: 'm',
-    photoAttributionPrefix: 'Photo de',
-    viewOnGoogleMapsText: 'Voir sur Google Maps',
-  ),
+  strings: const PlacesStrings(locale: Locale('he')),
 )
 ```
 
-Any string you leave out keeps its English default. The package does not yet
-pick a language for you, so an app in another language passes every string
-itself; the [API reference](api_reference.md#display-strings) lists them all.
-`languageCode:` is separate: it sets the language of Google's results, not of
-the widget's own text.
+To change one string, set only that one; the rest stay in the same language:
 
-`PlacePhotoView` and `PlacesPhotoAttribution` take the same `strings:` for
-their "Photo by" text, the "View on Google Maps" link, and the retry button.
+```dart
+strings: const PlacesStrings(searchHint: 'חפשו מסעדה'),
+```
+
+Portuguese is one bundle with Brazilian wording. A European Portuguese app can
+override the two strings that differ, only when its locale is `pt-PT`:
+
+```dart
+strings: Localizations.localeOf(context) == const Locale('pt', 'PT')
+    ? const PlacesStrings(
+        loadingText: 'A carregar locais…',
+        selectionLoadingLabel: 'A carregar detalhes do local',
+      )
+    : const PlacesStrings(),
+```
+
+The [API reference](api_reference.md#display-strings) lists every string.
+
+`PlacePhotoView` and `PlacesPhotoAttribution` use the same `strings:` for their
+"Photo by" text, the "View on Google Maps" link, and the retry button.
+
+### Distance units
+
+With `origin` set, distances read "850 m" or "1.2 km", and "500 ft" or "0.8 mi"
+on devices whose region is the United States, United Kingdom, Liberia or
+Myanmar. Numbers use the language's decimal separator and digits ("1,2 km" in
+German). On web, the region comes from the browser's language setting, and a
+language with no region gets metric. To force a system:
+
+```dart
+strings: const PlacesStrings(distanceUnits: PlacesDistanceUnits.metric),
+```
+
+### The result language is separate
+
+This is only the widgets' own text. The language of place names and addresses
+Google returns is `languageCode`:
+
+```dart
+PlacesAutocompleteField(
+  apiKey: apiKey,
+  languageCode: 'he',
+  strings: const PlacesStrings(locale: Locale('he')),
+)
+```
 
 ## Limit results to an area
 
@@ -316,6 +345,8 @@ PlacesAutocompleteField(
   },
 )
 ```
+
+`item.distanceText` is the formatted distance for a row, or `null` without `origin`.
 
 A `QuerySuggestion` only arrives with `includeQueryPredictions: true`. The
 default rows carry a screen-reader label; give your rows one too, for example
@@ -758,6 +789,9 @@ Two things to know before you use it:
 
 Without `origin`, no distance is requested and none is rendered. That is the
 default.
+
+In a custom row, `item.distanceText` is the distance as the default row shows it
+("1.2 km"), or `null` when there is none; see [Distance units](#distance-units).
 
 ### Using the device's location as the origin
 

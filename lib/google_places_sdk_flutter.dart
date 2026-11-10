@@ -45,4 +45,5 @@ export 'src/widgets/places_autocomplete_form_field.dart';
 export 'src/widgets/place_photo_view.dart';
 export 'src/widgets/places_autocomplete_overlay.dart';
 export 'src/widgets/places_photo_attribution.dart';
-export 'src/widgets/places_strings.dart';
+export 'src/widgets/places_strings.dart'
+    show PlacesDistanceUnits, PlacesStrings;

@@ -93,14 +93,17 @@ every surface: every `TextField` parameter except `controller`, `focusNode`, `de
 `onTapOutside`, `onTapUpOutside` run alongside the widget's own handling; `scrollController`,
 `undoController`, `statesController` attach to the search field, not a launcher.
 
-Widget text: `strings: const PlacesStrings(searchHint: ..., loadingText: ..., noResultsText: ...,
-errorText: ..., retryText: ..., poweredByGoogleLabel: ..., overlayTitle: ..., closeLabel: ...,
-clearLabel: ..., placeSuggestionLabel: ..., querySuggestionLabel: ..., distanceUnitMeters: ...,
-photoAttributionPrefix: ..., viewOnGoogleMapsText: ...)`.
-Every default is English and the package does not pick strings from the app's locale yet, so a
-non-English app passes them all. `languageCode` sets Google's result language, not the widget's
-text. The photo widgets take the same `strings:` for "Photo by" (`photoAttributionPrefix`) and
-"View on Google Maps" (`viewOnGoogleMapsText`).
+Widget text: follows the app's language (en, he, ar, ru, fr, de, es, pt) with no code; a regional
+tag uses its base language, anything else gets English. Override with `strings:`:
+`PlacesStrings(locale: Locale('he'))` forces a language; `PlacesStrings(searchHint: '...')` replaces
+only that string, the rest stay in the resolved language; `PlacesStrings(distanceUnits:
+PlacesDistanceUnits.metric)` forces km/m or mi/ft (default: by device region, imperial in US, GB, LR,
+MM; only shown when `origin` is set). Strings: `searchHint`, `loadingText`, `noResultsText`,
+`errorText`, `retryText`, `poweredByGoogleLabel`, `overlayTitle`, `closeLabel`, `clearLabel`,
+`placeSuggestionLabel`, `querySuggestionLabel`, `distanceUnitMeters`, `distanceUnitKilometers`,
+`distanceUnitMiles`, `distanceUnitFeet`, `selectionLoadingLabel`, `photoAttributionPrefix`,
+`viewOnGoogleMapsText`. `languageCode` sets Google's result language, not the widget's text. The
+photo widgets take the same `strings:`.
 
 Builders — each gets one data object and reaches every mode:
 
@@ -108,7 +111,7 @@ Builders — each gets one data object and reaches every mode:
 suggestionItemBuilder: (context, PlacesSuggestionItemData item) => switch (item.suggestion) {
   final PlaceSuggestion place => ListTile(title: Text(place.primaryText.text), onTap: item.onSelected),
   final QuerySuggestion query => ListTile(title: Text(query.displayText), onTap: item.onSelected),
-}, // item.highlighted: keyboard highlight
+}, // item.highlighted: keyboard highlight; item.distanceText: formatted distance ("1.2 km") or null
 suggestionsViewBuilder: (context, PlacesSuggestionsViewData view) => switch (view.status) {
   PlacesSuggestionsStatus.error => Card(child: ListTile(title: Text('Failed: ${view.error?.kind.name}'), onTap: view.onRetry)),
   _ => view.defaultView, // loading, results, empty: the package's own
@@ -251,6 +254,9 @@ default theme there. A `decoration:` must still be `material_ui`'s `InputDecorat
 
 ## Mistakes to avoid
 
+- Writing a full `PlacesStrings` per language — the eight bundles already exist; set `locale` or
+  override single strings.
+- Expecting `PlacesStrings.locale` to change Google's result language — `languageCode` does.
 - Passing both `apiKey:` and `client:`, or neither — a debug assertion fails.
 - Reading `place.displayName`, `rating`, or `photos` without requesting them — they are `null` or
   empty. Add them to `selectionFields` / `fields`.

@@ -184,10 +184,17 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   final InputDecoration? decoration;
 
   /// The overlay's own text: the title, the hint, the messages, and the
-  /// screen-reader labels. Every default is English.
+  /// screen-reader labels.
+  ///
+  /// Every default follows the app's language (English when the package does
+  /// not bundle it); a string set here replaces only that string. See
+  /// [PlacesStrings].
   final PlacesStrings strings;
 
   /// Preferred BCP-47 language code for autocomplete results.
+  ///
+  /// This is the language of Google's results only. The overlay's own text
+  /// follows the app's language; see [PlacesStrings.locale].
   final String? languageCode;
 
   /// Preferred CLDR region code for autocomplete results.
@@ -393,6 +400,10 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
   ///
   /// This is useful for field-launcher flows where the actual editing
   /// experience should happen in a dialog or fullscreen route.
+  ///
+  /// The route takes its language from [strings]' [PlacesStrings.locale],
+  /// else the app's root `Localizations`, not from a `Localizations.override`
+  /// placed around [context].
   static Future<PlaceSelection?> show(
     BuildContext context, {
     PlacesClient? client,
@@ -499,11 +510,6 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
     VoidCallback? onClearField,
     ValueChanged<Object>? onError,
   }) async {
-    assert(
-      (client == null) != (apiKey == null),
-      'Pass exactly one of client or apiKey.',
-    );
-    assert(minInputLength >= 1, 'minInputLength must be at least 1.');
     final ownedController = controller == null
         ? PlacesAutocompleteController(initialText: initialText)
         : null;
@@ -638,7 +644,9 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
                 context,
                 MaterialLocalizations,
               )?.modalBarrierDismissLabel ??
-              strings.closeLabel,
+              // Fixed at push: a locale switched while it is open does not
+              // update this screen-reader-only label.
+              resolvePlacesStrings(context, strings).closeLabel,
           traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
           builder: (dialogContext) => PlacesDesignScope(
             child: Dialog(
@@ -773,7 +781,8 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
       autofocus: true,
     );
 
-    final effectiveTitle = title ?? strings.overlayTitle;
+    final resolved = resolvePlacesStrings(context, strings);
+    final effectiveTitle = title ?? resolved.overlayTitle;
     if (mode == PlacesAutocompleteOverlayMode.fullscreen) {
       // The field builds the top bar itself, with the search input in it.
       // Escape does what the bar's back button does; with results open, the
@@ -811,7 +820,7 @@ class PlacesAutocompleteOverlay extends StatelessWidget {
                 ),
               ),
               IconButton(
-                tooltip: strings.closeLabel,
+                tooltip: resolved.closeLabel,
                 onPressed: () => Navigator.of(context).maybePop(),
                 icon: const Icon(Icons.close),
               ),

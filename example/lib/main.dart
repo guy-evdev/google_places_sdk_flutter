@@ -79,21 +79,36 @@ extension on TextSearchMode {
   };
 }
 
+/// The app's language. The Places widgets get no translations from the app:
+/// `strings:` carries only the demo's units and hint override; every other
+/// string follows `MaterialApp.locale` by itself, RTL for he and ar.
 enum DemoLocale {
-  english(Locale('en', 'US'), false),
-  hebrew(Locale('he', 'IL'), true),
-  arabic(Locale('ar', 'SA'), true);
+  english(Locale('en'), 'English'),
+  hebrew(Locale('he'), 'עברית'),
+  arabic(Locale('ar'), 'العربية'),
+  russian(Locale('ru'), 'Русский'),
+  french(Locale('fr'), 'Français'),
+  german(Locale('de'), 'Deutsch'),
+  spanish(Locale('es'), 'Español'),
+  portuguese(Locale('pt'), 'Português');
 
-  const DemoLocale(this.locale, this.isRtl);
+  const DemoLocale(this.locale, this.label);
 
   final Locale locale;
-  final bool isRtl;
+  final String label;
+}
 
-  String get label => switch (this) {
-    DemoLocale.english => 'English',
-    DemoLocale.hebrew => 'עברית',
-    DemoLocale.arabic => 'العربية',
-  };
+/// Distance units; automatic follows the device region.
+enum DemoUnits {
+  automatic(null),
+  metric(PlacesDistanceUnits.metric),
+  imperial(PlacesDistanceUnits.imperial);
+
+  const DemoUnits(this.units);
+
+  final PlacesDistanceUnits? units;
+
+  String get label => name[0].toUpperCase() + name.substring(1);
 }
 
 class DemoConfiguration {
@@ -105,6 +120,8 @@ class DemoConfiguration {
     this.fetchTimeZone = false,
     this.includeQueryPredictions = false,
     this.showDistanceFromOrigin = false,
+    this.units = DemoUnits.automatic,
+    this.overrideHint = false,
     this.showPhotos = true,
     this.customRows = false,
     this.pageSize = 5,
@@ -124,6 +141,8 @@ class DemoConfiguration {
   final bool fetchTimeZone;
   final bool includeQueryPredictions;
   final bool showDistanceFromOrigin;
+  final DemoUnits units;
+  final bool overrideHint;
   final bool showPhotos;
   final bool customRows;
   final int pageSize;
@@ -140,6 +159,8 @@ class DemoConfiguration {
     bool? fetchTimeZone,
     bool? includeQueryPredictions,
     bool? showDistanceFromOrigin,
+    DemoUnits? units,
+    bool? overrideHint,
     bool? showPhotos,
     bool? customRows,
     int? pageSize,
@@ -154,6 +175,8 @@ class DemoConfiguration {
           includeQueryPredictions ?? this.includeQueryPredictions,
       showDistanceFromOrigin:
           showDistanceFromOrigin ?? this.showDistanceFromOrigin,
+      units: units ?? this.units,
+      overrideHint: overrideHint ?? this.overrideHint,
       showPhotos: showPhotos ?? this.showPhotos,
       customRows: customRows ?? this.customRows,
       pageSize: pageSize ?? this.pageSize,
@@ -203,6 +226,12 @@ class _ExampleAppState extends State<ExampleApp> {
 
   bool get _includeQueryPredictions => _configuration.includeQueryPredictions;
 
+  /// Only what the demo overrides; every other string follows the language.
+  PlacesStrings get _strings => PlacesStrings(
+    distanceUnits: _configuration.units.units,
+    searchHint: _configuration.overrideHint ? 'Find somewhere' : null,
+  );
+
   PlaceCoordinates? get _origin => _configuration.origin;
 
   PlacesSuggestionItemBuilder? get _suggestionItemBuilder =>
@@ -246,16 +275,8 @@ class _ExampleAppState extends State<ExampleApp> {
       title: 'google_places_sdk_flutter example',
       debugShowCheckedModeBanner: false,
       locale: _demoLocale.locale,
-      supportedLocales: DemoLocale.values
-          .map((locale) => locale.locale)
-          .toList(),
+      supportedLocales: [for (final l in DemoLocale.values) l.locale],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      builder: (context, child) => Directionality(
-        textDirection: _demoLocale.isRtl
-            ? TextDirection.rtl
-            : TextDirection.ltr,
-        child: child!,
-      ),
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0B5D3B)),
         useMaterial3: true,
@@ -275,8 +296,6 @@ class _ExampleAppState extends State<ExampleApp> {
   }
 
   Widget _buildContent(BuildContext context) {
-    final strings = _stringsFor(_demoLocale);
-
     return ListView(
       children: <Widget>[
         _ConfigurationSummary(
@@ -298,6 +317,7 @@ class _ExampleAppState extends State<ExampleApp> {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: <Widget>[
               SegmentedButton<PlacesAutocompleteFieldMode>(
+                showSelectedIcon: false,
                 segments: const <ButtonSegment<PlacesAutocompleteFieldMode>>[
                   ButtonSegment<PlacesAutocompleteFieldMode>(
                     value: PlacesAutocompleteFieldMode.inline,
@@ -326,9 +346,8 @@ class _ExampleAppState extends State<ExampleApp> {
             client: _client,
             controller: _controller,
             decoration: _fieldDecoration,
-            strings: strings,
+            strings: _strings,
             languageCode: _demoLocale.locale.languageCode,
-            regionCode: _demoLocale.locale.countryCode?.toLowerCase(),
             origin: _origin,
             fetchPlaceDetailsOnSelection: _fetchPlaceDetails,
             fetchTimeZoneOnSelection: _fetchTimeZoneOnSelection,
@@ -378,9 +397,8 @@ class _ExampleAppState extends State<ExampleApp> {
               client: _client,
               controller: _controller,
               decoration: _fieldDecoration,
-              strings: strings,
+              strings: _strings,
               languageCode: _demoLocale.locale.languageCode,
-              regionCode: _demoLocale.locale.countryCode?.toLowerCase(),
               origin: _origin,
               fetchPlaceDetailsOnSelection: _fetchPlaceDetails,
               fetchTimeZoneOnSelection: _fetchTimeZoneOnSelection,
@@ -444,7 +462,6 @@ class _ExampleAppState extends State<ExampleApp> {
               FilledButton.tonal(
                 onPressed: () => _openOverlay(
                   context,
-                  strings,
                   mode: _widgetType == WidgetType.fullscreen
                       ? PlacesAutocompleteOverlayMode.fullscreen
                       : PlacesAutocompleteOverlayMode.dialog,
@@ -541,7 +558,6 @@ class _ExampleAppState extends State<ExampleApp> {
                     _PhotoStrip(
                       photos: _selection!.place!.photos,
                       client: _client,
-                      strings: strings,
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -583,8 +599,7 @@ class _ExampleAppState extends State<ExampleApp> {
   }
 
   Future<void> _openOverlay(
-    BuildContext context,
-    PlacesStrings strings, {
+    BuildContext context, {
     PlacesAutocompleteOverlayMode mode = PlacesAutocompleteOverlayMode.dialog,
   }) async {
     final selection = await PlacesAutocompleteOverlay.show(
@@ -592,9 +607,8 @@ class _ExampleAppState extends State<ExampleApp> {
       client: _client,
       mode: mode,
       decoration: _fieldDecoration,
-      strings: strings,
+      strings: _strings,
       languageCode: _demoLocale.locale.languageCode,
-      regionCode: _demoLocale.locale.countryCode?.toLowerCase(),
       origin: _origin,
       fetchPlaceDetailsOnSelection: _fetchPlaceDetails,
       fetchTimeZoneOnSelection: _fetchTimeZoneOnSelection,
@@ -790,7 +804,6 @@ class _ExampleAppState extends State<ExampleApp> {
         PlaceField.googleMapsTypeLabel,
       },
       languageCode: _demoLocale.locale.languageCode,
-      regionCode: _demoLocale.locale.countryCode?.toLowerCase(),
       pageSize: _configuration.pageSize,
       pageToken: pageToken,
       priceLevels: const <PlacePriceLevel>[
@@ -872,46 +885,6 @@ class _ExampleAppState extends State<ExampleApp> {
     _isLoadingTextSearch = false;
     _textSearchError = null;
     _textSearchValidationError = null;
-  }
-
-  PlacesStrings _stringsFor(DemoLocale locale) {
-    return switch (locale) {
-      DemoLocale.english => const PlacesStrings(
-        searchHint: 'Search for a place',
-        overlayTitle: 'Search places',
-        distanceUnitMeters: 'm',
-        photoAttributionPrefix: 'Photo by',
-        viewOnGoogleMapsText: 'View on Google Maps',
-      ),
-      DemoLocale.hebrew => const PlacesStrings(
-        searchHint: 'חיפוש מקום',
-        loadingText: 'טוען תוצאות…',
-        noResultsText: 'לא נמצאו תוצאות',
-        errorText: 'אירעה שגיאה בטעינת המקומות',
-        retryText: 'נסה שוב',
-        poweredByGoogleLabel: 'מופעל על ידי Google',
-        overlayTitle: 'חיפוש מקומות',
-        closeLabel: 'סגור',
-        clearLabel: 'נקה חיפוש',
-        distanceUnitMeters: 'מ׳',
-        photoAttributionPrefix: 'צילום:',
-        viewOnGoogleMapsText: 'הצגה במפות Google',
-      ),
-      DemoLocale.arabic => const PlacesStrings(
-        searchHint: 'ابحث عن مكان',
-        loadingText: 'جار تحميل النتائج…',
-        noResultsText: 'لا توجد نتائج مطابقة',
-        errorText: 'تعذر تحميل الأماكن',
-        retryText: 'إعادة المحاولة',
-        poweredByGoogleLabel: 'مشغل بواسطة Google',
-        overlayTitle: 'البحث عن الأماكن',
-        closeLabel: 'إغلاق',
-        clearLabel: 'مسح البحث',
-        distanceUnitMeters: 'م',
-        photoAttributionPrefix: 'تصوير:',
-        viewOnGoogleMapsText: 'العرض على خرائط Google',
-      ),
-    };
   }
 }
 
@@ -1183,6 +1156,34 @@ class _ConfigurationSheetState extends State<_ConfigurationSheet> {
                         ),
                       ),
                     ),
+                    DropdownButtonFormField<DemoUnits>(
+                      key: const ValueKey<String>('configuration-units'),
+                      initialValue: _draft.units,
+                      decoration: const InputDecoration(
+                        labelText: 'Distance units',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        for (final u in DemoUnits.values)
+                          DropdownMenuItem(value: u, child: Text(u.label)),
+                      ],
+                      onChanged: (value) => setState(
+                        () => _draft = _draft.copyWith(units: value),
+                      ),
+                    ),
+                    SwitchListTile(
+                      key: const ValueKey<String>('configuration-hint'),
+                      contentPadding: EdgeInsets.zero,
+                      value: _draft.overrideHint,
+                      title: const Text('Override the search hint'),
+                      subtitle: const Text(
+                        'PlacesStrings(searchHint: ...) changes that one '
+                        'string; the rest still follow the language.',
+                      ),
+                      onChanged: (value) => setState(
+                        () => _draft = _draft.copyWith(overrideHint: value),
+                      ),
+                    ),
                     SwitchListTile(
                       key: const ValueKey<String>('configuration-photos'),
                       contentPadding: EdgeInsets.zero,
@@ -1317,15 +1318,10 @@ class _ControllerStatus extends StatelessWidget {
 /// A horizontal strip of the place's photos — a composition of
 /// [PlacePhotoView]s, since the package has no gallery widget.
 class _PhotoStrip extends StatelessWidget {
-  const _PhotoStrip({
-    required this.photos,
-    required this.client,
-    required this.strings,
-  });
+  const _PhotoStrip({required this.photos, required this.client});
 
   final List<PlacePhoto> photos;
   final PlacesClient client;
-  final PlacesStrings strings;
 
   @override
   Widget build(BuildContext context) {
@@ -1343,7 +1339,6 @@ class _PhotoStrip extends StatelessWidget {
             client: client,
             width: 160,
             height: 120,
-            strings: strings,
             // Opens "View on Google Maps" and author profiles. Google requires
             // the Maps link; outside the browser it is shown only with this.
             onOpenLink: (uri) => launchUrl(uri),

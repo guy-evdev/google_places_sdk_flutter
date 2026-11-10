@@ -1,3 +1,21 @@
+## 0.8.0
+
+### November 10, 2026
+
+**New:**
+
+* The widgets' text follows the app's language in English, Hebrew, Arabic, Russian, French, German, Spanish and Portuguese, with no code. `PlacesStrings.locale` forces another language.
+* A string you set replaces only that string; the rest stay in the widgets' language.
+* Distances show in m and km, or in ft and mi on US, GB, LR and MM devices, with the language's number format. `PlacesStrings.distanceUnits` forces one.
+* `PlacesSuggestionItemData.distanceText` gives custom rows the formatted distance.
+
+**Compatibility:**
+
+* Apps that set `origin` now see "1.2 km" or "0.8 mi" where `0.7.x` showed "1234 m".
+* Non-English apps get translated defaults, and a partial `PlacesStrings` now fills the rest from the app's language instead of English.
+
+See [What's new in 0.8.0](doc/whats_new_0_8_0.md) for details and examples.
+
 ## 0.7.0
 
 ### October 26, 2026

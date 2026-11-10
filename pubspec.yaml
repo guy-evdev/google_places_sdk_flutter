@@ -1,6 +1,6 @@
 name: google_places_sdk_flutter
 description: "Google Places autocomplete for address and location search: a TextField, form field or search dialog that returns coordinates and a parsed address. Places API (New)."
-version: 0.7.0
+version: 0.8.0
 homepage: https://github.com/guy-evdev/google_places_sdk_flutter
 repository: https://github.com/guy-evdev/google_places_sdk_flutter
 issue_tracker: https://github.com/guy-evdev/google_places_sdk_flutter/issues

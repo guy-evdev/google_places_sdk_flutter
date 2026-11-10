@@ -15,6 +15,7 @@ import 'autocomplete_session_cache.dart';
 import 'backend.dart';
 import 'error_handling.dart';
 import 'place_field_mapping.dart';
+import 'places_response.dart';
 import 'proxy_transport.dart';
 
 /// Places backend for web builds, using the Google Maps JavaScript library and HTTP.
@@ -334,7 +335,7 @@ class PlacesWebBackend implements PlacesBackend {
       uri =
           Uri.parse(
             proxyTimeZoneEndpoint?.toString() ??
-                _normalizeTimeZoneUrl(
+                normalizeTimeZoneUrl(
                   timeZoneBaseUrl ?? _defaultTimeZoneBaseUrl,
                 ),
           ).replace(
@@ -372,7 +373,7 @@ class PlacesWebBackend implements PlacesBackend {
       timeout: options.requestTimeout,
       cancellationToken: cancellationToken,
     );
-    final body = _decode(
+    final body = decodePlacesResponse(
       response,
       operation: PlacesOperation.timeZone,
       fromProxy: proxyTimeZoneEndpoint != null,
@@ -1031,7 +1032,11 @@ class PlacesWebBackend implements PlacesBackend {
       timeout: options.requestTimeout,
       cancellationToken: cancellationToken,
     );
-    return _decode(response, operation: operation);
+    return decodePlacesResponse(
+      response,
+      operation: operation,
+      fromProxy: _usesProxy,
+    );
   }
 
   Future<Map<String, Object?>> _get({
@@ -1063,7 +1068,11 @@ class PlacesWebBackend implements PlacesBackend {
       timeout: options.requestTimeout,
       cancellationToken: cancellationToken,
     );
-    return _decode(response, operation: operation);
+    return decodePlacesResponse(
+      response,
+      operation: operation,
+      fromProxy: _usesProxy,
+    );
   }
 
   Uri _resolveUri(
@@ -1166,89 +1175,6 @@ class PlacesWebBackend implements PlacesBackend {
           code: 'web_http_disabled',
         );
     }
-  }
-
-  Map<String, Object?> _decode(
-    http.Response response, {
-    required PlacesOperation operation,
-    bool? fromProxy,
-  }) {
-    final proxyResponse = fromProxy ?? _usesProxy;
-    Object? decoded;
-    if (response.body.isNotEmpty) {
-      try {
-        decoded = jsonDecode(response.body);
-      } on FormatException {
-        throw _invalidResponse(
-          response,
-          operation: operation,
-          code: 'malformed_json',
-          fromProxy: proxyResponse,
-        );
-      }
-    }
-    if (decoded is! Map<Object?, Object?>) {
-      throw _invalidResponse(
-        response,
-        operation: operation,
-        code: response.body.isEmpty ? 'empty_response' : 'non_object_response',
-        fromProxy: proxyResponse,
-      );
-    }
-    final body = decoded.cast<String, Object?>();
-    final error = body['error'] is Map<Object?, Object?>
-        ? (body['error'] as Map<Object?, Object?>).cast<String, Object?>()
-        : null;
-    if (response.statusCode >= 400 || error != null) {
-      final statusCode = response.statusCode;
-      final message = error?['message'];
-      throw PlacesException(
-        message is String && message.isNotEmpty
-            ? message
-            : 'The Places HTTP request failed.',
-        kind: error == null
-            ? (!proxyResponse ? PlacesErrorKind.http : PlacesErrorKind.proxy)
-            : PlacesErrorKind.googleApi,
-        statusCode: statusCode,
-        code:
-            error?['status']?.toString() ??
-            error?['code']?.toString() ??
-            'http_error',
-        retryable: statusCode == 408 || statusCode == 429 || statusCode >= 500,
-        operation: operation,
-        details: error == null
-            ? null
-            : <String, Object?>{
-                if (error['status'] != null) 'status': error['status'],
-                if (error['code'] != null) 'code': error['code'],
-              },
-      );
-    }
-    return body;
-  }
-
-  PlacesException _invalidResponse(
-    http.Response response, {
-    required PlacesOperation operation,
-    required String code,
-    required bool fromProxy,
-  }) {
-    final metadata = <String, Object?>{'bodyLength': response.bodyBytes.length};
-    final contentType = response.headers['content-type'];
-    if (contentType != null) {
-      metadata['contentType'] = contentType;
-    }
-    return PlacesException(
-      !fromProxy
-          ? 'Google Places returned an invalid response.'
-          : 'The configured Places proxy returned an invalid response.',
-      kind: !fromProxy ? PlacesErrorKind.googleApi : PlacesErrorKind.proxy,
-      statusCode: response.statusCode,
-      code: code,
-      retryable: response.statusCode >= 500,
-      operation: operation,
-      metadata: metadata,
-    );
   }
 
   List<String> _listOfStrings(JSAny? value) {
@@ -1362,21 +1288,4 @@ bool shouldFallbackToHttp(Object error) {
       message.contains('not a valid') ||
       message.contains('unsupported') ||
       message.contains('unexpected property');
-}
-
-/// Ensures a Time Zone base URL ends in `/json`, without disturbing any query
-/// string the caller configured on it.
-String _normalizeTimeZoneUrl(String value) {
-  final parsed = Uri.tryParse(value);
-  if (parsed == null) {
-    return value;
-  }
-  var path = parsed.path;
-  if (path.endsWith('/')) {
-    path = path.substring(0, path.length - 1);
-  }
-  if (path.endsWith('/json')) {
-    return value;
-  }
-  return parsed.replace(path: '$path/json').toString();
 }

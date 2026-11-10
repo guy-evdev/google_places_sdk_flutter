@@ -91,7 +91,7 @@ class PlacesFieldData {
   final String? errorText;
 
   /// The widget's strings, such as [PlacesStrings.searchHint] and
-  /// [PlacesStrings.clearLabel].
+  /// [PlacesStrings.clearLabel], already in the widget's language.
   final PlacesStrings strings;
 }
 
@@ -104,6 +104,7 @@ class PlacesSuggestionItemData {
     required this.highlighted,
     required this.onSelected,
     required this.strings,
+    this.distanceText,
   });
 
   /// The suggestion to show: a [PlaceSuggestion] or a [QuerySuggestion].
@@ -120,8 +121,19 @@ class PlacesSuggestionItemData {
   final VoidCallback onSelected;
 
   /// The widget's strings, such as [PlacesStrings.placeSuggestionLabel] and
-  /// [PlacesStrings.distanceUnitMeters].
+  /// [PlacesStrings.distanceUnitMeters], already in the widget's language,
+  /// with [PlacesStrings.distanceUnits] set to the units the widget uses.
   final PlacesStrings strings;
+
+  /// The distance exactly as the default row shows it, such as "850 m",
+  /// "1.2 km" or "0.8 mi", so a custom row can show it without formatting
+  /// [PlaceSuggestion.distanceMeters] itself.
+  ///
+  /// It is in [PlacesStrings.distanceUnits], which default to the device's
+  /// region, with the units and number format of the widget's language.
+  /// `null` when the suggestion has no distance: the field has no `origin`,
+  /// or the suggestion is a [QuerySuggestion].
+  final String? distanceText;
 }
 
 /// The state of the suggestion area, as a [PlacesSuggestionsViewBuilder]
@@ -195,6 +207,6 @@ class PlacesSuggestionsViewData {
   final Widget defaultView;
 
   /// The widget's strings, such as [PlacesStrings.loadingText] and
-  /// [PlacesStrings.retryText].
+  /// [PlacesStrings.retryText], already in the widget's language.
   final PlacesStrings strings;
 }

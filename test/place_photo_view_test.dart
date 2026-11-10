@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_places_sdk_flutter/google_places_sdk_flutter.dart';
 import 'package:google_places_sdk_flutter/src/internal/backend.dart';
+import 'package:google_places_sdk_flutter/src/widgets/l10n/places_strings_fr.dart';
 import 'package:google_places_sdk_flutter/src/widgets/photo_links.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -145,6 +146,38 @@ void main() {
       reason: 'the default view draws the attribution over the image',
     );
   });
+
+  for (final (highContrast, band) in <(bool, Color)>[
+    (false, const Color(0x8A000000)),
+    (true, const Color(0xB3000000)),
+  ]) {
+    testWidgets('the attribution band, highContrast: $highContrast', (
+      tester,
+    ) async {
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          FakeAccessibilityFeatures(highContrast: highContrast);
+      addTearDown(
+        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+      );
+      await _seedImage(tester, 'https://img.test/a');
+      await tester.pumpWidget(
+        _app(PlacePhotoView(photo: _photo, client: client, width: 200)),
+      );
+      backend.succeed(0, 'https://img.test/a');
+      await tester.pump();
+
+      final box = tester.widget<ColoredBox>(
+        find.descendant(
+          of: find.ancestor(
+            of: find.byType(RawImage),
+            matching: find.byType(Stack),
+          ),
+          matching: find.byType(ColoredBox),
+        ),
+      );
+      expect(box.color, band);
+    });
+  }
 
   testWidgets('a photo without author names gets no attribution', (
     tester,
@@ -973,6 +1006,149 @@ void main() {
         ),
       );
       expect(find.text('Image: Ana Lima'), findsOneWidget);
+    });
+  });
+
+  group('language', () {
+    Widget localized(Locale locale, Widget child) => MaterialApp(
+      locale: locale,
+      supportedLocales: const <Locale>[
+        Locale('en'),
+        Locale('he'),
+        Locale('ar'),
+      ],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      home: Scaffold(body: Center(child: child)),
+    );
+
+    testWidgets('PlacePhotoView follows the app language', (tester) async {
+      await _seedImage(tester, 'https://img.test/a');
+      PlacesStrings? received;
+      await tester.pumpWidget(
+        localized(
+          const Locale('he'),
+          PlacePhotoView(
+            photo: _photo,
+            client: client,
+            width: 100,
+            builder: (context, data) {
+              received = data.strings;
+              return data.defaultView;
+            },
+          ),
+        ),
+      );
+      backend.succeed(0, 'https://img.test/a');
+      await tester.pump();
+      expect(find.text('צילום: Ana Lima'), findsOneWidget);
+      expect(received?.retryText, 'ניסיון חוזר');
+      expect(received?.locale, const Locale('he'));
+
+      await tester.pumpWidget(
+        localized(
+          const Locale('he'),
+          PlacePhotoView(photo: _otherPhoto, client: client, width: 100),
+        ),
+      );
+      backend.responses[1].completeError(const PlacesException('down'));
+      await tester.pump();
+      expect(find.text('ניסיון חוזר'), findsOneWidget);
+    });
+
+    testWidgets('PlacePhotoView: locale forces a language', (tester) async {
+      await _seedImage(tester, 'https://img.test/a');
+      const strings = PlacesStrings(locale: Locale('de'));
+      await tester.pumpWidget(
+        localized(
+          const Locale('he'),
+          PlacePhotoView(
+            photo: _photo,
+            client: client,
+            width: 100,
+            strings: strings,
+          ),
+        ),
+      );
+      backend.succeed(0, 'https://img.test/a');
+      await tester.pump();
+      expect(find.text('Foto von Ana Lima'), findsOneWidget);
+
+      await tester.pumpWidget(
+        localized(
+          const Locale('he'),
+          PlacePhotoView(
+            photo: _otherPhoto,
+            client: client,
+            width: 100,
+            strings: strings,
+          ),
+        ),
+      );
+      backend.responses[1].completeError(const PlacesException('down'));
+      await tester.pump();
+      expect(find.text('Wiederholen'), findsOneWidget);
+    });
+
+    testWidgets('PlacesPhotoAttribution follows the app language', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        localized(
+          const Locale('he'),
+          PlacesPhotoAttribution(photo: _linkedPhoto, onOpenLink: (_) {}),
+        ),
+      );
+      expect(
+        find.text('צילום: Ana Lima, Bo Chen · הצגה במפות Google'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('PlacesPhotoAttribution: locale forces a language', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        localized(
+          const Locale('en'),
+          PlacesPhotoAttribution(
+            photo: _linkedPhoto,
+            onOpenLink: (_) {},
+            strings: const PlacesStrings(locale: Locale('fr')),
+          ),
+        ),
+      );
+      expect(
+        find.text(
+          '${placesStringsFr.photoAttributionPrefix} Ana Lima, Bo Chen · '
+          '${placesStringsFr.viewOnGoogleMapsText}',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Arabic joins author names with the Arabic comma', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        localized(
+          const Locale('ar'),
+          const PlacesPhotoAttribution(photo: _linkedPhoto),
+        ),
+      );
+      expect(find.textContaining('Ana Lima، Bo Chen'), findsOneWidget);
+
+      // An override keeps the separator: it follows the language, not the
+      // prefix.
+      await tester.pumpWidget(
+        localized(
+          const Locale('ar'),
+          const PlacesPhotoAttribution(
+            photo: _linkedPhoto,
+            strings: PlacesStrings(photoAttributionPrefix: 'By'),
+          ),
+        ),
+      );
+      expect(find.textContaining('By Ana Lima، Bo Chen'), findsOneWidget);
     });
   });
 }

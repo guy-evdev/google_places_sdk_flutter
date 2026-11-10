@@ -89,7 +89,8 @@ class PlacePhotoViewData {
   final Widget defaultView;
 
   /// The widget's strings, such as [PlacesStrings.retryText] and
-  /// [PlacesStrings.photoAttributionPrefix].
+  /// [PlacesStrings.photoAttributionPrefix], already in the widget's
+  /// language.
   final PlacesStrings strings;
 }
 
@@ -437,6 +438,7 @@ class _PlacePhotoViewState extends State<PlacePhotoView> {
     Widget? image,
     PlacesException? error,
   }) {
+    final strings = resolvePlacesStrings(context, widget.strings);
     final hasAttribution = photoHasAttribution(
       widget.photo,
       photoLinkOpener(widget.onOpenLink, widget.photo),
@@ -449,7 +451,7 @@ class _PlacePhotoViewState extends State<PlacePhotoView> {
         ),
       ),
       PlacePhotoStatus.error => _placeholder(
-        TextButton(onPressed: _retry, child: Text(widget.strings.retryText)),
+        TextButton(onPressed: _retry, child: Text(strings.retryText)),
       ),
       // Passthrough, so a tight box — a PageView page, a grid tile — sizes
       // the image itself and the band stays on it.
@@ -462,9 +464,13 @@ class _PlacePhotoViewState extends State<PlacePhotoView> {
               left: 0,
               right: 0,
               bottom: 0,
-              // A dark band keeps the white text legible on any photo.
+              // A dark band keeps the white text legible on any photo: at
+              // least 4.6:1 over a white photo; under high contrast 8.6:1,
+              // past WCAG AAA's 7:1 (0xA6) with a margin.
               child: ColoredBox(
-                color: const Color(0x8A000000),
+                color: MediaQuery.highContrastOf(context)
+                    ? const Color(0xB3000000)
+                    : const Color(0x8A000000),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
@@ -504,7 +510,7 @@ class _PlacePhotoViewState extends State<PlacePhotoView> {
               )
             : null,
         defaultView: defaultView,
-        strings: widget.strings,
+        strings: strings,
       ),
     );
   }

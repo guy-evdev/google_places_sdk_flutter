@@ -382,9 +382,7 @@ class PlacesAutocompleteController extends ChangeNotifier {
   ///
   /// Call it when the user leaves your search UI without picking a place.
   void resetSession({bool notify = true}) {
-    final previous = _sessionToken;
-    _sessionToken = AutocompleteSessionToken.generate();
-    _endSession(previous);
+    _renewSession(_client);
     _invalidateAsyncWork(notify: false);
     if (notify) {
       notifyListeners();
@@ -432,7 +430,7 @@ class PlacesAutocompleteController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     if (_binding == null) {
-      _endSession(_sessionToken);
+      _renewSession(_client);
     }
     _invalidateAsyncWork(notify: false);
     if (_ownsTextController) {
@@ -534,8 +532,7 @@ class PlacesAutocompleteController extends ChangeNotifier {
   // a widget's lifecycle, where listeners cannot be told until the frame ends.
   void _endWidgetSession(PlacesClient client) {
     final showedAnything = _showsAnything;
-    unawaited(client.endAutocompleteSession(_sessionToken));
-    _sessionToken = AutocompleteSessionToken.generate();
+    _renewSession(client);
     _invalidateAsyncWork(notify: false);
     _notifyAfterFrame(showedAnything);
   }
@@ -568,11 +565,12 @@ class PlacesAutocompleteController extends ChangeNotifier {
       _error != null ||
       _suggestions.isNotEmpty;
 
-  void _endSession(AutocompleteSessionToken token) {
-    final client = _client;
+  // Ends the current session on [client] and starts a new one.
+  void _renewSession(PlacesClient? client) {
     if (client != null) {
-      unawaited(client.endAutocompleteSession(token));
+      unawaited(client.endAutocompleteSession(_sessionToken));
     }
+    _sessionToken = AutocompleteSessionToken.generate();
   }
 
   // Closes the search and abandons any pick in progress.
@@ -630,13 +628,6 @@ class PlacesAutocompleteController extends ChangeNotifier {
     });
   }
 
-  bool _isActiveSearch(String input, int generation) {
-    return generation == _searchGeneration &&
-        _open &&
-        (_binding?._canShowResults ?? !_disposed) &&
-        textController.text.trim() == input;
-  }
-
   void _closeSearch({bool notify = true}) {
     _debounce?.cancel();
     _searchCancellationToken?.cancel();
@@ -650,17 +641,23 @@ class PlacesAutocompleteController extends ChangeNotifier {
     _changed(notify: notify);
   }
 
-  // A search that can no longer show its result. If it was the latest, nothing
-  // will replace its loading state, so close the search rather than spin.
-  void _dropSearch(int generation) {
-    if (generation == _searchGeneration) {
+  // True for a search that can no longer show its result. If it was the
+  // latest, nothing will replace its loading state, so close the search
+  // rather than spin.
+  bool _dropIfStale(String input, int generation) {
+    final active =
+        generation == _searchGeneration &&
+        _open &&
+        (_binding?._canShowResults ?? !_disposed) &&
+        textController.text.trim() == input;
+    if (!active && generation == _searchGeneration) {
       _closeSearch();
     }
+    return !active;
   }
 
   Future<void> _search(String input, int generation) async {
-    if (!_isActiveSearch(input, generation)) {
-      _dropSearch(generation);
+    if (_dropIfStale(input, generation)) {
       return;
     }
     _searchCancellationToken?.cancel();
@@ -703,8 +700,7 @@ class PlacesAutocompleteController extends ChangeNotifier {
               request,
               cancellationToken: cancellationToken,
             );
-      if (!_isActiveSearch(input, generation)) {
-        _dropSearch(generation);
+      if (_dropIfStale(input, generation)) {
         return;
       }
       final limitedSuggestions = suggestions
@@ -715,8 +711,7 @@ class PlacesAutocompleteController extends ChangeNotifier {
       _highlightIndex = limitedSuggestions.isEmpty ? -1 : 0;
       _changed();
     } catch (error) {
-      if (!_isActiveSearch(input, generation)) {
-        _dropSearch(generation);
+      if (_dropIfStale(input, generation)) {
         return;
       }
       _loading = false;
