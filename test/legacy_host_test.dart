@@ -87,6 +87,8 @@ Future<void> _searchAndSelect(WidgetTester tester, Finder scope) async {
 typedef _Surface = ({
   Widget Function() build,
   Future<List<Finder>> Function(WidgetTester tester) open,
+  // A string the surface shows in Hebrew once open.
+  Finder hebrew,
 });
 
 const _photo = PlacePhoto(
@@ -122,18 +124,22 @@ final _surfaces = <String, _Surface>{
         tester,
         launcher: mode != PlacesAutocompleteFieldMode.inline,
       ),
+      hebrew: find.byTooltip('ניקוי החיפוש'),
     ),
   'PlacePhotoView': (
     // The fake backend has no photo support, so the fetch fails at once.
     build: () => PlacePhotoView(photo: _photo, client: _client(), width: 100),
     open: (tester) async {
       await tester.pump();
-      return <Finder>[find.text('Retry')];
+      // The retry button; its text follows the locale.
+      return <Finder>[find.byType(TextButton)];
     },
+    hebrew: find.text('ניסיון חוזר'),
   ),
   'PlacesPhotoAttribution': (
     build: () => const PlacesPhotoAttribution(photo: _photo),
     open: (tester) async => <Finder>[find.textContaining('A. Photographer')],
+    hebrew: find.textContaining('צילום: A. Photographer'),
   ),
 };
 
@@ -593,6 +599,8 @@ void main() {
         for (final probe in probes) {
           expect(Directionality.of(tester.element(probe)), direction);
         }
+        // The package's own text switches with the app.
+        expect(surface.hebrew, language == 'he' ? findsWidgets : findsNothing);
       }
       expect(tester.takeException(), isNull);
     });

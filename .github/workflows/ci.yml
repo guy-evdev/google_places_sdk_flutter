@@ -80,9 +80,9 @@ jobs:
 
       # Ratchets up, never down. Raised from 85 in 0.7.0, where it measured 93.6% on stable; the
       # figure moves about 0.2 points between runs of the same code.
-      - name: Enforce 92% line coverage
+      - name: Enforce 93% line coverage
         run: |
-          awk -F '[:,]' '$1 == "DA" { total++; covered += ($3 > 0) } END { if (total == 0 || covered * 100 / total < 92) exit 1; printf "Line coverage: %.2f%%\n", covered * 100 / total }' coverage/lcov.info
+          awk -F '[:,]' '$1 == "DA" { total++; covered += ($3 > 0) } END { if (total == 0 || covered * 100 / total < 93) exit 1; printf "Line coverage: %.2f%%\n", covered * 100 / total }' coverage/lcov.info
 
       # Required, not optional: this package has a real web backend.
       - name: Chrome tests

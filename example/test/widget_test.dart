@@ -275,6 +275,91 @@ void main() {
     await client.close();
   });
 
+  testWidgets('the widgets follow the app language; one string can be '
+      'overridden', (tester) async {
+    final client = _clientFor(_RecordingBackend());
+    await tester.pumpWidget(ExampleApp(client: client));
+    String? hint() => tester
+        .widget<TextField>(find.byType(TextField).first)
+        .decoration!
+        .hintText;
+    expect(hint(), 'Search places');
+
+    await _openConfiguration(tester);
+    await _selectDropdown(tester, 'configuration-language', 'עברית');
+    await _applyConfiguration(tester);
+    expect(hint(), 'חיפוש מקומות');
+    expect(
+      Directionality.of(tester.element(find.byType(PlacesAutocompleteField))),
+      TextDirection.rtl,
+    );
+    final field = tester.widget<PlacesAutocompleteField>(
+      find.byType(PlacesAutocompleteField),
+    );
+    expect(field.strings.locale, isNull, reason: 'no hand-written strings');
+
+    await _openConfiguration(tester);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('configuration-advanced')),
+    );
+    await tester.pumpAndSettle();
+    await _toggleConfigurationSwitch(tester, 'Override the search hint');
+    await _applyConfiguration(tester);
+    expect(hint(), 'Find somewhere');
+    await tester.enterText(find.byType(TextField).first, 'x');
+    await tester.pump();
+    expect(
+      find.byTooltip('ניקוי החיפוש'),
+      findsOneWidget,
+      reason: 'still Hebrew',
+    );
+    await client.close();
+  });
+
+  testWidgets('the units choice reaches the distance in each row', (
+    tester,
+  ) async {
+    final backend = _RecordingBackend()
+      ..suggestions = const <PlaceSuggestion>[
+        PlaceSuggestion(
+          placeId: 'place-1',
+          placeResourceName: 'places/place-1',
+          fullText: StructuredText(text: 'Coffee Lab, Main Street'),
+          primaryText: StructuredText(text: 'Coffee Lab'),
+          secondaryText: StructuredText(text: 'Main Street'),
+          distanceMeters: 1200,
+        ),
+      ];
+    final client = _clientFor(backend);
+    await tester.pumpWidget(ExampleApp(client: client));
+    await _openConfiguration(tester);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('configuration-advanced')),
+    );
+    await tester.pumpAndSettle();
+    await _toggleConfigurationSwitch(tester, 'Show distance from an origin');
+
+    for (final (units, text) in <(String, String)>[
+      ('Metric', '1.2\u00A0km'), // non-breaking space
+      ('Imperial', '0.7\u00A0mi'),
+    ]) {
+      await _selectDropdown(tester, 'configuration-units', units);
+      await _applyConfiguration(tester);
+      await tester.enterText(find.byType(TextField).first, 'cof');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      expect(find.text(text), findsOneWidget);
+      await tester.enterText(find.byType(TextField).first, '');
+      await tester.pumpAndSettle();
+      await _openConfiguration(tester);
+      await tester.tap(
+        find.byKey(const ValueKey<String>('configuration-advanced')),
+      );
+      await tester.pumpAndSettle();
+    }
+    await client.close();
+  });
+
   testWidgets('advanced settings are summarized and forwarded to the field', (
     tester,
   ) async {

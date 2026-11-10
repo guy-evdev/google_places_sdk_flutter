@@ -108,7 +108,10 @@ class _PlacesPhotoAttributionState extends State<PlacesPhotoAttribution> {
   @override
   Widget build(BuildContext context) {
     final used = <Uri>{};
-    final content = _content(used);
+    final content = _content(
+      resolvePlacesStrings(context, widget.strings),
+      used,
+    );
     _recognizers.removeWhere((uri, recognizer) {
       final unused = !used.contains(uri);
       if (unused) {
@@ -119,7 +122,7 @@ class _PlacesPhotoAttributionState extends State<PlacesPhotoAttribution> {
     return content;
   }
 
-  Widget _content(Set<Uri> used) {
+  Widget _content(PlacesStrings strings, Set<Uri> used) {
     final photo = widget.photo;
     final open = photoLinkOpener(widget.onOpenLink, photo);
     final authors = photo.authors
@@ -131,16 +134,16 @@ class _PlacesPhotoAttributionState extends State<PlacesPhotoAttribution> {
     }
     final spans = <InlineSpan>[
       if (authors.isNotEmpty)
-        TextSpan(
-          text: '${widget.prefix ?? widget.strings.photoAttributionPrefix} ',
-        ),
+        TextSpan(text: '${widget.prefix ?? strings.photoAttributionPrefix} '),
       for (final (index, author) in authors.indexed) ...<InlineSpan>[
-        if (index > 0) const TextSpan(text: ', '),
+        // The Arabic comma between names in Arabic.
+        if (index > 0)
+          TextSpan(text: strings.locale?.languageCode == 'ar' ? '، ' : ', '),
         _link(author.displayName.trim(), safePhotoLink(author.uri), open, used),
       ],
       if (mapsLink != null) ...<InlineSpan>[
         if (authors.isNotEmpty) const TextSpan(text: ' · '),
-        _link(widget.strings.viewOnGoogleMapsText, mapsLink, open, used),
+        _link(strings.viewOnGoogleMapsText, mapsLink, open, used),
       ],
     ];
     // Google requires the attribution to be legible, so in an app without

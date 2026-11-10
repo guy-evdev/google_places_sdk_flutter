@@ -6,8 +6,8 @@ coordinates and parsed address a pick returns, place photos, time-zone lookups,
 suggestion distances, custom suggestion rows, a right-to-left UI, and paged
 Text Search.
 
-As of package version `0.7.0` the app is built on
-[`material_ui`](https://pub.dev/packages/material_ui) rather than
+As of package version `0.8.0` the app shows the Places widgets in the app's language.
+Since `0.7.0` it is built on [`material_ui`](https://pub.dev/packages/material_ui) rather than
 `package:flutter/material.dart`, and its localization delegates come from
 `GlobalMaterialLocalizations.delegates`. It requires Flutter `>=3.44.0` and Dart `>=3.12.0`.
 
@@ -35,8 +35,13 @@ and add the Google credential server-side. See the package
 
 The main page starts with a compact summary of the active options. Select
 **Configuration** to change the language, autocomplete widget, or Text Search
-mode. Apply commits the draft; Cancel or dismissing the sheet leaves the active
-demo unchanged.
+mode. The language sets the app's `MaterialApp.locale`; the Places widgets get
+no translations from the app (`strings:` carries only the demo's units and hint
+override) and follow it by themselves, in all eight bundled languages and RTL
+for Hebrew and Arabic. **Override the search hint** passes
+`PlacesStrings(searchHint: ...)`: that one string changes, the rest still follow
+the language. Apply commits the draft; Cancel or dismissing the sheet leaves the
+active demo unchanged.
 
 Enter any query in **Text Search** and press Search. Single-page mode uses
 `searchText()` and returns a simple list. Paged mode uses `searchTextPage()`,
@@ -74,8 +79,9 @@ in every mode, and under an inline field shows the field controller's `status`
 **Show distance from an origin** sends `origin` with each autocomplete request,
 so Google returns a distance for every suggestion and the widget renders it. The
 demo uses a fixed coordinate to avoid a location permission; a real app would
-pass the device's current position. The unit comes from
-`PlacesStrings.distanceUnitMeters` and is localized per demo language.
+pass the device's current position. **Distance units** sets
+`PlacesStrings.distanceUnits` (kilometres or miles); Automatic follows the
+device's region.
 
 Paged Text Search uses the package's HTTP/proxy route on web; see the package
 [0.6.0 extended release notes](../doc/whats_new_0_6_0.md) for the transport

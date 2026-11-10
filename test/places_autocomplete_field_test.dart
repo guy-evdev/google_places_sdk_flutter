@@ -187,6 +187,10 @@ class _SlowAutocompleteBackend extends _FakeBackend {
 }
 
 class _DistanceBackend extends _FakeBackend {
+  _DistanceBackend([this.meters = 1234]);
+
+  final int meters;
+
   @override
   Future<List<PlaceSuggestion>> autocomplete(
     AutocompleteRequest request, {
@@ -201,7 +205,7 @@ class _DistanceBackend extends _FakeBackend {
         primaryText: const StructuredText(text: 'Coffee Lab'),
         secondaryText: const StructuredText(text: 'Main Street'),
         // Google only populates this when the request carries an origin.
-        distanceMeters: request.origin == null ? null : 1234,
+        distanceMeters: request.origin == null ? null : meters,
       ),
     ];
   }
@@ -539,6 +543,26 @@ Widget _plainField(PlacesFieldData field) => EditableText(
   cursorColor: const Color(0xFF000000),
   backgroundCursorColor: const Color(0xFF808080),
 );
+
+/// Overrides one getter, as an app could in 0.7.x.
+class _ExtendedStrings extends PlacesStrings {
+  const _ExtendedStrings();
+
+  @override
+  String get searchHint => 'EXT';
+}
+
+/// Implements the interface: every string is 'IMPL'.
+class _ImplementedStrings implements PlacesStrings {
+  const _ImplementedStrings();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      invocation.memberName == #locale ||
+          invocation.memberName == #distanceUnits
+      ? null
+      : 'IMPL';
+}
 
 void main() {
   testWidgets('renders custom strings and suggestion results', (tester) async {
@@ -1802,6 +1826,9 @@ void main() {
       });
 
       testWidgets('${fieldMode.name} honours origin', (tester) async {
+        // A metric region, so the default units are kilometres.
+        tester.platformDispatcher.localeTestValue = const Locale('en', 'IL');
+        addTearDown(tester.platformDispatcher.clearLocaleTestValue);
         final backend = _DistanceBackend();
         final client = PlacesClient.testing(apiKey: 'test', backend: backend);
 
@@ -1812,13 +1839,16 @@ void main() {
             client: client,
             fieldMode: fieldMode,
             origin: const PlaceCoordinates(latitude: 40.7, longitude: -74.0),
-            strings: const PlacesStrings(distanceUnitMeters: 'meters'),
+            strings: const PlacesStrings(distanceUnitKilometers: 'kilometers'),
           ),
         );
         await search(tester, fieldMode);
 
         expect(backend.lastAutocompleteRequest?.origin?.latitude, 40.7);
-        expect(within(fieldMode, find.text('1234 meters')), findsOneWidget);
+        expect(
+          within(fieldMode, find.text('1.2\u00a0kilometers')),
+          findsOneWidget,
+        );
       });
 
       testWidgets('${fieldMode.name} honours fieldBuilder', (tester) async {
@@ -1962,6 +1992,233 @@ void main() {
     }
   });
 
+  group('localization reaches every field mode', () {
+    Finder scopeFor(PlacesAutocompleteFieldMode fieldMode) =>
+        fieldMode == PlacesAutocompleteFieldMode.inline
+        ? find.byType(PlacesAutocompleteField)
+        : find.byType(PlacesAutocompleteOverlay);
+
+    Finder within(PlacesAutocompleteFieldMode fieldMode, Finder matching) =>
+        find.descendant(of: scopeFor(fieldMode), matching: matching);
+
+    // An app localized as flutter_localizations does it, on [locale].
+    Future<void> openMode(
+      WidgetTester tester,
+      PlacesAutocompleteFieldMode fieldMode,
+      Widget field, {
+      Locale locale = const Locale('he'),
+    }) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: locale,
+          supportedLocales: const <Locale>[
+            Locale('en'),
+            Locale('he'),
+            Locale('ar'),
+            Locale('de'),
+          ],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: Scaffold(body: field),
+        ),
+      );
+      if (fieldMode != PlacesAutocompleteFieldMode.inline) {
+        await tester.tap(find.byType(TextField));
+        await tester.pumpAndSettle();
+      }
+    }
+
+    Future<void> search(
+      WidgetTester tester,
+      PlacesAutocompleteFieldMode fieldMode,
+    ) async {
+      await tester.enterText(within(fieldMode, find.byType(TextField)), 'cof');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+    }
+
+    PlacesClient client([PlacesBackend? backend]) => PlacesClient.testing(
+      apiKey: 'test',
+      backend: backend ?? _FakeBackend(),
+    );
+
+    for (final fieldMode in PlacesAutocompleteFieldMode.values) {
+      final mode = fieldMode.name;
+
+      // flutter_test's device is en_US, a miles region; IL is metric.
+      for (final (country, meters, strings, text)
+          in <(String, int, PlacesStrings, String)>[
+            ('US', 1234, const PlacesStrings(), '0.8\u00a0mi'),
+            ('IL', 1234, const PlacesStrings(), '1.2\u00a0km'),
+            (
+              'US',
+              1234,
+              const PlacesStrings(distanceUnits: PlacesDistanceUnits.metric),
+              '1.2\u00a0km',
+            ),
+            (
+              'IL',
+              1234,
+              const PlacesStrings(distanceUnits: PlacesDistanceUnits.imperial),
+              '0.8\u00a0mi',
+            ),
+            (
+              'US',
+              1234,
+              const PlacesStrings(distanceUnitMiles: 'miles'),
+              '0.8\u00a0miles',
+            ),
+            // 100 m is 328 ft, shown to the nearest 10.
+            (
+              'US',
+              100,
+              const PlacesStrings(distanceUnitFeet: 'feet'),
+              '330\u00a0feet',
+            ),
+          ]) {
+        testWidgets('$mode: $text in $country', (tester) async {
+          tester.platformDispatcher.localeTestValue = Locale('en', country);
+          addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+          await openMode(
+            tester,
+            fieldMode,
+            PlacesAutocompleteField(
+              client: client(_DistanceBackend(meters)),
+              fieldMode: fieldMode,
+              origin: const PlaceCoordinates(latitude: 40.7, longitude: -74.0),
+              strings: strings,
+            ),
+            locale: const Locale('en'),
+          );
+          await search(tester, fieldMode);
+          expect(within(fieldMode, find.text(text)), findsOne);
+        });
+      }
+
+      for (final (country, origin, placeText) in <(String, bool, String?)>[
+        ('IL', true, '1.2 km'),
+        ('US', true, '0.8 mi'),
+        ('US', false, null),
+      ]) {
+        testWidgets(
+          '$mode: suggestionItemBuilder gets distanceText $placeText in $country',
+          (tester) async {
+            tester.platformDispatcher.localeTestValue = Locale('en', country);
+            addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+            final place = <String?>[];
+            final query = <String?>[];
+            await openMode(
+              tester,
+              fieldMode,
+              PlacesAutocompleteField(
+                client: client(_DistanceBackend()),
+                fieldMode: fieldMode,
+                includeQueryPredictions: true,
+                origin: origin
+                    ? const PlaceCoordinates(latitude: 40.7, longitude: -74.0)
+                    : null,
+                suggestionItemBuilder: (context, item) {
+                  (item.suggestion is PlaceSuggestion ? place : query).add(
+                    item.distanceText,
+                  );
+                  return const SizedBox(height: 10);
+                },
+              ),
+              locale: const Locale('en'),
+            );
+            await search(tester, fieldMode);
+
+            expect(place, isNotEmpty);
+            expect(place.toSet(), <String?>{placeText});
+            expect(query, isNotEmpty);
+            expect(query.toSet(), <String?>{null});
+          },
+        );
+      }
+
+      testWidgets('$mode: distance in the app language', (tester) async {
+        tester.platformDispatcher.localeTestValue = const Locale('de', 'DE');
+        addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+        await openMode(
+          tester,
+          fieldMode,
+          PlacesAutocompleteField(
+            client: client(_DistanceBackend()),
+            fieldMode: fieldMode,
+            origin: const PlaceCoordinates(latitude: 40.7, longitude: -74.0),
+          ),
+          locale: const Locale('de'),
+        );
+        await search(tester, fieldMode);
+        expect(within(fieldMode, find.text('1,2 km')), findsOne);
+      });
+
+      testWidgets('$mode: builders get the resolved strings', (tester) async {
+        final received = <String, PlacesStrings>{};
+        await openMode(
+          tester,
+          fieldMode,
+          PlacesAutocompleteField(
+            client: client(),
+            fieldMode: fieldMode,
+            strings: const PlacesStrings(retryText: 'custom retry'),
+            fieldBuilder: (context, field) {
+              received['field'] = field.strings;
+              return TextField(
+                controller: field.controller,
+                focusNode: field.focusNode,
+                onChanged: field.onChanged,
+                onTap: field.onTap,
+                readOnly: field.readOnly,
+              );
+            },
+            suggestionItemBuilder: (context, item) {
+              received['item'] = item.strings;
+              return const SizedBox(height: 10);
+            },
+            suggestionsViewBuilder: (context, view) {
+              received['view'] = view.strings;
+              return view.defaultView;
+            },
+          ),
+        );
+        await search(tester, fieldMode);
+
+        expect(
+          received.keys,
+          unorderedEquals(<String>['field', 'item', 'view']),
+        );
+        for (final MapEntry(key: builder, value: strings) in received.entries) {
+          expect(
+            strings.noResultsText,
+            'לא נמצאו מקומות תואמים.',
+            reason: builder,
+          );
+          expect(strings.retryText, 'custom retry', reason: builder);
+          expect(strings.locale, const Locale('he'), reason: builder);
+          expect(strings.distanceUnits, isNotNull, reason: builder);
+        }
+      });
+    }
+
+    for (final (kind, strings, text) in <(String, PlacesStrings, String)>[
+      ('a subclass', const _ExtendedStrings(), 'EXT'),
+      ('an implementation', const _ImplementedStrings(), 'IMPL'),
+    ]) {
+      testWidgets('$kind of PlacesStrings is shown as-is', (tester) async {
+        await openMode(
+          tester,
+          PlacesAutocompleteFieldMode.inline,
+          PlacesAutocompleteField(client: client(), strings: strings),
+        );
+        expect(tester.takeException(), isNull);
+        expect(
+          tester.widget<TextField>(find.byType(TextField)).decoration?.hintText,
+          text,
+        );
+      });
+    }
+  });
+
   testWidgets('no origin means no distance is requested or rendered', (
     tester,
   ) async {
@@ -1980,6 +2237,8 @@ void main() {
 
     expect(backend.lastAutocompleteRequest?.origin, isNull);
     expect(find.textContaining('1234'), findsNothing);
+    // A distance is always a number joined to its unit by a no-break space.
+    expect(find.textContaining(RegExp('\\d[\u00a0\u202f]')), findsNothing);
   });
 
   group('dialog and fullscreen layouts', () {
@@ -1997,6 +2256,7 @@ void main() {
       Size size = screen,
       double keyboardHeight = keyboard,
       ValueChanged<PlaceSelection?>? onResult,
+      TextDirection? direction,
     }) async {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1.0;
@@ -2009,6 +2269,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: theme,
+          builder: direction == null
+              ? null
+              : (context, child) =>
+                    Directionality(textDirection: direction, child: child!),
           home: Builder(
             builder: (context) => FilledButton(
               onPressed: () async {
@@ -2109,6 +2373,26 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(PlacesAutocompleteOverlay), findsNothing);
     });
+
+    for (final direction in TextDirection.values) {
+      testWidgets('fullscreen field ends 16 from the screen edge, $direction', (
+        tester,
+      ) async {
+        final field = await openAndSearch(
+          tester,
+          PlacesAutocompleteOverlayMode.fullscreen,
+          direction: direction,
+        );
+
+        final rect = tester.getRect(field);
+        expect(
+          direction == TextDirection.ltr
+              ? screen.width - rect.right
+              : rect.left,
+          16,
+        );
+      });
+    }
 
     testWidgets('fullscreen bar ignores a coloured appBarTheme', (
       tester,

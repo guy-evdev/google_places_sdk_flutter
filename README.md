@@ -36,6 +36,9 @@ PlacesAutocompleteField(
   at the lowest Place Details billing tier that returns an address.
 - **Billing sessions are handled for you.** Each search and the pick that ends it are grouped into
   one Google autocomplete session, with no setup.
+- **The widget's text speaks your users' language.** It follows the app's language in English,
+  Hebrew, Arabic, Russian, French, German, Spanish and Portuguese with no setup, and lays out
+  right-to-left in Hebrew and Arabic apps.
 - **It works in any Flutter app**, whether it uses `material_ui` or still uses
   `package:flutter/material.dart`, with no extra code.
 - **Pure Dart on Android, iOS, web (including Wasm), macOS, Windows, and Linux.** It is not a
@@ -113,8 +116,9 @@ Given `apiKey:`, the widget creates its own `PlacesClient` and closes it when it
 `client:` instead to share one client across screens, to use a key restricted to your Android or
 iOS app (see [Security](#security)), or to use a keyless proxy.
 
-The widget's own text — the hint, the loading and error messages — is English by default. Pass
-`strings:` to [change or translate it](doc/recipes.md#change-or-translate-the-widgets-text).
+The widget's own text — the hint, the loading and error messages — follows your app's language in
+eight languages, and distances use the device region's units, with nothing to set. Pass `strings:`
+to [change a string or force a language](doc/recipes.md#change-or-translate-the-widgets-text).
 
 ### Apps that still use `package:flutter/material.dart`
 
@@ -327,20 +331,15 @@ The widget shows a short error message. Pass `onError: (error) => debugPrint('$e
 
 ## What's new
 
-Version `0.7.0` moves the widget layer from `package:flutter/material.dart` to the standalone
-[`material_ui`](https://pub.dev/packages/material_ui) package, and keeps it working in apps that have
-not migrated. The widgets take an `apiKey:`, return coordinates and an address by default, and
-`PlaceData` gains `city`, `streetAddress`, and other address getters. Inline suggestions float
-over the page instead of pushing it down, and the fullscreen search puts the field in the top bar.
-Three builders let you supply the field, each row, or the whole suggestion area.
-`minInputLength` and `debounceDuration` send fewer billed requests, and the widgets take
-`TextField`'s own options, such as `keyboardType` and `inputFormatters`.
-`PlacePhotoView` shows a place's photos with their required attribution.
-`PlacesClient` requests fewer fields by default. See [What's new in 0.7.0](doc/whats_new_0_7_0.md)
-for details and examples, and [MIGRATION.md](MIGRATION.md#070) for the defaults that changed.
+Version `0.8.0` shows the widgets' text in your app's language, in English, Hebrew, Arabic,
+Russian, French, German, Spanish and Portuguese, with no code. Distances read in km, or in mi and
+ft on US, GB, LR and MM devices, and custom rows get the formatted distance as
+`PlacesSuggestionItemData.distanceText`. A few layout fixes round it out. See
+[What's new in 0.8.0](doc/whats_new_0_8_0.md) for details and examples; no source change is
+required to upgrade.
 
-Earlier releases: [What's new in 0.6.1](doc/whats_new_0_6_1.md) and
-[What's new in 0.6.0](doc/whats_new_0_6_0.md).
+Earlier releases: [What's new in 0.7.0](doc/whats_new_0_7_0.md),
+[0.6.1](doc/whats_new_0_6_1.md) and [0.6.0](doc/whats_new_0_6_0.md).
 
 ## More documentation
 
@@ -351,6 +350,7 @@ Earlier releases: [What's new in 0.6.1](doc/whats_new_0_6_1.md) and
   class and member
 - [Example app](example/README.md) — run it with
   `flutter run --dart-define=GOOGLE_MAPS_API_KEY=your_key_here` from `example/`
+- [What's new in 0.8.0](doc/whats_new_0_8_0.md)
 - [What's new in 0.7.0](doc/whats_new_0_7_0.md)
 - [What's new in 0.6.1](doc/whats_new_0_6_1.md)
 - [What's new in 0.6.0](doc/whats_new_0_6_0.md)

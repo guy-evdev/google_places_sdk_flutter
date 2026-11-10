@@ -42,7 +42,7 @@ unchanged; only the library it is imported from moved. See
 | `apiKey` | `String?` | `null` | The widget creates its own client from this key, closes it on dispose, and replaces it when the key changes. Sends no application identity — use `client` for an app-restricted mobile key. |
 | `controller` | `PlacesAutocompleteController?` | `null` | When omitted, the widget owns an internal controller. |
 | `decoration` | `InputDecoration?` | `null` | Falls back to `InputDecoration()` and preserves user styling. In the fullscreen search, where the field sits in the top bar, it has no border unless the decoration sets one. |
-| `strings` | `PlacesStrings` | `const PlacesStrings()` | The widget's own text. Every default is English; see [Display Strings](#display-strings). |
+| `strings` | `PlacesStrings` | `const PlacesStrings()` | The widget's own text. Follows the app's language by default; see [Display Strings](#display-strings). |
 | `languageCode` | `String?` | `null` | Preferred BCP-47 language code for autocomplete. |
 | `regionCode` | `String?` | `null` | Preferred CLDR region code for autocomplete. |
 | `origin` | `PlaceCoordinates?` | `null` | Makes Google return a straight-line distance for each suggestion, which the widget then renders. Does not bias or restrict results. For device location, see the [recipe](recipes.md#using-the-devices-location-as-the-origin) — the package never requests location permission. |
@@ -148,11 +148,18 @@ dropped `decoration`, `suggestionBuilder`, `showPoweredByGoogle`,
 
 ## Display Strings
 
-`PlacesStrings` holds every piece of text the package's widgets show. Pass
-one to `strings:` to change any of them; omitted values keep their default. The
-package does not yet choose strings from the app's locale, so an app in another
-language supplies them itself — see the
+`PlacesStrings` holds every piece of text the package's widgets show. By
+default the widgets follow the app's language (English, Hebrew, Arabic,
+Russian, French, German, Spanish, Portuguese); set a value to replace that one
+string, and every other string stays in the widgets' language. See the
 [recipe](recipes.md#change-or-translate-the-widgets-text).
+
+| Option | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `locale` | `Locale?` | `null` | Language of the widgets' text. `null` uses the app's active locale. A regional tag uses its base language; an unbundled language gets English. Does not change Google's result language (`languageCode`). |
+| `distanceUnits` | `PlacesDistanceUnits?` | `null` | `metric` or `imperial`. `null` follows the device region: imperial in US, GB, LR and MM, otherwise metric. On web the region comes from the browser language, which often has none (metric). |
+
+The English defaults below are what an English or unbundled-language app sees.
 
 | Field | Default | Where it appears |
 | --- | --- | --- |
@@ -167,9 +174,28 @@ language supplies them itself — see the
 | `clearLabel` | `'Clear search'` | Tooltip and screen-reader label of the clear button. |
 | `placeSuggestionLabel` | `'Place suggestion'` | Screen-reader prefix for a place suggestion. |
 | `querySuggestionLabel` | `'Query suggestion'` | Screen-reader prefix for a query suggestion. |
-| `distanceUnitMeters` | `'m'` | Suffix of the distance beside a suggestion when `origin` is set. Distances are shown in meters. |
+| `distanceUnitMeters` | `'m'` | Unit after a metric distance under 1 km, beside a suggestion when `origin` is set. |
+| `distanceUnitKilometers` | `'km'` | Unit after a metric distance of 1 km or more. |
+| `distanceUnitFeet` | `'ft'` | Unit after an imperial distance under 0.1 mi. |
+| `distanceUnitMiles` | `'mi'` | Unit after an imperial distance of 0.1 mi or more. |
+| `selectionLoadingLabel` | `'Loading place details'` | Screen-reader label of the progress bar while a picked place's details load. |
 | `photoAttributionPrefix` | `'Photo by'` | Before the author names that `PlacePhotoView` and `PlacesPhotoAttribution` show. |
 | `viewOnGoogleMapsText` | `'View on Google Maps'` | The link to the photo on Google Maps, after the author names. |
+
+Distance format (only with `origin`; the number comes first, then a no-break space and the unit):
+
+| Units | Range | Shown as |
+| --- | --- | --- |
+| metric | under 1 km | whole metres, `850 m` |
+| metric | 1 km to under 10 km | one decimal, `1.2 km` |
+| metric | 10 km and over | whole kilometres, `12 km` |
+| imperial | under 0.1 mi | feet to the nearest 10, `500 ft` |
+| imperial | 0.1 mi to under 10 mi | one decimal, `0.8 mi` |
+| imperial | 10 mi and over | whole miles, `12 mi` |
+
+The decimal separator and digits follow the locale, for example `1,2 km` in
+German and Arabic-Indic digits in Egyptian Arabic. Ranges are decided on the
+rounded value, so `10.0 km` never appears.
 
 `PlacePhotoView` also uses `retryText`, on its retry button.
 `PlacesPhotoAttribution`'s own `prefix` is deprecated; when set, it still wins
@@ -197,7 +223,7 @@ examples, including a Cupertino-style search, see the
 | `autofocus` | `bool` | Whether to take focus when first built. |
 | `selectionLoading` | `bool` | The picked place's details are loading. A custom field shows this itself. |
 | `errorText` | `String?` | The decoration's `errorText` — the form field's validation message. |
-| `strings` | `PlacesStrings` | The widget's strings, such as `searchHint`. |
+| `strings` | `PlacesStrings` | The widget's strings, already in the widget's language (`locale` and `distanceUnits` filled in), such as `searchHint`. |
 
 `suggestionItemBuilder` receives a `PlacesSuggestionItemData`:
 
@@ -206,7 +232,8 @@ examples, including a Cupertino-style search, see the
 | `suggestion` | `AutocompleteSuggestion` | A `PlaceSuggestion` or a `QuerySuggestion`; the type is sealed. |
 | `highlighted` | `bool` | Highlighted from the keyboard. The first row is highlighted when results arrive. |
 | `onSelected` | `VoidCallback` | Selects the suggestion, exactly as a tap on a default row does. |
-| `strings` | `PlacesStrings` | The widget's strings, such as `placeSuggestionLabel`. |
+| `strings` | `PlacesStrings` | The widget's strings, resolved as above, such as `placeSuggestionLabel`. |
+| `distanceText` | `String?` | The distance as the default row shows it, such as "1.2 km"; `null` without `origin` or for a `QuerySuggestion`. |
 
 `suggestionsViewBuilder` receives a `PlacesSuggestionsViewData`:
 
@@ -219,7 +246,7 @@ examples, including a Cupertino-style search, see the
 | `onRetry` | `VoidCallback` | Runs the failed search again. |
 | `attribution` | `Widget?` | Google's attribution; `null` with `showPoweredByGoogle: false`. |
 | `defaultView` | `Widget` | The package's own view for this state. |
-| `strings` | `PlacesStrings` | The widget's strings, such as `retryText`. |
+| `strings` | `PlacesStrings` | The widget's strings, resolved as above, such as `retryText`. |
 
 The suggestions themselves:
 
@@ -265,7 +292,7 @@ failure, and the image with the author names on a dark band across its bottom.
 | `onRetry` | `VoidCallback` | Fetches the photo again. Call it from an event handler, not while building. |
 | `attribution` | `Widget?` | The author names and the "View on Google Maps" link; `null` when there is neither. Place it with the image. |
 | `defaultView` | `Widget` | The package's own view for this state. |
-| `strings` | `PlacesStrings` | The widget's strings. |
+| `strings` | `PlacesStrings` | The widget's strings, resolved as above. |
 
 There is no option to hide the attribution: Google requires the author to be
 credited wherever a photo is shown, and allows leaving the names out only on a

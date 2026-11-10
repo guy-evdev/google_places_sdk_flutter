@@ -16,6 +16,7 @@ import '../places_cancellation_token.dart';
 import 'places_autocomplete_builders.dart';
 import 'places_autocomplete_overlay.dart';
 import 'places_design_scope.dart';
+import 'places_distance.dart';
 import 'places_strings.dart';
 
 part 'places_autocomplete_controller.dart';
@@ -256,10 +257,17 @@ class PlacesAutocompleteField extends StatefulWidget {
   final InputDecoration? decoration;
 
   /// The widget's own text: the hint, the loading, empty, and error messages,
-  /// and the screen-reader labels. Every default is English.
+  /// and the screen-reader labels.
+  ///
+  /// Every default follows the app's language (English when the package does
+  /// not bundle it); a string set here replaces only that string. See
+  /// [PlacesStrings].
   final PlacesStrings strings;
 
   /// Preferred BCP-47 language code for results, such as `'en'` or `'he'`.
+  ///
+  /// This is the language of Google's results only. The widget's own text
+  /// follows the app's language; see [PlacesStrings.locale].
   final String? languageCode;
 
   /// Preferred CLDR region code for results, such as `'us'` or `'il'`.
@@ -269,8 +277,9 @@ class PlacesAutocompleteField extends StatefulWidget {
   ///
   /// Suggestions only carry [PlaceSuggestion.distanceMeters] when this is set,
   /// so the field renders a distance next to each place suggestion only while
-  /// an origin is supplied. The distance unit comes from
-  /// [PlacesStrings.distanceUnitMeters].
+  /// an origin is supplied, as in "850 m", "1.2 km" or "0.8 mi". The units
+  /// follow the device's region unless [PlacesStrings.distanceUnits] sets
+  /// them.
   ///
   /// This does not bias or restrict which places are returned. Use
   /// [locationBias] or [locationRestriction] for that.
@@ -361,6 +370,10 @@ class PlacesAutocompleteField extends StatefulWidget {
 
   /// How the field should behave: inline search, dialog launcher, or
   /// fullscreen launcher.
+  ///
+  /// A dialog or fullscreen search takes its language from [strings]'
+  /// [PlacesStrings.locale], else the app's root `Localizations`, not from a
+  /// `Localizations.override` placed around the field.
   final PlacesAutocompleteFieldMode fieldMode;
 
   /// Called when the user selects a suggestion or resolved place.
@@ -577,6 +590,8 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField>
   PlacesClient? _ownedClient;
   bool _suggestionPointerDown = false;
   bool _hasText = false;
+  // widget.strings resolved for this build's locale, set first in _buildField.
+  late PlacesStrings _strings;
   // Inline suggestions float in the nearest Overlay. Always shown: the overlay
   // child is empty while the search UI is closed, so visibility follows the
   // controller without a second flag to keep in sync. The portal must stay
@@ -946,6 +961,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField>
   // Takes the context below PlacesDesignScope, so Theme.of and the
   // localizations resolve inside it.
   Widget _buildField(BuildContext context) {
+    _strings = resolvePlacesStrings(context, widget.strings);
     // Only PlacesAutocompleteOverlay builds a field inside itself, so its mode
     // picks the dedicated-route layouts. Elsewhere the field lays out inline.
     final overlayMode = context
@@ -971,13 +987,15 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField>
       autofocus: widget.autofocus && !_isLauncherMode,
       selectionLoading: selectionLoading,
       errorText: widget.decoration?.errorText,
-      strings: widget.strings,
+      strings: _strings,
     );
     final customField = widget.fieldBuilder?.call(context, field);
     final textField = customField ?? _buildTextField(field, fullscreen);
     // A custom field shows selection loading itself.
     final progress = selectionLoading && customField == null
-        ? const LinearProgressIndicator()
+        ? LinearProgressIndicator(
+            semanticsLabel: _strings.selectionLoadingLabel,
+          )
         : null;
     // The pointer guard covers the whole search surface, not just the
     // suggestion list. Tapping Retry moves focus to that button on some
@@ -1072,7 +1090,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField>
       enabled: field.enabled,
       readOnly: field.readOnly,
       autofocus: field.autofocus,
-      decoration: _buildDecoration(inTopBar: inTopBar),
+      decoration: _buildDecoration(inTopBar: inTopBar, onClear: field.onClear),
       onChanged: (value) {
         field.onChanged(value);
         w._onChanged?.call(value);
@@ -1251,7 +1269,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField>
     // be mistaken for the clear button. The label is the caller's.
     final dismiss = (ModalRoute.of(context)?.impliesAppBarDismissal ?? false)
         ? IconButton(
-            tooltip: widget.strings.closeLabel,
+            tooltip: _strings.closeLabel,
             onPressed: () => Navigator.of(context).maybePop(),
             icon: const BackButtonIcon(),
           )
@@ -1273,7 +1291,9 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField>
               padding: EdgeInsetsDirectional.fromSTEB(
                 dismiss == null ? 16 : 4,
                 8,
-                8,
+                // The end edge matches the 16 the start has without a back
+                // button.
+                16,
                 8,
               ),
               child: Row(
@@ -1305,7 +1325,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField>
     final framed = overlayMode == null;
     final attribution = widget.showPoweredByGoogle
         ? _PoweredByGoogleAttribution(
-            semanticLabel: widget.strings.poweredByGoogleLabel,
+            semanticLabel: _strings.poweredByGoogleLabel,
           )
         : null;
     final items = <Widget>[
@@ -1325,25 +1345,29 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField>
               child: CircularProgressIndicator.adaptive(strokeWidth: 2),
             ),
             const SizedBox(width: 12),
-            Expanded(child: Text(widget.strings.loadingText)),
+            Expanded(child: Text(_strings.loadingText)),
           ],
         ),
       ),
       PlacesSuggestionsStatus.error => _InfoTile(
         framed: framed,
-        child: Row(
+        // Side by side when both fit; otherwise the button goes under the
+        // start of the text, so large text or a long label never squeezes
+        // the message.
+        child: OverflowBar(
+          alignment: MainAxisAlignment.spaceBetween,
           children: <Widget>[
-            Expanded(child: Text(widget.strings.errorText)),
+            Text(_strings.errorText),
             TextButton(
               onPressed: controller._retrySearch,
-              child: Text(widget.strings.retryText),
+              child: Text(_strings.retryText),
             ),
           ],
         ),
       ),
       PlacesSuggestionsStatus.empty => _InfoTile(
         framed: framed,
-        child: Text(widget.strings.noResultsText),
+        child: Text(_strings.noResultsText),
       ),
       PlacesSuggestionsStatus.results => _buildResults(
         context,
@@ -1362,7 +1386,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField>
             onRetry: controller._retrySearch,
             attribution: attribution,
             defaultView: defaultView,
-            strings: widget.strings,
+            strings: _strings,
           ),
         ) ??
         defaultView;
@@ -1413,7 +1437,14 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField>
       suggestion: suggestion,
       highlighted: index == _controller.highlightIndex,
       onSelected: () => _controller._select(suggestion),
-      strings: widget.strings,
+      strings: _strings,
+      distanceText: switch (suggestion) {
+        PlaceSuggestion(:final int distanceMeters) => _distanceText(
+          distanceMeters,
+          _strings,
+        ),
+        _ => null,
+      },
     );
     return widget.suggestionItemBuilder?.call(context, item) ??
         _buildDefaultSuggestionItem(context, item);
@@ -1449,9 +1480,10 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField>
           subtitle: place.secondaryText == null
               ? null
               : _structuredText(place.secondaryText!),
-          trailing: place.distanceMeters == null
-              ? null
-              : Text('${place.distanceMeters} ${strings.distanceUnitMeters}'),
+          trailing: switch (item.distanceText) {
+            null => null,
+            final text => Text(text),
+          },
         ),
       ),
     };
@@ -1461,6 +1493,24 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField>
       button: true,
       label: label,
       child: Material(type: MaterialType.transparency, child: tile),
+    );
+  }
+
+  // "850 m", "1.2 km", "0.8 mi" in the resolved language and units. The
+  // number format follows the language's region, else the device's.
+  static String _distanceText(int meters, PlacesStrings strings) {
+    final region = strings.locale?.countryCode;
+    return formatPlacesDistance(
+      meters,
+      imperial: strings.distanceUnits == PlacesDistanceUnits.imperial,
+      languageCode: strings.locale?.languageCode ?? 'en',
+      metersUnit: strings.distanceUnitMeters,
+      kilometersUnit: strings.distanceUnitKilometers,
+      milesUnit: strings.distanceUnitMiles,
+      feetUnit: strings.distanceUnitFeet,
+      regionCode: region == null || region.isEmpty
+          ? placesDeviceRegion()
+          : region,
     );
   }
 
@@ -1495,7 +1545,10 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField>
     return Text.rich(TextSpan(children: spans));
   }
 
-  InputDecoration _buildDecoration({required bool inTopBar}) {
+  InputDecoration _buildDecoration({
+    required bool inTopBar,
+    required VoidCallback? onClear,
+  }) {
     var baseDecoration = widget.decoration ?? const InputDecoration();
     if (inTopBar &&
         baseDecoration.border == null &&
@@ -1514,11 +1567,9 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField>
     }
     final clearButton = _hasText
         ? IconButton(
-            onPressed: widget.enabled && !_controller.selectionLoading
-                ? _clearField
-                : null,
+            onPressed: onClear,
             icon: const Icon(Icons.clear),
-            tooltip: widget.strings.clearLabel,
+            tooltip: _strings.clearLabel,
           )
         : null;
 
@@ -1534,7 +1585,7 @@ class _PlacesAutocompleteFieldState extends State<PlacesAutocompleteField>
     final effectiveSuffixIcon = clearButton ?? userSuffixIcon;
 
     return baseDecoration.copyWith(
-      hintText: baseDecoration.hintText ?? widget.strings.searchHint,
+      hintText: baseDecoration.hintText ?? _strings.searchHint,
       suffix: effectiveSuffix,
       suffixIcon: effectiveSuffixIcon,
     );
